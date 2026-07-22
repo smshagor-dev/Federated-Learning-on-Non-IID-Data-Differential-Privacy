@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import math
 import os
 import random
 import subprocess
@@ -24,12 +25,15 @@ import time
 import threading
 from typing import Dict, List
 
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 import numpy as np
 import torch
 import yaml
 from torch.utils.data import DataLoader
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from tkinter import font as tkfont
 
 from data.partitioner import (
     get_dataset,
@@ -41,7 +45,7 @@ from federated.client import Client
 from federated.dp_accountant import MomentsAccountant
 from federated.server import SUPPORTED_ALGORITHMS, Server
 from models.networks import build_model
-from utils.logger import CSVLogger, generate_all_plots
+from utils.logger import CSVLogger, discover_run_csvs, generate_all_plots, read_run_csv
 from utils.metrics import (
     compute_client_drift,
     compute_weight_variance,
@@ -308,61 +312,82 @@ def build_summary_table(summaries: List[dict], config: dict) -> str:
 
 
 class ExperimentGUI:
-    """Small Tkinter front-end for launching experiments from main.py."""
+    """Research dashboard for configuring and monitoring FL experiments."""
 
     def __init__(self, root: tk.Tk, script_path: str, config_path: str) -> None:
         self.root = root
         self.script_path = script_path
         self.config_path = config_path
+        self.base_config = load_config(config_path)
         self.process: subprocess.Popen[str] | None = None
         self.active_results_dir = "results"
         self.runtime_config_path: str | None = None
+        self.live_refresh_job: str | None = None
 
-        self.root.title("Federated DP Research Runner")
-        self.root.geometry("1180x780")
-        self.root.minsize(980, 680)
+        self.root.title("Federated DP Research Studio")
+        self.root.geometry("1460x920")
+        self.root.minsize(1180, 760)
 
-        self.status_var = tk.StringVar(value="Ready")
+        self._configure_theme()
+        self._init_state()
         self._build_layout()
         self.reload_from_config()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    def _build_layout(self) -> None:
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=1)
+    def _configure_theme(self) -> None:
+        self.bg = "#f4f7fb"
+        self.surface = "#ffffff"
+        self.surface_alt = "#eef3f8"
+        self.ink = "#16202b"
+        self.muted = "#607284"
+        self.accent = "#0f766e"
+        self.accent_2 = "#d97706"
+        self.border = "#d7e0ea"
+        self.success = "#0b8f55"
+        self.danger = "#c2410c"
+        self.shadow = "#e9eef5"
 
-        header = ttk.Frame(self.root, padding=(16, 14))
-        header.grid(row=0, column=0, sticky="ew")
-        header.columnconfigure(0, weight=1)
+        style = ttk.Style()
+        style.theme_use("clam")
+        self.root.configure(bg=self.bg)
 
-        ttk.Label(
-            header,
-            text="Federated Learning on Non-IID Data with Differential Privacy",
-            font=("Segoe UI", 16, "bold"),
-        ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            header,
-            text="Configure the experiment, run main.py, and inspect logs and outputs from one place.",
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        default_font = tkfont.nametofont("TkDefaultFont")
+        default_font.configure(family="Segoe UI", size=10)
+        text_font = tkfont.nametofont("TkTextFont")
+        text_font.configure(family="Consolas", size=10)
 
-        content = ttk.Panedwindow(self.root, orient="horizontal")
-        content.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        self.title_font = tkfont.Font(family="Segoe UI Semibold", size=20)
+        self.hero_font = tkfont.Font(family="Georgia", size=11)
+        self.section_font = tkfont.Font(family="Segoe UI Semibold", size=11)
+        self.metric_value_font = tkfont.Font(family="Segoe UI Semibold", size=18)
+        self.metric_label_font = tkfont.Font(family="Segoe UI", size=9)
 
-        left = ttk.Frame(content, padding=12)
-        right = ttk.Frame(content, padding=12)
-        content.add(left, weight=4)
-        content.add(right, weight=5)
+        style.configure(".", background=self.bg, foreground=self.ink)
+        style.configure("App.TFrame", background=self.bg)
+        style.configure("Card.TFrame", background=self.surface, relief="flat")
+        style.configure("Subtle.TFrame", background=self.surface_alt, relief="flat")
+        style.configure("HeroTitle.TLabel", background=self.bg, foreground=self.ink, font=self.title_font)
+        style.configure("HeroBody.TLabel", background=self.bg, foreground=self.muted, font=self.hero_font)
+        style.configure("Section.TLabel", background=self.surface, foreground=self.ink, font=self.section_font)
+        style.configure("Muted.TLabel", background=self.surface, foreground=self.muted)
+        style.configure("MetricLabel.TLabel", background=self.surface, foreground=self.muted, font=self.metric_label_font)
+        style.configure("MetricValue.TLabel", background=self.surface, foreground=self.ink, font=self.metric_value_font)
+        style.configure("Pill.TLabel", background=self.surface_alt, foreground=self.accent, padding=(10, 5))
+        style.configure("Primary.TButton", background=self.accent, foreground="white", borderwidth=0, padding=(12, 8))
+        style.map("Primary.TButton", background=[("active", "#0b5f5a")])
+        style.configure("Secondary.TButton", background=self.surface_alt, foreground=self.ink, bordercolor=self.border, padding=(12, 8))
+        style.map("Secondary.TButton", background=[("active", "#dbe7f1")])
+        style.configure("App.TNotebook", background=self.bg, borderwidth=0)
+        style.configure("App.TNotebook.Tab", padding=(16, 8), font=("Segoe UI", 10, "bold"))
+        style.map("App.TNotebook.Tab", background=[("selected", self.surface)], foreground=[("selected", self.ink)])
+        style.configure("App.Horizontal.TProgressbar", troughcolor=self.surface_alt, background=self.accent, bordercolor=self.surface_alt, lightcolor=self.accent, darkcolor=self.accent)
+        style.configure("App.Treeview", rowheight=28, fieldbackground=self.surface, background=self.surface, foreground=self.ink, bordercolor=self.border)
+        style.configure("App.Treeview.Heading", background=self.surface_alt, foreground=self.ink, font=("Segoe UI", 10, "bold"))
 
-        self._build_form(left)
-        self._build_output_panel(right)
-
-        footer = ttk.Frame(self.root, padding=(16, 0, 16, 12))
-        footer.grid(row=2, column=0, sticky="ew")
-        footer.columnconfigure(0, weight=1)
-        ttk.Label(footer, textvariable=self.status_var).grid(row=0, column=0, sticky="w")
-
-    def _build_form(self, parent: ttk.Frame) -> None:
-        parent.columnconfigure(1, weight=1)
+    def _init_state(self) -> None:
+        self.status_var = tk.StringVar(value="Studio ready")
+        self.command_var = tk.StringVar(value="Command preview will appear before each run.")
+        self.run_state_var = tk.StringVar(value="Idle")
 
         self.config_var = tk.StringVar(value=self.config_path)
         self.results_dir_var = tk.StringVar()
@@ -390,112 +415,358 @@ class ExperimentGUI:
         self.delta_var = tk.StringVar()
         self.eval_batch_size_var = tk.StringVar()
 
-        row = 0
-        ttk.Label(parent, text="Config file", font=("Segoe UI", 11, "bold")).grid(
-            row=row, column=0, columnspan=2, sticky="w"
-        )
-        row += 1
-        config_frame = ttk.Frame(parent)
-        config_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(6, 10))
-        config_frame.columnconfigure(0, weight=1)
-        ttk.Entry(config_frame, textvariable=self.config_var).grid(row=0, column=0, sticky="ew")
-        ttk.Button(config_frame, text="Browse", command=self._browse_config).grid(row=0, column=1, padx=(8, 0))
-        ttk.Button(config_frame, text="Reload", command=self.reload_from_config).grid(row=0, column=2, padx=(8, 0))
-        row += 1
+        self.metric_vars = {
+            "algorithms": tk.StringVar(value="0"),
+            "best_acc": tk.StringVar(value="--"),
+            "epsilon": tk.StringVar(value="--"),
+            "last_round": tk.StringVar(value="--"),
+        }
 
-        row = self._section(parent, row, "System")
-        row = self._entry(parent, row, "Results directory", self.results_dir_var)
-        row = self._combobox(parent, row, "Device", self.device_var, ["auto", "cpu", "cuda"])
-        row = self._entry(parent, row, "Seed", self.seed_var)
+        self.summary_cards = {
+            "dataset": tk.StringVar(value="--"),
+            "federated": tk.StringVar(value="--"),
+            "privacy": tk.StringVar(value="--"),
+            "results": tk.StringVar(value="--"),
+        }
 
-        row = self._section(parent, row, "Data")
-        row = self._combobox(parent, row, "Dataset", self.dataset_var, ["CIFAR10", "MNIST"])
-        row = self._combobox(parent, row, "Partition", self.partition_var, ["dirichlet", "pathological"])
-        row = self._entry(parent, row, "Alpha", self.alpha_var)
-        row = self._entry(parent, row, "Classes per client", self.classes_per_client_var)
-        row = self._entry(parent, row, "Min partition size", self.min_partition_size_var)
+    def _build_layout(self) -> None:
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(1, weight=1)
 
-        row = self._section(parent, row, "Federated")
-        row = self._entry(parent, row, "Num clients", self.num_clients_var)
-        row = self._entry(parent, row, "Sample rate", self.sample_rate_var)
-        row = self._entry(parent, row, "Rounds", self.rounds_var)
-        row = self._entry(parent, row, "Local epochs", self.local_epochs_var)
-        row = self._entry(parent, row, "Batch size", self.batch_size_var)
-        row = self._entry(parent, row, "Server learning rate", self.server_lr_var)
+        hero = ttk.Frame(self.root, style="App.TFrame", padding=(26, 20, 26, 12))
+        hero.grid(row=0, column=0, sticky="ew")
+        hero.columnconfigure(0, weight=1)
+        hero.columnconfigure(1, weight=0)
 
-        row = self._section(parent, row, "Optimizer")
-        row = self._entry(parent, row, "Learning rate", self.optimizer_lr_var)
-        row = self._entry(parent, row, "Momentum", self.momentum_var)
-        row = self._entry(parent, row, "Weight decay", self.weight_decay_var)
+        hero_left = ttk.Frame(hero, style="App.TFrame")
+        hero_left.grid(row=0, column=0, sticky="w")
+        ttk.Label(hero_left, text="Federated DP Research Studio", style="HeroTitle.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            hero_left,
+            text="A richer desktop dashboard for non-IID federated learning experiments, privacy diagnostics, and artifact review.",
+            style="HeroBody.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
 
-        row = self._section(parent, row, "Algorithm and DP")
-        row = self._combobox(parent, row, "Algorithm", self.algorithm_var, list(SUPPORTED_ALGORITHMS) + ["all"])
-        row = self._entry(parent, row, "FedProx mu", self.mu_var)
-        row = self._checkbox(parent, row, "Enable DP", self.dp_enabled_var)
-        row = self._entry(parent, row, "Max grad norm", self.max_grad_norm_var)
-        row = self._entry(parent, row, "Noise multiplier", self.noise_var)
-        row = self._entry(parent, row, "Target delta", self.delta_var)
+        hero_right = ttk.Frame(hero, style="App.TFrame")
+        hero_right.grid(row=0, column=1, sticky="e")
+        ttk.Label(hero_right, textvariable=self.run_state_var, style="Pill.TLabel").grid(row=0, column=0, sticky="e")
+        ttk.Label(hero_right, textvariable=self.status_var, style="HeroBody.TLabel").grid(row=1, column=0, sticky="e", pady=(8, 0))
 
-        row = self._section(parent, row, "Evaluation")
-        row = self._entry(parent, row, "Eval batch size", self.eval_batch_size_var)
+        body = ttk.Panedwindow(self.root, orient="horizontal")
+        body.grid(row=1, column=0, sticky="nsew", padx=24, pady=(0, 10))
 
-        actions = ttk.Frame(parent)
-        actions.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(16, 0))
-        actions.columnconfigure(0, weight=1)
-        ttk.Button(actions, text="Run experiment", command=self.run_experiment).grid(row=0, column=0, sticky="ew")
-        ttk.Button(actions, text="Open results folder", command=self.open_results_folder).grid(row=0, column=1, padx=8)
-        ttk.Button(actions, text="Clear log", command=self.clear_log).grid(row=0, column=2)
+        left_shell = ttk.Frame(body, style="App.TFrame", padding=(0, 0, 10, 0))
+        right_shell = ttk.Frame(body, style="App.TFrame", padding=(10, 0, 0, 0))
+        body.add(left_shell, weight=34)
+        body.add(right_shell, weight=66)
 
-    def _build_output_panel(self, parent: ttk.Frame) -> None:
+        self._build_control_panel(left_shell)
+        self._build_dashboard(right_shell)
+
+        footer = ttk.Frame(self.root, style="App.TFrame", padding=(26, 0, 26, 18))
+        footer.grid(row=2, column=0, sticky="ew")
+        footer.columnconfigure(0, weight=1)
+        self.progress = ttk.Progressbar(footer, mode="indeterminate", style="App.Horizontal.TProgressbar")
+        self.progress.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Label(footer, textvariable=self.command_var, style="HeroBody.TLabel").grid(row=1, column=0, sticky="w")
+
+    def _build_control_panel(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(3, weight=1)
-        parent.rowconfigure(5, weight=1)
+        parent.rowconfigure(0, weight=1)
 
-        ttk.Label(parent, text="Run details", font=("Segoe UI", 11, "bold")).grid(row=0, column=0, sticky="w")
-        self.command_var = tk.StringVar(value="Command will appear here before each run.")
-        ttk.Label(parent, textvariable=self.command_var, wraplength=560, justify="left").grid(
-            row=1, column=0, sticky="ew", pady=(6, 12)
-        )
+        card = ttk.Frame(parent, style="Card.TFrame", padding=0)
+        card.grid(row=0, column=0, sticky="nsew")
+        card.columnconfigure(0, weight=1)
+        card.rowconfigure(1, weight=1)
 
-        self.info_text = tk.Text(parent, height=10, wrap="word")
-        self.info_text.grid(row=2, column=0, sticky="nsew")
+        header = ttk.Frame(card, style="Card.TFrame", padding=(18, 18, 18, 10))
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Experiment Controls", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Scrollable configuration panel with grouped settings and safer runtime validation.", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+        scroller = ttk.Frame(card, style="Card.TFrame")
+        scroller.grid(row=1, column=0, sticky="nsew")
+        scroller.columnconfigure(0, weight=1)
+        scroller.rowconfigure(0, weight=1)
+
+        self.form_canvas = tk.Canvas(scroller, bg=self.surface, highlightthickness=0, bd=0)
+        self.form_canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(scroller, orient="vertical", command=self.form_canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.form_canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.form_inner = ttk.Frame(self.form_canvas, style="Card.TFrame", padding=(18, 8, 18, 18))
+        self.form_window = self.form_canvas.create_window((0, 0), window=self.form_inner, anchor="nw")
+        self.form_inner.bind("<Configure>", self._sync_form_canvas)
+        self.form_canvas.bind("<Configure>", self._resize_form_canvas)
+        self.form_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
+        self._build_form_fields(self.form_inner)
+
+    def _build_form_fields(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+
+        self._build_config_card(parent).pack(fill="x", pady=(0, 14))
+        self._build_summary_strip(parent).pack(fill="x", pady=(0, 14))
+        self._build_section_card(parent, "System", [
+            ("Results directory", self.results_dir_var, "entry"),
+            ("Device", self.device_var, "combo", ["auto", "cpu", "cuda"]),
+            ("Seed", self.seed_var, "entry"),
+        ]).pack(fill="x", pady=(0, 14))
+        self._build_section_card(parent, "Data Topology", [
+            ("Dataset", self.dataset_var, "combo", ["CIFAR10", "MNIST"]),
+            ("Partition", self.partition_var, "combo", ["dirichlet", "pathological"]),
+            ("Dirichlet alpha", self.alpha_var, "entry"),
+            ("Classes per client", self.classes_per_client_var, "entry"),
+            ("Minimum partition size", self.min_partition_size_var, "entry"),
+        ]).pack(fill="x", pady=(0, 14))
+        self._build_section_card(parent, "Federated Loop", [
+            ("Number of clients", self.num_clients_var, "entry"),
+            ("Client sample rate", self.sample_rate_var, "entry"),
+            ("Communication rounds", self.rounds_var, "entry"),
+            ("Local epochs", self.local_epochs_var, "entry"),
+            ("Batch size", self.batch_size_var, "entry"),
+            ("Server learning rate", self.server_lr_var, "entry"),
+        ]).pack(fill="x", pady=(0, 14))
+        self._build_section_card(parent, "Optimizer", [
+            ("Learning rate", self.optimizer_lr_var, "entry"),
+            ("Momentum", self.momentum_var, "entry"),
+            ("Weight decay", self.weight_decay_var, "entry"),
+        ]).pack(fill="x", pady=(0, 14))
+        self._build_section_card(parent, "Algorithm and Privacy", [
+            ("Algorithm", self.algorithm_var, "combo", list(SUPPORTED_ALGORITHMS) + ["all"]),
+            ("FedProx mu", self.mu_var, "entry"),
+            ("Enable DP", self.dp_enabled_var, "check"),
+            ("Max grad norm", self.max_grad_norm_var, "entry"),
+            ("Noise multiplier", self.noise_var, "entry"),
+            ("Target delta", self.delta_var, "entry"),
+        ]).pack(fill="x", pady=(0, 14))
+        self._build_section_card(parent, "Evaluation", [
+            ("Eval batch size", self.eval_batch_size_var, "entry"),
+        ]).pack(fill="x", pady=(0, 14))
+        self._build_action_card(parent).pack(fill="x")
+
+    def _build_config_card(self, parent: ttk.Frame) -> ttk.Frame:
+        frame = ttk.Frame(parent, style="Subtle.TFrame", padding=14)
+        frame.columnconfigure(0, weight=1)
+        ttk.Label(frame, text="Config source", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, text="Switch configs, reload defaults, and preserve a GUI-generated runtime YAML per run.", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 10))
+        row = ttk.Frame(frame, style="Subtle.TFrame")
+        row.grid(row=2, column=0, sticky="ew")
+        row.columnconfigure(0, weight=1)
+        ttk.Entry(row, textvariable=self.config_var).grid(row=0, column=0, sticky="ew")
+        ttk.Button(row, text="Browse", style="Secondary.TButton", command=self._browse_config).grid(row=0, column=1, padx=(8, 0))
+        ttk.Button(row, text="Reload", style="Secondary.TButton", command=self.reload_from_config).grid(row=0, column=2, padx=(8, 0))
+        return frame
+
+    def _build_summary_strip(self, parent: ttk.Frame) -> ttk.Frame:
+        frame = ttk.Frame(parent, style="Card.TFrame")
+        for column in range(2):
+            frame.columnconfigure(column, weight=1)
+        cards = [
+            ("Dataset", self.summary_cards["dataset"]),
+            ("Federated", self.summary_cards["federated"]),
+            ("Privacy", self.summary_cards["privacy"]),
+            ("Results", self.summary_cards["results"]),
+        ]
+        for idx, (label, variable) in enumerate(cards):
+            card = ttk.Frame(frame, style="Subtle.TFrame", padding=12)
+            card.grid(row=idx // 2, column=idx % 2, sticky="nsew", padx=(0 if idx % 2 == 0 else 8, 0), pady=(0, 8))
+            ttk.Label(card, text=label, style="MetricLabel.TLabel").grid(row=0, column=0, sticky="w")
+            ttk.Label(card, textvariable=variable, style="Muted.TLabel", wraplength=220, justify="left").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        return frame
+
+    def _build_section_card(self, parent: ttk.Frame, title: str, fields: list[tuple]) -> ttk.Frame:
+        frame = ttk.Frame(parent, style="Card.TFrame", padding=14)
+        frame.columnconfigure(1, weight=1)
+        ttk.Label(frame, text=title, style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Separator(frame, orient="horizontal").grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 12))
+
+        row = 2
+        for field in fields:
+            label = field[0]
+            variable = field[1]
+            kind = field[2]
+            values = field[3] if len(field) > 3 else None
+            ttk.Label(frame, text=label, style="Muted.TLabel").grid(row=row, column=0, sticky="w", pady=6, padx=(0, 12))
+            if kind == "combo":
+                widget = ttk.Combobox(frame, textvariable=variable, values=values, state="readonly")
+                widget.grid(row=row, column=1, sticky="ew", pady=6)
+            elif kind == "check":
+                ttk.Checkbutton(frame, variable=variable).grid(row=row, column=1, sticky="w", pady=6)
+            else:
+                ttk.Entry(frame, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=6)
+            row += 1
+        return frame
+
+    def _build_action_card(self, parent: ttk.Frame) -> ttk.Frame:
+        frame = ttk.Frame(parent, style="Subtle.TFrame", padding=14)
+        frame.columnconfigure(0, weight=1)
+        ttk.Label(frame, text="Run Actions", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, text="Launch, stop, refresh, and inspect generated artifacts without leaving the studio.", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 12))
+
+        buttons = ttk.Frame(frame, style="Subtle.TFrame")
+        buttons.grid(row=2, column=0, sticky="ew")
+        for column in range(2):
+            buttons.columnconfigure(column, weight=1)
+        ttk.Button(buttons, text="Run Experiment", style="Primary.TButton", command=self.run_experiment).grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 8))
+        ttk.Button(buttons, text="Stop Run", style="Secondary.TButton", command=self.stop_run).grid(row=0, column=1, sticky="ew", padx=(6, 0), pady=(0, 8))
+        ttk.Button(buttons, text="Open Results Folder", style="Secondary.TButton", command=self.open_results_folder).grid(row=1, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(buttons, text="Refresh Dashboard", style="Secondary.TButton", command=self.refresh_outputs).grid(row=1, column=1, sticky="ew", padx=(6, 0))
+        return frame
+
+    def _build_dashboard(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
+
+        metrics_frame = ttk.Frame(parent, style="App.TFrame")
+        metrics_frame.grid(row=0, column=0, sticky="ew", pady=(0, 14))
+        for column in range(4):
+            metrics_frame.columnconfigure(column, weight=1)
+        self._build_metric_card(metrics_frame, 0, "Algorithms Logged", self.metric_vars["algorithms"], "Detected from result CSV files")
+        self._build_metric_card(metrics_frame, 1, "Best Accuracy", self.metric_vars["best_acc"], "Highest test accuracy observed")
+        self._build_metric_card(metrics_frame, 2, "Latest Epsilon", self.metric_vars["epsilon"], "Finite privacy budget if DP is enabled")
+        self._build_metric_card(metrics_frame, 3, "Latest Round", self.metric_vars["last_round"], "Most recent communication round")
+
+        notebook = ttk.Notebook(parent, style="App.TNotebook")
+        notebook.grid(row=1, column=0, sticky="nsew")
+
+        dashboard_tab = ttk.Frame(notebook, style="App.TFrame", padding=(0, 8, 0, 0))
+        logs_tab = ttk.Frame(notebook, style="App.TFrame", padding=(0, 8, 0, 0))
+        summary_tab = ttk.Frame(notebook, style="App.TFrame", padding=(0, 8, 0, 0))
+        notebook.add(dashboard_tab, text="Dashboard")
+        notebook.add(logs_tab, text="Logs")
+        notebook.add(summary_tab, text="Summary")
+
+        self._build_dashboard_tab(dashboard_tab)
+        self._build_logs_tab(logs_tab)
+        self._build_summary_tab(summary_tab)
+
+    def _build_metric_card(self, parent: ttk.Frame, column: int, title: str, variable: tk.StringVar, caption: str) -> None:
+        card = ttk.Frame(parent, style="Card.TFrame", padding=16)
+        card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 8, 0))
+        ttk.Label(card, text=title, style="MetricLabel.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(card, textvariable=variable, style="MetricValue.TLabel").grid(row=1, column=0, sticky="w", pady=(8, 4))
+        ttk.Label(card, text=caption, style="Muted.TLabel", wraplength=220, justify="left").grid(row=2, column=0, sticky="w")
+
+    def _build_dashboard_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=3)
+        parent.columnconfigure(1, weight=2)
+        parent.rowconfigure(0, weight=1)
+
+        chart_card = ttk.Frame(parent, style="Card.TFrame", padding=16)
+        chart_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        chart_card.columnconfigure(0, weight=1)
+        chart_card.rowconfigure(1, weight=1)
+        ttk.Label(chart_card, text="Experiment Analytics", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+
+        self.chart_figure = Figure(figsize=(9, 7), dpi=100, facecolor=self.surface)
+        self.chart_axes = [
+            self.chart_figure.add_subplot(221),
+            self.chart_figure.add_subplot(222),
+            self.chart_figure.add_subplot(223),
+            self.chart_figure.add_subplot(224),
+        ]
+        self.chart_canvas = FigureCanvasTkAgg(self.chart_figure, master=chart_card)
+        self.chart_canvas.get_tk_widget().grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+
+        side = ttk.Frame(parent, style="App.TFrame")
+        side.grid(row=0, column=1, sticky="nsew")
+        side.columnconfigure(0, weight=1)
+        side.rowconfigure(1, weight=1)
+
+        insight = ttk.Frame(side, style="Card.TFrame", padding=16)
+        insight.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        ttk.Label(insight, text="Run Snapshot", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        self.info_text = tk.Text(insight, height=9, wrap="word", relief="flat", bg=self.surface, fg=self.ink)
+        self.info_text.grid(row=1, column=0, sticky="ew", pady=(10, 0))
         self.info_text.configure(state="disabled")
 
-        ttk.Label(parent, text="Live logs", font=("Segoe UI", 11, "bold")).grid(row=3, column=0, sticky="sw", pady=(12, 6))
-        self.log_text = tk.Text(parent, wrap="word")
-        self.log_text.grid(row=4, column=0, sticky="nsew")
-
-        controls = ttk.Frame(parent)
-        controls.grid(row=5, column=0, sticky="ew", pady=(10, 0))
-        controls.columnconfigure(0, weight=1)
-        ttk.Button(controls, text="Refresh summary", command=self.refresh_summary).grid(row=0, column=0, sticky="w")
-        ttk.Button(controls, text="Stop run", command=self.stop_run).grid(row=0, column=1, padx=8)
-
-        ttk.Label(parent, text="Summary markdown", font=("Segoe UI", 11, "bold")).grid(row=6, column=0, sticky="sw", pady=(12, 6))
-        self.summary_text = tk.Text(parent, height=11, wrap="word")
-        self.summary_text.grid(row=7, column=0, sticky="nsew")
-
-    def _section(self, parent: ttk.Frame, row: int, title: str) -> int:
-        ttk.Label(parent, text=title, font=("Segoe UI", 11, "bold")).grid(
-            row=row, column=0, columnspan=2, sticky="w", pady=(12, 2)
+        artifact_card = ttk.Frame(side, style="Card.TFrame", padding=16)
+        artifact_card.grid(row=1, column=0, sticky="nsew")
+        artifact_card.columnconfigure(0, weight=1)
+        artifact_card.rowconfigure(1, weight=1)
+        ttk.Label(artifact_card, text="Artifacts", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        self.artifact_tree = ttk.Treeview(
+            artifact_card,
+            style="App.Treeview",
+            columns=("type", "name"),
+            show="headings",
+            selectmode="browse",
+            height=10,
         )
-        return row + 1
+        self.artifact_tree.heading("type", text="Type")
+        self.artifact_tree.heading("name", text="File")
+        self.artifact_tree.column("type", width=90, stretch=False)
+        self.artifact_tree.column("name", width=260, stretch=True)
+        self.artifact_tree.grid(row=1, column=0, sticky="nsew", pady=(10, 10))
+        self.artifact_tree.bind("<Double-1>", lambda _event: self.open_selected_artifact())
 
-    def _entry(self, parent: ttk.Frame, row: int, label: str, variable: tk.StringVar) -> int:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=3, padx=(0, 8))
-        ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=3)
-        return row + 1
+        actions = ttk.Frame(artifact_card, style="Card.TFrame")
+        actions.grid(row=2, column=0, sticky="ew")
+        actions.columnconfigure(0, weight=1)
+        ttk.Button(actions, text="Open Selected", style="Secondary.TButton", command=self.open_selected_artifact).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(actions, text="Open Results Folder", style="Secondary.TButton", command=self.open_results_folder).grid(row=0, column=1, sticky="ew")
 
-    def _combobox(self, parent: ttk.Frame, row: int, label: str, variable: tk.StringVar, values: List[str]) -> int:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=3, padx=(0, 8))
-        box = ttk.Combobox(parent, textvariable=variable, values=values, state="readonly")
-        box.grid(row=row, column=1, sticky="ew", pady=3)
-        return row + 1
+    def _build_logs_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        card = ttk.Frame(parent, style="Card.TFrame", padding=16)
+        card.grid(row=0, column=0, sticky="nsew")
+        card.columnconfigure(0, weight=1)
+        card.rowconfigure(1, weight=1)
+        header = ttk.Frame(card, style="Card.TFrame")
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Live Console", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Button(header, text="Clear Log", style="Secondary.TButton", command=self.clear_log).grid(row=0, column=1, sticky="e")
 
-    def _checkbox(self, parent: ttk.Frame, row: int, label: str, variable: tk.BooleanVar) -> int:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=3, padx=(0, 8))
-        ttk.Checkbutton(parent, variable=variable).grid(row=row, column=1, sticky="w", pady=3)
-        return row + 1
+        holder = ttk.Frame(card, style="Card.TFrame")
+        holder.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        holder.columnconfigure(0, weight=1)
+        holder.rowconfigure(0, weight=1)
+        self.log_text = tk.Text(holder, wrap="word", bg="#101820", fg="#e6eef7", insertbackground="#e6eef7", relief="flat")
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(holder, orient="vertical", command=self.log_text.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.log_text.configure(yscrollcommand=scroll.set)
+
+    def _build_summary_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        card = ttk.Frame(parent, style="Card.TFrame", padding=16)
+        card.grid(row=0, column=0, sticky="nsew")
+        card.columnconfigure(0, weight=1)
+        card.rowconfigure(1, weight=1)
+        header = ttk.Frame(card, style="Card.TFrame")
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Markdown Summary", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Button(header, text="Refresh Summary", style="Secondary.TButton", command=self.refresh_summary).grid(row=0, column=1, sticky="e")
+
+        holder = ttk.Frame(card, style="Card.TFrame")
+        holder.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        holder.columnconfigure(0, weight=1)
+        holder.rowconfigure(0, weight=1)
+        self.summary_text = tk.Text(holder, wrap="word", bg=self.surface, fg=self.ink, relief="flat")
+        self.summary_text.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(holder, orient="vertical", command=self.summary_text.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.summary_text.configure(yscrollcommand=scroll.set)
+
+    def _sync_form_canvas(self, _event: tk.Event) -> None:
+        self.form_canvas.configure(scrollregion=self.form_canvas.bbox("all"))
+
+    def _resize_form_canvas(self, event: tk.Event) -> None:
+        self.form_canvas.itemconfigure(self.form_window, width=event.width)
+
+    def _on_mousewheel(self, event: tk.Event) -> None:
+        widget = self.root.winfo_containing(event.x_root, event.y_root)
+        if widget is None:
+            return
+        if str(widget).startswith(str(self.form_canvas)) or str(widget).startswith(str(self.form_inner)):
+            self.form_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def _browse_config(self) -> None:
         selected = filedialog.askopenfilename(
@@ -509,50 +780,64 @@ class ExperimentGUI:
 
     def reload_from_config(self) -> None:
         config_path = self.config_var.get().strip() or self.config_path
-        config = load_config(config_path)
+        self.base_config = load_config(config_path)
         self.config_path = config_path
 
-        self.results_dir_var.set(str(config["system"]["results_dir"]))
-        self.device_var.set(str(config["system"]["device"]))
-        self.seed_var.set(str(config["system"]["seed"]))
-        self.dataset_var.set(str(config["data"]["dataset"]))
-        self.partition_var.set(str(config["data"]["partition"]))
-        self.alpha_var.set(str(config["data"]["alpha"]))
-        self.classes_per_client_var.set(str(config["data"]["classes_per_client"]))
-        self.min_partition_size_var.set(str(config["data"]["min_partition_size"]))
-        self.num_clients_var.set(str(config["federated"]["num_clients"]))
-        self.sample_rate_var.set(str(config["federated"]["sample_rate"]))
-        self.rounds_var.set(str(config["federated"]["rounds"]))
-        self.local_epochs_var.set(str(config["federated"]["local_epochs"]))
-        self.batch_size_var.set(str(config["federated"]["batch_size"]))
-        self.server_lr_var.set(str(config["federated"]["server_lr"]))
-        self.optimizer_lr_var.set(str(config["optimizer"]["lr"]))
-        self.momentum_var.set(str(config["optimizer"]["momentum"]))
-        self.weight_decay_var.set(str(config["optimizer"]["weight_decay"]))
-        self.algorithm_var.set(str(config["algorithm"]["name"]))
-        self.mu_var.set(str(config["algorithm"]["mu"]))
-        self.dp_enabled_var.set(bool(config["dp"]["enabled"]))
-        self.max_grad_norm_var.set(str(config["dp"]["max_grad_norm"]))
-        self.noise_var.set(str(config["dp"]["noise_multiplier"]))
-        self.delta_var.set(str(config["dp"]["target_delta"]))
-        self.eval_batch_size_var.set(str(config["evaluation"]["eval_batch_size"]))
+        self.results_dir_var.set(str(self.base_config["system"]["results_dir"]))
+        self.device_var.set(str(self.base_config["system"]["device"]))
+        self.seed_var.set(str(self.base_config["system"]["seed"]))
+        self.dataset_var.set(str(self.base_config["data"]["dataset"]))
+        self.partition_var.set(str(self.base_config["data"]["partition"]))
+        self.alpha_var.set(str(self.base_config["data"]["alpha"]))
+        self.classes_per_client_var.set(str(self.base_config["data"]["classes_per_client"]))
+        self.min_partition_size_var.set(str(self.base_config["data"]["min_partition_size"]))
+        self.num_clients_var.set(str(self.base_config["federated"]["num_clients"]))
+        self.sample_rate_var.set(str(self.base_config["federated"]["sample_rate"]))
+        self.rounds_var.set(str(self.base_config["federated"]["rounds"]))
+        self.local_epochs_var.set(str(self.base_config["federated"]["local_epochs"]))
+        self.batch_size_var.set(str(self.base_config["federated"]["batch_size"]))
+        self.server_lr_var.set(str(self.base_config["federated"]["server_lr"]))
+        self.optimizer_lr_var.set(str(self.base_config["optimizer"]["lr"]))
+        self.momentum_var.set(str(self.base_config["optimizer"]["momentum"]))
+        self.weight_decay_var.set(str(self.base_config["optimizer"]["weight_decay"]))
+        self.algorithm_var.set(str(self.base_config["algorithm"]["name"]))
+        self.mu_var.set(str(self.base_config["algorithm"]["mu"]))
+        self.dp_enabled_var.set(bool(self.base_config["dp"]["enabled"]))
+        self.max_grad_norm_var.set(str(self.base_config["dp"]["max_grad_norm"]))
+        self.noise_var.set(str(self.base_config["dp"]["noise_multiplier"]))
+        self.delta_var.set(str(self.base_config["dp"]["target_delta"]))
+        self.eval_batch_size_var.set(str(self.base_config["evaluation"]["eval_batch_size"]))
 
         self.active_results_dir = self._resolve_results_dir()
+        self._update_summary_cards()
         self._write_info(self._format_info())
-        self.refresh_summary()
+        self.refresh_outputs()
         self.status_var.set(f"Loaded configuration from {self.config_path}")
 
+    def _update_summary_cards(self) -> None:
+        self.summary_cards["dataset"].set(
+            f"{self.dataset_var.get()} | {self.partition_var.get()} | alpha {self.alpha_var.get()}"
+        )
+        self.summary_cards["federated"].set(
+            f"{self.num_clients_var.get()} clients | q={self.sample_rate_var.get()} | {self.rounds_var.get()} rounds"
+        )
+        self.summary_cards["privacy"].set(
+            f"DP {'on' if self.dp_enabled_var.get() else 'off'} | sigma {self.noise_var.get()} | delta {self.delta_var.get()}"
+        )
+        self.summary_cards["results"].set(self._resolve_results_dir())
+
     def _format_info(self) -> str:
-        dp_mode = "On" if self.dp_enabled_var.get() else "Off"
+        dp_mode = "Enabled" if self.dp_enabled_var.get() else "Disabled"
         return (
             f"Dataset: {self.dataset_var.get()}\n"
-            f"Partition: {self.partition_var.get()} (alpha={self.alpha_var.get()}, "
-            f"classes/client={self.classes_per_client_var.get()})\n"
-            f"Clients: {self.num_clients_var.get()} total, sample rate {self.sample_rate_var.get()}, "
-            f"rounds {self.rounds_var.get()}, local epochs {self.local_epochs_var.get()}\n"
-            f"Algorithm: {self.algorithm_var.get()} | DP: {dp_mode} | Noise: {self.noise_var.get()} | "
-            f"Delta: {self.delta_var.get()}\n"
-            f"Device: {self.device_var.get()} | Seed: {self.seed_var.get()} | Results: {self._resolve_results_dir()}"
+            f"Partitioning: {self.partition_var.get()} | alpha={self.alpha_var.get()} | classes/client={self.classes_per_client_var.get()}\n"
+            f"Federated loop: {self.num_clients_var.get()} clients, sample rate {self.sample_rate_var.get()}, "
+            f"{self.rounds_var.get()} rounds, {self.local_epochs_var.get()} local epochs\n"
+            f"Optimization: lr={self.optimizer_lr_var.get()}, momentum={self.momentum_var.get()}, "
+            f"server lr={self.server_lr_var.get()}, batch={self.batch_size_var.get()}\n"
+            f"Privacy: {dp_mode}, C={self.max_grad_norm_var.get()}, sigma={self.noise_var.get()}, delta={self.delta_var.get()}\n"
+            f"Execution: device={self.device_var.get()}, seed={self.seed_var.get()}\n"
+            f"Artifacts: {self._resolve_results_dir()}"
         )
 
     def _write_info(self, text: str) -> None:
@@ -562,8 +847,10 @@ class ExperimentGUI:
         self.info_text.configure(state="disabled")
 
     def _set_text(self, widget: tk.Text, text: str) -> None:
+        widget.configure(state="normal")
         widget.delete("1.0", "end")
         widget.insert("1.0", text)
+        widget.configure(state="normal")
 
     def _resolve_results_dir(self) -> str:
         candidate = self.results_dir_var.get().strip() or "results"
@@ -580,7 +867,7 @@ class ExperimentGUI:
             },
             "data": {
                 "dataset": self.dataset_var.get(),
-                "data_root": load_config(self.config_path)["data"]["data_root"],
+                "data_root": self.base_config["data"]["data_root"],
                 "partition": self.partition_var.get(),
                 "alpha": float(self.alpha_var.get()),
                 "classes_per_client": int(self.classes_per_client_var.get()),
@@ -609,7 +896,7 @@ class ExperimentGUI:
                 "noise_multiplier": float(self.noise_var.get()),
                 "target_delta": float(self.delta_var.get()),
             },
-            "model": load_config(self.config_path)["model"],
+            "model": self.base_config["model"],
             "evaluation": {
                 "eval_batch_size": int(self.eval_batch_size_var.get()),
             },
@@ -646,10 +933,18 @@ class ExperimentGUI:
             "max_grad_norm": self.max_grad_norm_var.get(),
             "delta": self.delta_var.get(),
             "eval_batch_size": self.eval_batch_size_var.get(),
+            "min_partition_size": self.min_partition_size_var.get(),
+            "classes_per_client": self.classes_per_client_var.get(),
         }
         for field, value in required.items():
             if not str(value).strip():
                 raise ValueError(f"Missing value for {field}.")
+        if float(self.sample_rate_var.get()) <= 0 or float(self.sample_rate_var.get()) > 1:
+            raise ValueError("Sample rate must be between 0 and 1.")
+        if int(self.rounds_var.get()) <= 0:
+            raise ValueError("Rounds must be greater than zero.")
+        if int(self.num_clients_var.get()) <= 0:
+            raise ValueError("Number of clients must be greater than zero.")
         float(self.alpha_var.get())
         float(self.noise_var.get())
         int(self.rounds_var.get())
@@ -666,6 +961,8 @@ class ExperimentGUI:
         float(self.max_grad_norm_var.get())
         float(self.delta_var.get())
         int(self.eval_batch_size_var.get())
+        int(self.min_partition_size_var.get())
+        int(self.classes_per_client_var.get())
 
     def run_experiment(self) -> None:
         if self.process is not None:
@@ -678,12 +975,16 @@ class ExperimentGUI:
             messagebox.showerror("Invalid input", str(exc))
             return
 
-        command = self._build_command()
-        self.command_var.set(" ".join(command))
+        self._update_summary_cards()
         self._write_info(self._format_info())
         self.active_results_dir = self._resolve_results_dir()
+        command = self._build_command()
+        self.command_var.set(" ".join(command))
         self.clear_log()
+        self.run_state_var.set("Running")
         self.status_var.set("Experiment running...")
+        self.progress.start(10)
+        self._schedule_live_refresh()
 
         def worker() -> None:
             env = os.environ.copy()
@@ -711,14 +1012,33 @@ class ExperimentGUI:
         self.log_text.see("end")
 
     def _finish_run(self, return_code: int) -> None:
-        self.refresh_summary()
+        self.progress.stop()
+        self.run_state_var.set("Completed" if return_code == 0 else "Failed")
+        self.refresh_outputs()
         if return_code == 0:
             self.status_var.set("Experiment finished successfully.")
         else:
             self.status_var.set(f"Experiment failed with exit code {return_code}.")
 
+    def _schedule_live_refresh(self) -> None:
+        if self.live_refresh_job is not None:
+            self.root.after_cancel(self.live_refresh_job)
+        self.live_refresh_job = self.root.after(1800, self._refresh_live_outputs)
+
+    def _refresh_live_outputs(self) -> None:
+        self.refresh_outputs()
+        if self.process is not None:
+            self._schedule_live_refresh()
+        else:
+            self.live_refresh_job = None
+
+    def refresh_outputs(self) -> None:
+        self.refresh_summary()
+        self._refresh_artifacts()
+        self._refresh_metrics_and_charts()
+
     def clear_log(self) -> None:
-        self._set_text(self.log_text, "")
+        self.log_text.delete("1.0", "end")
 
     def refresh_summary(self) -> None:
         summary_path = os.path.join(self._resolve_results_dir(), "summary.md")
@@ -726,10 +1046,109 @@ class ExperimentGUI:
             with open(summary_path, "r", encoding="utf-8") as handle:
                 self._set_text(self.summary_text, handle.read())
         else:
-            self._set_text(
-                self.summary_text,
-                "No summary found yet. Run an experiment and summary.md will appear here.",
-            )
+            self._set_text(self.summary_text, "No summary found yet. Run an experiment and summary.md will appear here.")
+
+    def _refresh_artifacts(self) -> None:
+        for item in self.artifact_tree.get_children():
+            self.artifact_tree.delete(item)
+        results_dir = self._resolve_results_dir()
+        os.makedirs(results_dir, exist_ok=True)
+        for name in sorted(os.listdir(results_dir)):
+            path = os.path.join(results_dir, name)
+            if os.path.isdir(path):
+                continue
+            ext = os.path.splitext(name)[1].lower()
+            kind = "Plot" if ext == ".png" else "CSV" if ext == ".csv" else "Markdown" if ext == ".md" else "YAML" if ext in {".yml", ".yaml"} else "File"
+            self.artifact_tree.insert("", "end", values=(kind, name), tags=(path,))
+
+    def open_selected_artifact(self) -> None:
+        selected = self.artifact_tree.selection()
+        if not selected:
+            self.status_var.set("Select an artifact to open.")
+            return
+        values = self.artifact_tree.item(selected[0], "values")
+        path = os.path.join(self._resolve_results_dir(), values[1])
+        if os.path.exists(path):
+            os.startfile(path)
+
+    def _refresh_metrics_and_charts(self) -> None:
+        run_csvs = discover_run_csvs(self._resolve_results_dir())
+        self.metric_vars["algorithms"].set(str(len(run_csvs)))
+        if not run_csvs:
+            self.metric_vars["best_acc"].set("--")
+            self.metric_vars["epsilon"].set("--")
+            self.metric_vars["last_round"].set("--")
+            self._draw_empty_chart_state()
+            return
+
+        best_acc = 0.0
+        latest_epsilon = None
+        latest_round = 0
+        data_map = {}
+        for algo, path in run_csvs.items():
+            data = read_run_csv(path)
+            data_map[algo] = data
+            if data["test_acc"]:
+                best_acc = max(best_acc, max(data["test_acc"]))
+            if data["round"]:
+                latest_round = max(latest_round, int(max(data["round"])))
+            eps_values = [e for e in data["epsilon"] if math.isfinite(e)]
+            if eps_values:
+                latest_epsilon = max(eps_values) if latest_epsilon is None else max(latest_epsilon, max(eps_values))
+
+        self.metric_vars["best_acc"].set(f"{best_acc * 100:.2f}%")
+        self.metric_vars["epsilon"].set("--" if latest_epsilon is None else f"{latest_epsilon:.2f}")
+        self.metric_vars["last_round"].set(str(latest_round))
+        self._draw_charts(data_map)
+
+    def _draw_empty_chart_state(self) -> None:
+        for ax in self.chart_axes:
+            ax.clear()
+            ax.set_facecolor(self.surface)
+            ax.text(0.5, 0.5, "Run an experiment to populate charts", ha="center", va="center", transform=ax.transAxes, color=self.muted)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        self.chart_figure.tight_layout(pad=2.0)
+        self.chart_canvas.draw_idle()
+
+    def _draw_charts(self, data_map: Dict[str, dict]) -> None:
+        palette = {
+            "fedavg": "#2563eb",
+            "fedprox": "#dc2626",
+            "scaffold": "#0891b2",
+        }
+        titles = [
+            ("Accuracy vs Rounds", "round", "test_acc", "Accuracy (%)"),
+            ("Loss vs Rounds", "round", "test_loss", "Loss"),
+            ("Privacy Budget", "round", "epsilon", "Epsilon"),
+            ("Client Drift", "round", "client_drift", "Drift"),
+        ]
+
+        for ax, (title, x_key, y_key, y_label) in zip(self.chart_axes, titles):
+            ax.clear()
+            ax.set_facecolor(self.surface)
+            for algo, data in sorted(data_map.items()):
+                xs = data[x_key]
+                ys = data[y_key]
+                if y_key == "test_acc":
+                    ys = [v * 100.0 for v in ys]
+                if y_key == "epsilon":
+                    filtered = [(x, y) for x, y in zip(xs, ys) if math.isfinite(y)]
+                    if not filtered:
+                        continue
+                    xs, ys = zip(*filtered)
+                color = palette.get(algo, "#475569")
+                ax.plot(xs, ys, linewidth=2.1, color=color, label=algo.upper())
+            ax.set_title(title, color=self.ink, fontsize=11, pad=10)
+            ax.set_xlabel("Round", color=self.muted)
+            ax.set_ylabel(y_label, color=self.muted)
+            ax.grid(alpha=0.22)
+            ax.tick_params(colors=self.muted, labelsize=8)
+            for spine in ax.spines.values():
+                spine.set_color(self.border)
+        self.chart_axes[0].legend(frameon=False, fontsize=8, loc="best")
+        self.chart_figure.tight_layout(pad=2.0)
+        self.chart_canvas.draw_idle()
 
     def open_results_folder(self) -> None:
         results_dir = self._resolve_results_dir()
@@ -741,9 +1160,13 @@ class ExperimentGUI:
             self.status_var.set("No active experiment to stop.")
             return
         self.process.terminate()
+        self.progress.stop()
+        self.run_state_var.set("Stopping")
         self.status_var.set("Stopping experiment...")
 
     def _on_close(self) -> None:
+        if self.live_refresh_job is not None:
+            self.root.after_cancel(self.live_refresh_job)
         if self.process is not None:
             if not messagebox.askyesno("Exit", "An experiment is still running. Close the GUI anyway?"):
                 return
@@ -753,7 +1176,8 @@ class ExperimentGUI:
 
 def launch_gui(config_path: str) -> None:
     root = tk.Tk()
-    root.option_add("*Font", "Segoe UI 10")
+    default_font = tkfont.nametofont("TkDefaultFont")
+    default_font.configure(family="Segoe UI", size=10)
     ExperimentGUI(
         root=root,
         script_path=os.path.abspath(__file__),
