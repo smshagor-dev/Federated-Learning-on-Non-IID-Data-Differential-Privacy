@@ -35,7 +35,9 @@ def validate_scheduling_config(config: SchedulingConfig) -> SchedulingValidation
     if config.minimum_clients <= 0:
         return SchedulingValidationResult(False, ["minimum_clients must be positive"])
     if config.minimum_clients > config.target_clients:
-        return SchedulingValidationResult(False, ["minimum_clients must not exceed target_clients"])
+        return SchedulingValidationResult(
+            False, ["minimum_clients must not exceed target_clients"]
+        )
 
     if config.mode == ExecutionMode.SYNCHRONOUS:
         if config.round_deadline_s is not None:
@@ -46,19 +48,27 @@ def validate_scheduling_config(config: SchedulingConfig) -> SchedulingValidation
 
     if config.mode == ExecutionMode.DEADLINE_BASED_SEMI_SYNCHRONOUS:
         if config.round_deadline_s is None or config.round_deadline_s <= 0:
-            return SchedulingValidationResult(False, ["semi-synchronous mode requires positive round_deadline_s"])
+            return SchedulingValidationResult(
+                False, ["semi-synchronous mode requires positive round_deadline_s"]
+            )
         return SchedulingValidationResult(True, warnings)
 
     if config.mode == ExecutionMode.BUFFERED_ASYNCHRONOUS:
         if config.buffer_size is None or config.buffer_size <= 0:
-            return SchedulingValidationResult(False, ["buffered asynchronous mode requires positive buffer_size"])
+            return SchedulingValidationResult(
+                False, ["buffered asynchronous mode requires positive buffer_size"]
+            )
         return SchedulingValidationResult(True, warnings)
 
     if config.mode == ExecutionMode.STALENESS_AWARE_ASYNCHRONOUS:
         if config.maximum_staleness is None or config.maximum_staleness < 0:
-            return SchedulingValidationResult(False, ["staleness-aware mode requires non-negative maximum_staleness"])
+            return SchedulingValidationResult(
+                False, ["staleness-aware mode requires non-negative maximum_staleness"]
+            )
         if config.buffer_size is None or config.buffer_size <= 0:
-            warnings.append("staleness-aware mode usually pairs with a positive buffer_size")
+            warnings.append(
+                "staleness-aware mode usually pairs with a positive buffer_size"
+            )
         return SchedulingValidationResult(True, warnings)
 
     return SchedulingValidationResult(True, warnings)

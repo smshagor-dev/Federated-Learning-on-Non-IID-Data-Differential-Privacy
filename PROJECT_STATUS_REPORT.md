@@ -23,6 +23,34 @@ High-level status:
 
 `plan.md` defines a very large target platform with 10 milestones and release gates. It explicitly says to begin with **Milestone 1 only**.
 
+**Final Architecture:**
+flowchart LR
+    UI[Next.js / React Dashboard]
+    GO[Go Control Plane API]
+    CPP[C++20 FL Coordinator and Aggregation Engine]
+    PY[Python AI/ML Workers]
+    EDGE[Flower / Edge SuperNodes]
+
+    DB[(PostgreSQL)]
+    OBJ[(MinIO / S3 Artifacts)]
+    MLF[MLflow Tracking]
+    OBS[Prometheus + OpenTelemetry]
+
+    UI <-->|REST + WebSocket| GO
+    GO <-->|gRPC Control Commands| CPP
+    CPP <-->|Bidirectional gRPC Tensor Streams| PY
+    PY <-->|Flower Adapter| EDGE
+
+    GO --> DB
+    GO --> MLF
+    PY --> MLF
+    CPP --> OBJ
+    PY --> OBJ
+
+    GO --> OBS
+    CPP --> OBS
+    PY --> OBS
+
 Milestone 1 includes:
 
 - Full repository audit

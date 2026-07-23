@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from math import sqrt
-from typing import Iterable
 
 
 def _l2_norm(values: Iterable[float]) -> float:
@@ -38,7 +38,7 @@ def build_fedsam_step(
 
     base = [
         abs(weight) * gradient if config.adaptive else gradient
-        for weight, gradient in zip(weights, gradients)
+        for weight, gradient in zip(weights, gradients, strict=True)
     ]
     gradient_norm = _l2_norm(base)
     scale = config.rho / max(gradient_norm, config.epsilon)

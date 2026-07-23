@@ -4,6 +4,18 @@ from dataclasses import dataclass
 
 from fl_platform.execution import ExecutionMode
 
+ASYNC_INCOMPATIBLE_MESSAGE = (
+    "secure aggregation scaffold is not compatible with asynchronous modes yet"
+)
+SEMI_SYNC_WARNING = (
+    "semi-synchronous secure aggregation requires stricter cohort compatibility "
+    "in a future milestone"
+)
+DROPOUT_WARNING = (
+    "dropout recovery is declared but not yet backed by a cryptographic "
+    "recovery protocol"
+)
+
 
 @dataclass(slots=True)
 class SecureAggregationConfig:
@@ -36,14 +48,10 @@ def validate_secure_aggregation_config(
     }:
         return SecureAggregationValidationResult(
             False,
-            ["secure aggregation scaffold is not compatible with asynchronous modes yet"],
+            [ASYNC_INCOMPATIBLE_MESSAGE],
         )
     if config.execution_mode == ExecutionMode.DEADLINE_BASED_SEMI_SYNCHRONOUS:
-        warnings.append(
-            "semi-synchronous secure aggregation requires stricter cohort compatibility in a future milestone"
-        )
+        warnings.append(SEMI_SYNC_WARNING)
     if config.dropout_recovery:
-        warnings.append(
-            "dropout recovery is declared but not yet backed by a cryptographic recovery protocol"
-        )
+        warnings.append(DROPOUT_WARNING)
     return SecureAggregationValidationResult(True, warnings)

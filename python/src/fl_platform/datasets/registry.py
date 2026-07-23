@@ -27,7 +27,7 @@ class DatasetRegistry:
         return sorted(self._datasets)
 
     @classmethod
-    def with_milestone_defaults(cls) -> "DatasetRegistry":
+    def with_milestone_defaults(cls) -> DatasetRegistry:
         registry = cls()
         partitioning = ["iid", "dirichlet", "pathological"]
         for name, classes in [
@@ -50,14 +50,24 @@ class DatasetRegistry:
             DatasetDescriptor(
                 name="custom_image_folder",
                 modality="image",
-                supports_partitioning=["iid", "dirichlet", "pathological", "quantity_skew"],
+                supports_partitioning=[
+                    "iid",
+                    "dirichlet",
+                    "pathological",
+                    "quantity_skew",
+                ],
             )
         )
         registry.register(
             DatasetDescriptor(
                 name="custom_manifest_dataset",
                 modality="manifest",
-                supports_partitioning=["iid", "dirichlet", "pathological", "quantity_skew"],
+                supports_partitioning=[
+                    "iid",
+                    "dirichlet",
+                    "pathological",
+                    "quantity_skew",
+                ],
             )
         )
         return registry

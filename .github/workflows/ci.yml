@@ -1,0 +1,192 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # C++ (Milestone 1 + Milestone 2)
+  # ------------------------------------------------------------------ #
+  cpp-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (Debug)
+        run: cmake -S cpp -B build/cpp-debug -DCMAKE_BUILD_TYPE=Debug
+      - name: Build (Debug)
+        run: cmake --build build/cpp-debug
+      - name: Test (Debug)
+        run: ctest --test-dir build/cpp-debug --output-on-failure
+
+  cpp-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (Release)
+        run: cmake -S cpp -B build/cpp-release -DCMAKE_BUILD_TYPE=Release
+      - name: Build (Release)
+        run: cmake --build build/cpp-release
+      - name: Test (Release)
+        run: ctest --test-dir build/cpp-release --output-on-failure
+
+  cpp-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: Check formatting
+        run: make cpp-format-check
+
+  cpp-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      - name: Run clang-tidy
+        run: make cpp-tidy
+
+  cpp-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ASan build + test
+        run: make cpp-asan
+      - name: UBSan build + test
+        run: make cpp-ubsan
+    # ThreadSanitizer is intentionally not run here: it is not supported
+    # under the MSVC toolchain this project also targets, and adding a
+    # Linux-only TSan job was not part of the scope exercised in this
+    # pass. See docs/known-limitations.md.
+
+  cpp-benchmark:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # optional: informational, not a merge gate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build benchmark (Release)
+        run: |
+          cmake -S cpp -B build/cpp-release -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/cpp-release --target fl_aggregation_benchmark
+      - name: Run benchmark (quick mode)
+        run: ./build/cpp-release/fl_aggregation_benchmark
+      - name: Upload benchmark output
+        uses: actions/upload-artifact@v4
+        with:
+          name: aggregation-benchmark-results
+          path: build/cpp-release/fl_aggregation_benchmark
+
+  # ------------------------------------------------------------------ #
+  # Python (Milestone 1 tooling + Milestone 2 compatibility tests)
+  # ------------------------------------------------------------------ #
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package with dev tooling
+        run: python -m pip install -e "python[dev]"
+      - name: Install legacy prototype requirements (torch, for compat tests)
+        run: python -m pip install -r requirements.txt
+      - name: Build C++ core (needed for golden/compat parity tests)
+        run: |
+          cmake -S cpp -B build/cpp-debug -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/cpp-debug
+      - name: pytest
+        run: python -m pytest tests python/tests
+      - name: Ruff (lint)
+        run: python -m ruff check .
+      - name: Ruff (format check)
+        run: python -m ruff format --check .
+      - name: mypy
+        run: python -m mypy python/src
+
+  # ------------------------------------------------------------------ #
+  # Go
+  # ------------------------------------------------------------------ #
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false  # no go.sum: this module has no external dependencies
+      - name: gofmt check
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+      - name: go test -race
+        run: go test -race ./...
+      - name: go build
+        run: go build ./...
+
+  # ------------------------------------------------------------------ #
+  # Web
+  # ------------------------------------------------------------------ #
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit / component tests
+        run: npm run test
+      - name: Production build
+        run: npm run build
+
+  # ------------------------------------------------------------------ #
+  # Protobuf contracts
+  # ------------------------------------------------------------------ #
+  protobuf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: protoc version
+        run: protoc --version
+      - name: Contract compatibility check
+        run: make proto-check
+      - name: Generate bindings (freshness / generation-succeeds check)
+        run: make proto
+
+  # ------------------------------------------------------------------ #
+  # Infrastructure
+  # ------------------------------------------------------------------ #
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        run: docker compose config
+      - name: docker compose build
+        continue-on-error: true  # optional: base-image pulls can be flaky/slow in CI
+        run: docker compose build

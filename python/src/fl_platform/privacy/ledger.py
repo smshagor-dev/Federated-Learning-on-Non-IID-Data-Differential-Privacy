@@ -51,7 +51,9 @@ class PrivacyLedger:
         else:
             deltas = [
                 current.epsilon - previous.epsilon
-                for previous, current in zip(self.entries[:-1], self.entries[1:])
+                for previous, current in zip(
+                    self.entries[:-1], self.entries[1:], strict=True
+                )
             ]
             increment = mean(deltas)
         projected = latest.epsilon + increment

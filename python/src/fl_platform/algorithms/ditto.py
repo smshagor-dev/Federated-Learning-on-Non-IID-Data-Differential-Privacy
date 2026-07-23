@@ -21,18 +21,15 @@ def compute_ditto_regularized_weights(
     config: DittoConfig,
 ) -> list[float]:
     """Single personalized Ditto-style update on a flat weight vector."""
-    if not (
-        len(state.global_weights) == len(state.local_weights) == len(gradients)
-    ):
+    if not (len(state.global_weights) == len(state.local_weights) == len(gradients)):
         raise ValueError("global, local, and gradient vectors must align")
 
     updated: list[float] = []
     for global_weight, local_weight, gradient in zip(
-        state.global_weights, state.local_weights, gradients
+        state.global_weights, state.local_weights, gradients, strict=True
     ):
         regularizer = config.regularization * (local_weight - global_weight)
         updated.append(
-            local_weight
-            - config.personalized_learning_rate * (gradient + regularizer)
+            local_weight - config.personalized_learning_rate * (gradient + regularizer)
         )
     return updated

@@ -6,9 +6,13 @@ data_raw/
 results/
 build/
 generated/
+benchmarks/results/*.csv
 node_modules/
 .next/
 package-lock.json
+*.tsbuildinfo
+web/.coverage/
+web/coverage/
 
 .DS_Store
 Thumbs.db

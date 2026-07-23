@@ -21,7 +21,9 @@ class TrackingFoundationTests(unittest.TestCase):
                 trace_id="trace-1",
             )
         )
-        bundle.add_artifact(ArtifactRef(logical_name="summary", uri="s3://bucket/summary.md"))
+        bundle.add_artifact(
+            ArtifactRef(logical_name="summary", uri="s3://bucket/summary.md")
+        )
         mapped = bundle.artifact_map()
         self.assertIn("summary", mapped)
 
@@ -35,7 +37,13 @@ class TrackingFoundationTests(unittest.TestCase):
                 mlflow_run_id="mlflow-2",
                 trace_id="trace-2",
             ),
-            artifacts=[ArtifactRef(logical_name="plot", uri="minio://plots/plot.png", media_type="image/png")],
+            artifacts=[
+                ArtifactRef(
+                    logical_name="plot",
+                    uri="minio://plots/plot.png",
+                    media_type="image/png",
+                )
+            ],
         )
         record = build_mlflow_record(
             bundle=bundle,

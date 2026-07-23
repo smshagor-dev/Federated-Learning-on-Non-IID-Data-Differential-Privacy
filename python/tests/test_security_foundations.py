@@ -22,7 +22,9 @@ class SecurityFoundationTests(unittest.TestCase):
             issued_at="2026-07-22T20:00:00Z",
             secret="top-secret",
         )
-        result = verify_envelope(envelope, "top-secret", nonce_guard=guard, scope="run-1")
+        result = verify_envelope(
+            envelope, "top-secret", nonce_guard=guard, scope="run-1"
+        )
         self.assertTrue(result.valid)
 
     def test_replayed_nonce_is_rejected(self) -> None:
@@ -34,8 +36,12 @@ class SecurityFoundationTests(unittest.TestCase):
             issued_at="2026-07-22T20:05:00Z",
             secret="top-secret",
         )
-        first = verify_envelope(envelope, "top-secret", nonce_guard=guard, scope="run-2")
-        second = verify_envelope(envelope, "top-secret", nonce_guard=guard, scope="run-2")
+        first = verify_envelope(
+            envelope, "top-secret", nonce_guard=guard, scope="run-2"
+        )
+        second = verify_envelope(
+            envelope, "top-secret", nonce_guard=guard, scope="run-2"
+        )
         self.assertTrue(first.valid)
         self.assertFalse(second.valid)
         self.assertEqual(second.reason, "replayed nonce")

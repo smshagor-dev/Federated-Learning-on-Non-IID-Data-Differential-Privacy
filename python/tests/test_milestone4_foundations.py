@@ -52,7 +52,10 @@ class Milestone4FoundationTests(unittest.TestCase):
     def test_dataset_registry_defaults(self) -> None:
         registry = DatasetRegistry.with_milestone_defaults()
         self.assertIn("cifar10", registry.list_names())
-        self.assertIn("quantity_skew", registry.get("custom_manifest_dataset").supports_partitioning)
+        self.assertIn(
+            "quantity_skew",
+            registry.get("custom_manifest_dataset").supports_partitioning,
+        )
 
     def test_personalization_summary(self) -> None:
         summary = summarize_personalization(

@@ -5,7 +5,21 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CPP_GOLDEN_EXE = REPO_ROOT / "build" / "cpp" / "Debug" / "fl_aggregator_golden.exe"
+_CANDIDATE_GOLDEN_EXES = [
+    REPO_ROOT / "build" / "cpp-debug" / "Debug" / "fl_aggregator_golden.exe",
+    REPO_ROOT / "build" / "cpp-release" / "Release" / "fl_aggregator_golden.exe",
+    REPO_ROOT / "build" / "cpp-debug" / "fl_aggregator_golden",
+    REPO_ROOT / "build" / "cpp-release" / "fl_aggregator_golden",
+    REPO_ROOT / "build" / "cpp" / "Debug" / "fl_aggregator_golden.exe",
+    REPO_ROOT / "build" / "cpp" / "fl_aggregator_golden",
+]
+
+
+def _find_golden_exe() -> Path | None:
+    for candidate in _CANDIDATE_GOLDEN_EXES:
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def weighted_average(pairs: list[tuple[float, float]]) -> float:
@@ -25,11 +39,12 @@ def parse_output(stdout: str) -> dict[str, float]:
 
 class CppGoldenParityTests(unittest.TestCase):
     def test_cpp_aggregator_golden_matches_expected_values(self) -> None:
-        if not CPP_GOLDEN_EXE.exists():
+        golden_exe = _find_golden_exe()
+        if golden_exe is None:
             self.skipTest("C++ golden executable has not been built yet.")
 
         result = subprocess.run(
-            [str(CPP_GOLDEN_EXE)],
+            [str(golden_exe)],
             check=True,
             capture_output=True,
             text=True,
@@ -39,6 +54,8 @@ class CppGoldenParityTests(unittest.TestCase):
         expected: dict[str, float] = {}
         delta_round_one = weighted_average([(3.0, 1.0), (1.0, 0.0)])
         expected["fedavg"] = delta_round_one
+        expected["fedavg_uniform"] = 0.5
+        expected["fedavg_capped"] = weighted_average([(2.0, 1.0), (1.0, 0.0)])
         expected["fedprox"] = delta_round_one
         expected["scaffold_delta"] = (1.0 + 3.0) / 2.0
         expected["scaffold_control"] = ((0.4 + 0.8) / 2.0) * (2.0 / 10.0)

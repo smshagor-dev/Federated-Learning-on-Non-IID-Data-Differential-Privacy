@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from fl_platform.execution.modes import ExecutionMode, SchedulingConfig
 from fl_platform.workers import TrainingResult, TrainingTask, WorkerService
@@ -46,14 +46,18 @@ class MultiprocessingOrchestrator:
             return OrchestratorResult(accepted=accepted, deferred=deferred)
 
         if self._scheduling.mode == ExecutionMode.BUFFERED_ASYNCHRONOUS:
-            buffer_size = self._scheduling.buffer_size or self._scheduling.target_clients
+            buffer_size = (
+                self._scheduling.buffer_size or self._scheduling.target_clients
+            )
             return OrchestratorResult(
                 accepted=results[:buffer_size],
                 deferred=results[buffer_size:],
             )
 
         if self._scheduling.mode == ExecutionMode.STALENESS_AWARE_ASYNCHRONOUS:
-            buffer_size = self._scheduling.buffer_size or self._scheduling.target_clients
+            buffer_size = (
+                self._scheduling.buffer_size or self._scheduling.target_clients
+            )
             accepted = results[:buffer_size]
             rejected = []
             for result in results[buffer_size:]:

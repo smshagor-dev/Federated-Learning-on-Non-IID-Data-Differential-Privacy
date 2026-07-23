@@ -32,8 +32,7 @@ class TrainingResult:
 
 
 class LocalTrainer(Protocol):
-    def train(self, task: TrainingTask) -> TrainingResult:
-        ...
+    def train(self, task: TrainingTask) -> TrainingResult: ...
 
 
 class WorkerService:

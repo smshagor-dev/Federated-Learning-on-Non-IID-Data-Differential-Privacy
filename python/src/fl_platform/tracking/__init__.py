@@ -1,7 +1,7 @@
 """Tracking and observability foundations."""
 
 from .identity import ArtifactRef, RunIdentity, TrackingIdentityBundle
-from .mlflow import MLflowRunRecord, MetricPoint, build_mlflow_record
+from .mlflow import MetricPoint, MLflowRunRecord, build_mlflow_record
 
 __all__ = [
     "ArtifactRef",

@@ -42,7 +42,9 @@ def make_tasks(count: int) -> list[TrainingTask]:
 class ExecutionFoundationTests(unittest.TestCase):
     def test_validate_synchronous_config(self) -> None:
         result = validate_scheduling_config(
-            SchedulingConfig(mode=ExecutionMode.SYNCHRONOUS, target_clients=4, minimum_clients=4)
+            SchedulingConfig(
+                mode=ExecutionMode.SYNCHRONOUS, target_clients=4, minimum_clients=4
+            )
         )
         self.assertTrue(result.valid)
 
@@ -89,7 +91,9 @@ class ExecutionFoundationTests(unittest.TestCase):
         adapter = RayWorkerAdapter()
         plan = adapter.build_plan(
             make_tasks(5),
-            SchedulingConfig(mode=ExecutionMode.SYNCHRONOUS, target_clients=3, minimum_clients=3),
+            SchedulingConfig(
+                mode=ExecutionMode.SYNCHRONOUS, target_clients=3, minimum_clients=3
+            ),
             num_workers=2,
         )
         self.assertEqual(plan.num_workers, 2)
@@ -99,7 +103,9 @@ class ExecutionFoundationTests(unittest.TestCase):
         adapter = FlowerSimulationAdapter()
         plan = adapter.build_plan(
             10,
-            SchedulingConfig(mode=ExecutionMode.SYNCHRONOUS, target_clients=4, minimum_clients=2),
+            SchedulingConfig(
+                mode=ExecutionMode.SYNCHRONOUS, target_clients=4, minimum_clients=2
+            ),
         )
         self.assertAlmostEqual(plan.fraction_fit, 0.4)
         self.assertEqual(plan.min_available_clients, 2)

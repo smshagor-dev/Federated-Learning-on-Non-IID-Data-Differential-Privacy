@@ -28,7 +28,7 @@ class ModelRegistry:
         return sorted(self._models)
 
     @classmethod
-    def with_milestone_defaults(cls) -> "ModelRegistry":
+    def with_milestone_defaults(cls) -> ModelRegistry:
         registry = cls()
         registry.register(
             ModelDescriptor(

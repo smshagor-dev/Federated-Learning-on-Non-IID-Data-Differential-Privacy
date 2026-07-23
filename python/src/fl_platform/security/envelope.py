@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hmac
 import json
+from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any
 
@@ -46,7 +46,9 @@ def sign_envelope(
         "trace_id": trace_id,
         "issued_at": issued_at,
     }
-    signature = hmac.new(secret.encode("utf-8"), _canonical_bytes(body), sha256).hexdigest()
+    signature = hmac.new(
+        secret.encode("utf-8"), _canonical_bytes(body), sha256
+    ).hexdigest()
     return SignedEnvelope(
         payload=payload,
         nonce=nonce,
@@ -71,7 +73,9 @@ def verify_envelope(
         "trace_id": envelope.trace_id,
         "issued_at": envelope.issued_at,
     }
-    expected = hmac.new(secret.encode("utf-8"), _canonical_bytes(body), sha256).hexdigest()
+    expected = hmac.new(
+        secret.encode("utf-8"), _canonical_bytes(body), sha256
+    ).hexdigest()
     if not hmac.compare_digest(expected, envelope.signature_hex):
         return EnvelopeValidationResult(False, "signature mismatch")
     if nonce_guard is not None and not nonce_guard.register(scope, envelope.nonce):

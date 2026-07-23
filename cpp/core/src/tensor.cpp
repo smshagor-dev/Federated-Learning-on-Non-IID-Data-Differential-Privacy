@@ -1,6 +1,7 @@
 #include "fl_core/tensor.hpp"
 
 #include <cmath>
+#include <limits>
 
 namespace fl::core {
 
@@ -51,12 +52,22 @@ TensorBuffer binary_apply(
 std::size_t TensorDescriptor::element_count() const {
     std::size_t total = 1;
     for (const auto dimension : shape) {
+        if (dimension == 0) {
+            throw std::invalid_argument("tensor shape dimensions must be positive");
+        }
+        if (total > std::numeric_limits<std::size_t>::max() /
+                static_cast<std::size_t>(dimension)) {
+            throw std::invalid_argument("tensor shape element count overflows");
+        }
         total *= static_cast<std::size_t>(dimension);
     }
     return total;
 }
 
 std::size_t TensorDescriptor::byte_length() const {
+    if (element_count() > std::numeric_limits<std::size_t>::max() / sizeof(float)) {
+        throw std::invalid_argument("tensor byte length overflows");
+    }
     return element_count() * sizeof(float);
 }
 
@@ -92,6 +103,9 @@ void TensorBuffer::validate() const {
     if (descriptor_.shape.empty()) {
         throw std::invalid_argument("tensor shape must not be empty");
     }
+    if (descriptor_.dtype != DType::kFloat32) {
+        throw std::invalid_argument("unsupported tensor dtype");
+    }
     if (descriptor_.element_count() != values_.size()) {
         throw std::invalid_argument("tensor element count does not match values size");
     }
@@ -103,6 +117,14 @@ void TensorBuffer::validate() const {
 }
 
 void TensorCollection::insert(TensorBuffer tensor) {
+    tensor.validate();
+    if (contains(tensor.descriptor().name)) {
+        throw std::invalid_argument("duplicate tensor name");
+    }
+    tensors_[tensor.descriptor().name] = std::move(tensor);
+}
+
+void TensorCollection::assign(TensorBuffer tensor) {
     tensor.validate();
     tensors_[tensor.descriptor().name] = std::move(tensor);
 }

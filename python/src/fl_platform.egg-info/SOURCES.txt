@@ -3,6 +3,7 @@ src/fl_platform/__init__.py
 src/fl_platform.egg-info/PKG-INFO
 src/fl_platform.egg-info/SOURCES.txt
 src/fl_platform.egg-info/dependency_links.txt
+src/fl_platform.egg-info/requires.txt
 src/fl_platform.egg-info/top_level.txt
 src/fl_platform/algorithms/__init__.py
 src/fl_platform/algorithms/ditto.py

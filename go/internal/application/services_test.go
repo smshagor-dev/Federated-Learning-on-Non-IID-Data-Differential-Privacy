@@ -61,6 +61,26 @@ func TestInvalidRunTransition(t *testing.T) {
 	}
 }
 
+func TestDuplicateStartRequestRejected(t *testing.T) {
+	ctx := context.Background()
+	services := newServices()
+	project, _ := services.Projects.Create(ctx, "proj", "desc")
+	experiment, _ := services.Experiments.Create(ctx, project.ID, "exp", "desc", nil)
+	run, _ := services.Runs.Create(ctx, experiment.ID, nil)
+
+	run, err := services.Runs.Transition(ctx, run.ID, runs.StatusQueued)
+	if err != nil {
+		t.Fatalf("queue run: %v", err)
+	}
+	if run.Status != runs.StatusQueued {
+		t.Fatalf("expected queued, got %s", run.Status)
+	}
+
+	if _, err := services.Runs.Transition(ctx, run.ID, runs.StatusQueued); err != ErrInvalidTransition {
+		t.Fatalf("expected duplicate queue request to be rejected as invalid transition, got %v", err)
+	}
+}
+
 func TestAuthLoginAndAuthorize(t *testing.T) {
 	ctx := context.Background()
 	services := newServices()

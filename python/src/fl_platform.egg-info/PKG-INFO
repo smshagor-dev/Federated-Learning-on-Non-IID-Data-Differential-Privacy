@@ -3,3 +3,7 @@ Name: fl-platform
 Version: 0.1.0
 Summary: Milestone 1 Python foundation for the federated learning super system
 Requires-Python: >=3.10
+Provides-Extra: dev
+Requires-Dist: pytest<9,>=8.2; extra == "dev"
+Requires-Dist: ruff<1,>=0.6; extra == "dev"
+Requires-Dist: mypy<2,>=1.11; extra == "dev"

@@ -45,6 +45,7 @@ private:
 class TensorCollection {
 public:
     void insert(TensorBuffer tensor);
+    void assign(TensorBuffer tensor);
     [[nodiscard]] bool contains(const std::string& name) const;
     [[nodiscard]] const TensorBuffer& at(const std::string& name) const;
     [[nodiscard]] TensorBuffer& at(const std::string& name);

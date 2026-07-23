@@ -6,8 +6,9 @@
     "dev": "node ./node_modules/next/dist/bin/next dev",
     "build": "node ./node_modules/next/dist/bin/next build",
     "start": "node ./node_modules/next/dist/bin/next start",
-    "lint": "node ./node_modules/next/dist/bin/next lint",
-    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit"
+    "lint": "node ./node_modules/eslint/bin/eslint.js .",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit --incremental false",
+    "test": "node ./node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {
     "next": "15.0.0",
@@ -15,9 +16,18 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@eslint/js": "9.18.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.1.0",
     "@types/node": "22.10.2",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
-    "typescript": "5.7.2"
+    "@vitejs/plugin-react": "4.3.4",
+    "eslint": "9.18.0",
+    "eslint-config-next": "15.0.0",
+    "jsdom": "25.0.1",
+    "typescript": "5.7.2",
+    "typescript-eslint": "8.20.0",
+    "vitest": "2.1.8"
   }
 }

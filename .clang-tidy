@@ -1,0 +1,25 @@
+---
+# Scoped to be actionable rather than exhaustive: enables the check
+# families most likely to catch real bugs in this codebase (bugprone,
+# performance, correctness-flavored modernize/readability rules), and
+# explicitly disables a few checks that would flag intentional design
+# choices already made elsewhere in the codebase (e.g. exceptions for
+# validation errors, non-trivial value types passed to constructors).
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  modernize-use-override,
+  modernize-use-nullptr,
+  modernize-use-emplace,
+  modernize-loop-convert,
+  readability-redundant-*,
+  readability-container-size-empty,
+  readability-else-after-return,
+  cppcoreguidelines-slicing,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape
+
+WarningsAsErrors: ''
+HeaderFilterRegex: 'cpp/core/include/.*'
+FormatStyle: file

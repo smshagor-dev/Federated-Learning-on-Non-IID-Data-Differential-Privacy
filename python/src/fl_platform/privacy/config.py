@@ -38,7 +38,9 @@ class PrivacyValidationResult:
     warnings: list[str]
 
 
-def build_privacy_config(payload: dict[str, Any]) -> SampleLevelDPConfig | UserLevelDPConfig | dict[str, Any]:
+def build_privacy_config(
+    payload: dict[str, Any],
+) -> SampleLevelDPConfig | UserLevelDPConfig | dict[str, Any]:
     mode = PrivacyMode(payload.get("mode", PrivacyMode.NONE))
     if mode == PrivacyMode.SAMPLE_LEVEL_DP:
         return SampleLevelDPConfig(
@@ -75,23 +77,37 @@ def build_privacy_config(payload: dict[str, Any]) -> SampleLevelDPConfig | UserL
     return {"mode": PrivacyMode.NONE}
 
 
-def validate_privacy_config(config: SampleLevelDPConfig | UserLevelDPConfig | dict[str, Any]) -> PrivacyValidationResult:
+def validate_privacy_config(
+    config: SampleLevelDPConfig | UserLevelDPConfig | dict[str, Any],
+) -> PrivacyValidationResult:
     warnings: list[str] = []
     if isinstance(config, SampleLevelDPConfig):
         if config.noise_multiplier <= 0:
-            return PrivacyValidationResult(False, ["sample-level DP requires positive noise_multiplier"])
+            return PrivacyValidationResult(
+                False, ["sample-level DP requires positive noise_multiplier"]
+            )
         if config.max_grad_norm <= 0:
-            return PrivacyValidationResult(False, ["sample-level DP requires positive max_grad_norm"])
+            return PrivacyValidationResult(
+                False, ["sample-level DP requires positive max_grad_norm"]
+            )
         if config.accountant not in {"rdp", "prv"}:
-            warnings.append("unknown sample-level accountant; future integration may reject it")
+            warnings.append(
+                "unknown sample-level accountant; future integration may reject it"
+            )
         return PrivacyValidationResult(True, warnings)
     if isinstance(config, UserLevelDPConfig):
         if config.noise_multiplier <= 0:
-            return PrivacyValidationResult(False, ["user-level DP requires positive noise_multiplier"])
+            return PrivacyValidationResult(
+                False, ["user-level DP requires positive noise_multiplier"]
+            )
         if config.max_update_norm <= 0:
-            return PrivacyValidationResult(False, ["user-level DP requires positive max_update_norm"])
+            return PrivacyValidationResult(
+                False, ["user-level DP requires positive max_update_norm"]
+            )
         if not 0 < config.client_sampling_rate <= 1:
-            return PrivacyValidationResult(False, ["user-level DP requires client_sampling_rate in (0,1]"])
+            return PrivacyValidationResult(
+                False, ["user-level DP requires client_sampling_rate in (0,1]"]
+            )
         return PrivacyValidationResult(True, warnings)
 
     mode = config.get("mode", PrivacyMode.NONE)

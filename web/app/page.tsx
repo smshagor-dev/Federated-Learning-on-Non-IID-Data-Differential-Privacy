@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { AppShell } from "@/components/app-shell";
 import { OverviewPage } from "@/features/overview/overview-page";
 import { getOverviewData } from "@/lib/api";
@@ -12,12 +14,12 @@ export default async function HomePage() {
       description="Overview of projects, experiments, and runs with a design language that is ready for future auth, live events, and privacy telemetry."
       actions={
         <>
-          <a className="button-primary" href="/experiments/new">
+          <Link className="button-primary" href="/experiments/new">
             New experiment
-          </a>
-          <a className="button-secondary" href="/runs/run-demo-1">
+          </Link>
+          <Link className="button-secondary" href="/runs/run-demo-1">
             Open live run view
-          </a>
+          </Link>
         </>
       }
     >
