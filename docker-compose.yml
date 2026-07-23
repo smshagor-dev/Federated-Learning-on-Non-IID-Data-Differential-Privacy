@@ -1,0 +1,41 @@
+services:
+  postgres:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: postgres
+  redis:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: redis
+  minio:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: minio
+  mlflow:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: mlflow
+  api:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: api
+  web:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: web
+  python-worker:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: python-worker
+  prometheus:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: prometheus
+  grafana:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: grafana
+  otel-collector:
+    extends:
+      file: infra/compose/docker-compose.dev.yml
+      service: otel-collector

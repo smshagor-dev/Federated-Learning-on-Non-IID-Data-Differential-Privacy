@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package fl.common.v1;
+
+message ArtifactReference {
+  string uri = 1;
+  string checksum = 2;
+  string media_type = 3;
+}

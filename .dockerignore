@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+build
+results
+data_raw
+node_modules
+.next
+web/node_modules
+web/.next
+python/.pytest_cache
+python/__pycache__

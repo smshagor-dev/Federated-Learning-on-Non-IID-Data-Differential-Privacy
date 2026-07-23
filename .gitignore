@@ -4,6 +4,11 @@ __pycache__/
 
 data_raw/
 results/
+build/
+generated/
+node_modules/
+.next/
+package-lock.json
 
 .DS_Store
 Thumbs.db

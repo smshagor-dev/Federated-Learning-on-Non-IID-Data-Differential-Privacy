@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package fl.coordinator.v1;
+
+message RoundState {
+  string run_id = 1;
+  uint64 round_id = 2;
+  string state = 3;
+  string reason = 4;
+}
+
+message RunState {
+  string run_id = 1;
+  string state = 2;
+  string reason = 3;
+}

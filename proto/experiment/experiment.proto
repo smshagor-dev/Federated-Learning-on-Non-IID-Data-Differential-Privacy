@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package fl.experiment.v1;
+
+message DatasetConfig {
+  string name = 1;
+  string partitioning = 2;
+  double alpha = 3;
+}
+
+message ModelConfig {
+  string name = 1;
+  string update_format = 2;
+}
+
+message PrivacyConfig {
+  string mode = 1;
+  double noise_multiplier = 2;
+  double max_grad_norm = 3;
+  double delta = 4;
+}
+
+message AlgorithmConfig {
+  string name = 1;
+  double mu = 2;
+}
+
+message RunConfiguration {
+  string run_id = 1;
+  DatasetConfig dataset = 2;
+  ModelConfig model = 3;
+  PrivacyConfig privacy = 4;
+  AlgorithmConfig algorithm = 5;
+  uint32 rounds = 6;
+}

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package fl.events.v1;
+
+message CoordinatorEvent {
+  string event_id = 1;
+  string run_id = 2;
+  uint64 round_id = 3;
+  string event_type = 4;
+  string timestamp = 5;
+  string trace_id = 6;
+  string payload_json = 7;
+}

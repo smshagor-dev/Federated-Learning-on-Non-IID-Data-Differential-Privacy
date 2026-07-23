@@ -1,0 +1,48 @@
+# =============================================================================
+# Federated Learning on Non-IID Data with Differential Privacy
+# Master experiment configuration
+# Any value here can be overridden from the CLI (see main.py --help)
+# =============================================================================
+
+system:
+  seed: 42                    # Global seed (python random / numpy / torch / cuda)
+  device: "auto"              # "auto" | "cuda" | "cpu"
+  results_dir: "results"      # All CSV logs, plots and summaries are written here
+
+data:
+  dataset: "CIFAR10"          # "CIFAR10" | "MNIST"
+  data_root: "./data_raw"     # Download / cache directory for torchvision
+  partition: "dirichlet"      # "dirichlet" | "pathological"
+  alpha: 0.1                  # Dirichlet concentration (0.1 => extreme Non-IID)
+  classes_per_client: 2       # Used only when partition == "pathological"
+  min_partition_size: 10      # Re-draw Dirichlet split until every client has >= this many samples
+
+federated:
+  num_clients: 20             # Total client population
+  sample_rate: 0.2            # Fraction of clients sampled per round (0.2 * 20 = 4 clients/round)
+  rounds: 50                  # Communication rounds
+  local_epochs: 2             # Local SGD epochs (E)
+  batch_size: 64              # Local mini-batch size
+  server_lr: 1.0              # Server-side learning rate (used by SCAFFOLD aggregation too)
+
+optimizer:
+  lr: 0.01                    # Client SGD learning rate
+  momentum: 0.9               # Set to 0.0 automatically for SCAFFOLD (theory requires plain SGD)
+  weight_decay: 0.0005
+
+algorithm:
+  name: "fedprox"             # "fedavg" | "fedprox" | "scaffold" (or "all" via CLI to run the full matrix)
+  mu: 0.01                    # FedProx proximal coefficient (mu/2 * ||w - w_global||^2)
+
+dp:
+  enabled: true               # Master switch for the DP mechanism
+  max_grad_norm: 1.5          # Clipping bound C (applied to per-batch grads AND the client update)
+  noise_multiplier: 0.8       # sigma: Gaussian noise std = sigma * C added to each clipped client update
+  target_delta: 1.0e-5        # Delta used when converting RDP -> (epsilon, delta)
+
+model:
+  name: "cnn"                 # Lightweight GroupNorm CNN (see models/networks.py)
+  group_norm_groups: 2        # num_groups for every GroupNorm layer
+
+evaluation:
+  eval_batch_size: 256        # Batch size for global test-set evaluation

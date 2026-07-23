@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package fl.privacy.v1;
+
+message PrivacyLedger {
+  string run_id = 1;
+  string mode = 2;
+  double epsilon = 3;
+  double delta = 4;
+  double noise_multiplier = 5;
+  double clipping_bound = 6;
+}

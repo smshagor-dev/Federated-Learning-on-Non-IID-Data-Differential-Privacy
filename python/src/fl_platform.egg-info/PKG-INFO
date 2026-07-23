@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: fl-platform
+Version: 0.1.0
+Summary: Milestone 1 Python foundation for the federated learning super system
+Requires-Python: >=3.10
