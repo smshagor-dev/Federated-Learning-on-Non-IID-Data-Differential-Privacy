@@ -105,3 +105,46 @@ export type AuthSession = {
   user: AuthUser;
   capabilities: string[];
 };
+
+// Milestone 3: the live federated coordinator's own run state, distinct
+// from the Run bookkeeping type above (project/experiment scheduling
+// metadata) — see docs/go-coordinator-integration.md for why the Go API
+// keeps these as separate resources under /api/v1/coordinator/runs/.
+export type CoordinatorRunState =
+  | "CREATED"
+  | "WAITING_FOR_CLIENTS"
+  | "RUNNING"
+  | "AGGREGATING"
+  | "EVALUATING"
+  | "CHECKPOINTING"
+  | "PAUSED"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELED";
+
+export type CoordinatorRunSnapshot = {
+  run_id: string;
+  state: CoordinatorRunState;
+  current_round: number;
+  max_rounds: number;
+  model_version: string;
+  algorithm: string;
+  registered_workers: number;
+  healthy_workers: number;
+};
+
+export type CoordinatorHealth = {
+  status: string;
+};
+
+export type CoordinatorEvent = {
+  event_id: string;
+  run_id: string;
+  round_id: number;
+  type: string;
+  client_id?: string;
+  worker_id?: string;
+  model_version?: string;
+  timestamp: string;
+  trace_id?: string;
+};

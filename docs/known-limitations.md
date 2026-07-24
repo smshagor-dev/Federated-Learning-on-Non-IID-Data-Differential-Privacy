@@ -5,6 +5,64 @@ implemented and tested as described in the other `docs/` files — this
 document exists specifically to prevent scaffold code from being read as
 production-ready.
 
+## Milestone 3 (coordinator runtime / gRPC / Docker Compose)
+
+* **The C++ gRPC coordinator server (`fl_coordinator_grpc_server`) is real
+  and, as of this milestone, has actually been compiled and run** — see
+  [docker-runtime.md](docker-runtime.md) and
+  [coordinator-runtime.md](coordinator-runtime.md). It still cannot be
+  built on this Windows/MSVC development machine (no local gRPC C++
+  install); `infra/docker/cpp-coordinator.Dockerfile` builds it for real
+  on Ubuntu via apt, and that image was run, exercised end-to-end over
+  HTTP→Go→gRPC→C++, and torn down as part of this milestone's validation.
+* **Python `GrpcCoordinatorClient` implements only `Health()`.**
+  `register_worker`, `acquire_task`, `submit_result`, and `heartbeat`
+  remain unimplemented by design (see
+  `python/src/fl_platform/worker/coordinator_client.py`'s module
+  docstring) — carrying unverified request-building code for RPCs with no
+  real server to validate the mapping against was judged worse than
+  leaving them explicitly deferred. `python -m fl_platform.worker` (the
+  Docker worker entrypoint) only performs a real, repeated `Health()`
+  poll against the coordinator; it does not execute federated training
+  rounds. See [python-worker.md](python-worker.md).
+* **Coordinator→Go event streaming has a several-second poll window, not
+  sub-second push.** `GrpcClient.PollEvents` (`go/internal/coordinator/grpc_client.go`)
+  bounds each `StreamRunEvents` call to `pollEventsWindow` (8s). This
+  value was arrived at empirically: over docker-compose's bridge network,
+  a fresh gRPC stream from the Go client to the C++ coordinator was
+  observed to take longer than 5s (but well under 12s) to yield its first
+  message, for reasons not fully root-caused (ruled out: IPv6/DNS
+  happy-eyeballs — the container resolves a single A record for
+  `coordinator`). The same call over the coordinator's host-published
+  port, and the equivalent call from the Python gRPC client over the
+  identical bridge network, did not show this delay. See
+  [event-streaming.md](event-streaming.md) for the full investigation
+  and the elapsed-time-based (not status-code-based) fix this required.
+* **`grafana` does not start via `docker compose up` on this machine** —
+  host port 3001 is held by an unrelated process outside Docker (`netstat`
+  confirms a non-Docker PID). Every other service in `docker-compose.yml`,
+  including the two new Milestone 3 services (`coordinator`,
+  `python-worker`), started and reached a healthy/running state in the
+  same run. Not a regression from this milestone; carried over from
+  Milestone 1's identical note.
+* **`mlflow`'s Prometheus scrape target is unhealthy (404 on `/metrics`)**
+  — mlflow does not expose a Prometheus endpoint by default. Pre-existing
+  from Milestone 1's `infra/prometheus/prometheus.yml`, unrelated to this
+  milestone's work; the *other* previously-broken scrape target
+  (`go-api`, which had no `/metrics` route registered at all before this
+  milestone) is now fixed and scraping successfully — see
+  [milestone-3-validation.md](milestone-3-validation.md).
+* **Coordinator security is local-development-grade.** `insecure` gRPC
+  credentials, no TLS/mTLS, no per-worker auth token, no request-rate
+  limiting beyond gRPC's own message-size caps. TLS/mTLS has a named
+  configuration hook (`GrpcClient`'s `Insecure` field;
+  `grpc::InsecureServerCredentials()` in `main.cpp`) but no actual
+  certificate handling. See [coordinator-runtime.md](coordinator-runtime.md).
+* **No secure aggregation, no per-round differential privacy application,
+  no asynchronous/semi-synchronous round execution** — explicitly out of
+  scope for this milestone by instruction (see the "explicitly out of
+  scope" section below); the existing scaffolds are unchanged.
+
 ## Environment-specific (this machine, not a design gap)
 
 * **Go race tests do not run locally.** `go test -race` requires cgo and a
@@ -21,20 +79,19 @@ production-ready.
   explicit scope actually exercised in this pass; the Makefile/CMake
   scaffolding for ASan/UBSan can be extended the same way if a future pass
   adds it.
-* **The `web` Docker image does not build in this environment.** Next.js
-  static export times out repeatedly (60s, then 180s after raising
-  `staticPageGenerationTimeout`) inside this machine's Docker Desktop VM,
-  which was already running several long-running containers from other,
-  unrelated projects and is resource-constrained as a result — the
-  identical `npm run build` completes natively in ~13 seconds. `mlflow`,
-  `api`, and `python-worker` images all build successfully, and
-  `docker compose up` was run for real (postgres/redis/minio/mlflow/api/
-  prometheus/otel-collector all reached a healthy/running state, verified
-  via `curl` and compose healthchecks, then torn down with
-  `down -v`). `grafana` did not start due to a host port-3001 conflict with
-  unrelated software on this machine. See
-  [milestone-1-validation.md](milestone-1-validation.md) for the full
-  detail.
+* **RESOLVED in Milestone 3: the `web` Docker image now builds
+  (~17s).** The Milestone 1 note below described the symptom
+  (`next build`'s static-generation phase hanging in this Docker Desktop
+  VM); the actual root cause was `getOverviewData()`/`getRunData()` being
+  called during Next.js's build-time static prerendering against a
+  backend that isn't running at build time, which hung rather than failed
+  fast. Fixed with `export const dynamic = "force-dynamic"` on the three
+  pages that fetch live backend data (`web/app/page.tsx`,
+  `web/app/audit/page.tsx`, `web/app/runs/[runId]/page.tsx`), which tells
+  Next.js those routes are always server-rendered per-request and must
+  never be prerendered at build time. Left here rather than deleted so
+  the historical symptom (which looked like a resource/timeout problem)
+  isn't rediscovered as "unexplained."
 
 ## Design gaps, stated honestly (not yet implemented)
 
@@ -106,7 +163,15 @@ production-ready.
 
 FedSAM, Ditto, Per-FedAvg, Opacus/sample-level DP training, secure
 aggregation cryptography, Ray/Flower execution, asynchronous/buffered
-aggregation, the production Go database layer (PostgreSQL/Redis/MinIO
-integration), and live dashboard↔backend integration are all still
-scaffold-only, unchanged from before this pass, per the explicit
-instruction not to expand them beyond compilation/contract compatibility.
+aggregation, and the production Go database layer (PostgreSQL/Redis/MinIO
+integration for the project/experiment/run bookkeeping repositories,
+which remain file/in-memory-backed) are all still scaffold-only, per the
+explicit instruction not to expand them beyond compilation/contract
+compatibility. Live dashboard↔backend integration is now partial: the Go
+API's own project/experiment/run/audit data and the new coordinator-run
+endpoints are both real and live (see
+[go-coordinator-integration.md](go-coordinator-integration.md)); training
+metrics like accuracy/loss remain out of scope since no training
+algorithm work happened this milestone (see
+[milestone-3-report.md](milestone-3-report.md)'s recommended Milestone 4
+scope).

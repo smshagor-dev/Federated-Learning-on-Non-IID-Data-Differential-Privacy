@@ -5,6 +5,7 @@ import (
 
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/application"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/auth"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/experiments"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/observability"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/projects"
@@ -31,7 +32,15 @@ func PathsForDataDir(dataDir string) PersistencePaths {
 	}
 }
 
+// NewPersistentServices wires file-backed repositories with no
+// coordinator client configured (Services.Coordinator methods return
+// application.ErrCoordinatorNotConfigured). Use
+// NewPersistentServicesWithCoordinator to attach one.
 func NewPersistentServices(paths PersistencePaths, clock application.Clock) (*application.Services, error) {
+	return NewPersistentServicesWithCoordinator(paths, nil, clock)
+}
+
+func NewPersistentServicesWithCoordinator(paths PersistencePaths, coordinatorClient coordinator.Client, clock application.Clock) (*application.Services, error) {
 	projectRepo, err := projects.NewFileRepository(paths.Projects)
 	if err != nil {
 		return nil, err
@@ -56,5 +65,5 @@ func NewPersistentServices(paths PersistencePaths, clock application.Clock) (*ap
 	if err != nil {
 		return nil, err
 	}
-	return application.NewServicesWithAudit(projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo, clock), nil
+	return application.NewServicesWithCoordinator(projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo, coordinatorClient, clock), nil
 }

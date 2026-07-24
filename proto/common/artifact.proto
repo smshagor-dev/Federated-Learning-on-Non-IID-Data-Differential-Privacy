@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package fl.common.v1;
 
+option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/common/v1;commonv1";
+
 message ArtifactReference {
   string uri = 1;
   string checksum = 2;

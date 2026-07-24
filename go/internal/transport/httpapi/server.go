@@ -41,7 +41,58 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/api/v1/runs", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleRuns)))
 	mux.Handle("/api/v1/runs/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleRunRoutes)))
 	mux.Handle("/api/v1/audit/events", s.withAuth(auth.RoleResearcher, auth.RoleAdmin)(http.HandlerFunc(s.handleAuditEvents)))
-	return mux
+	mux.Handle("/api/v1/system/coordinator-health", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleCoordinatorHealth)))
+	mux.Handle("/api/v1/coordinator/runs", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleCoordinatorRuns)))
+	mux.Handle("/api/v1/coordinator/runs/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleCoordinatorRunRoutes)))
+	mux.HandleFunc("/metrics", s.handleMetrics)
+	return s.withMetrics(mux)
+}
+
+// handleMetrics is deliberately unauthenticated (like /healthz): Prometheus
+// scrapes it directly (see infra/prometheus/prometheus.yml's go-api job),
+// and it carries no sensitive data — only request/RPC counters.
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	s.services.Metrics.WritePrometheus(w)
+}
+
+// withMetrics records every request's route (with dynamic ID segments
+// normalized so cardinality stays bounded by the route table, not by how
+// many runs/projects/experiments exist) and latency into
+// Services.Metrics, which handleMetrics then renders for Prometheus.
+func (s *Server) withMetrics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		next.ServeHTTP(w, r)
+		if s.services.Metrics != nil {
+			route := r.Method + " " + normalizeRouteLabel(r.URL.Path)
+			s.services.Metrics.RecordRoute(route, float64(time.Since(started).Microseconds())/1000.0)
+		}
+	})
+}
+
+func normalizeRouteLabel(path string) string {
+	for _, prefix := range []string{
+		"/api/v1/coordinator/runs/",
+		"/api/v1/dashboard/runs/",
+		"/api/v1/runs/",
+		"/api/v1/projects/",
+		"/api/v1/experiments/",
+	} {
+		if strings.HasPrefix(path, prefix) {
+			rest := strings.TrimPrefix(path, prefix)
+			parts := strings.SplitN(rest, "/", 2)
+			if len(parts) == 2 {
+				return prefix + "{id}/" + parts[1]
+			}
+			return prefix + "{id}"
+		}
+	}
+	return path
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

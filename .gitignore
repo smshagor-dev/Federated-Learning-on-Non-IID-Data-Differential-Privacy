@@ -7,6 +7,9 @@ results/
 build/
 generated/
 benchmarks/results/*.csv
+.tools/
+coordinator_test_scratch/
+.test_scratch/
 node_modules/
 .next/
 package-lock.json

@@ -2,6 +2,13 @@ syntax = "proto3";
 
 package fl.coordinator.v1;
 
+option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/coordinator/v1;coordinatorv1";
+
+import "worker/worker.proto";
+import "experiment/experiment.proto";
+import "events/events.proto";
+import "common/artifact.proto";
+
 message RoundState {
   string run_id = 1;
   uint64 round_id = 2;
@@ -13,4 +20,224 @@ message RunState {
   string run_id = 1;
   string state = 2;
   string reason = 3;
+}
+
+// ---------------------------------------------------------------------
+// Milestone 3 additions. RoundState/RunState above are unchanged from
+// Milestone 1/2 (field numbers preserved).
+// ---------------------------------------------------------------------
+
+message ErrorDetail {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  map<string, string> details = 4;
+}
+
+message ModelManifest {
+  string model_id = 1;
+  string model_version = 2;
+  string architecture_name = 3;
+  repeated fl.worker.v1.TensorManifest tensors = 4;
+  string checksum = 5;
+  uint64 total_bytes = 6;
+  fl.common.v1.ArtifactReference artifact_reference = 7;
+  uint32 schema_version = 8;
+}
+
+message OptimizerConfig {
+  string algorithm = 1;
+  string weighting = 2;
+  double server_lr = 3;
+  double beta1 = 4;
+  double beta2 = 5;
+  double tau = 6;
+  double contribution_cap = 7;
+}
+
+message CreateRunRequest {
+  fl.experiment.v1.RunConfiguration config = 1;
+  OptimizerConfig optimizer = 2;
+  uint32 target_clients_per_round = 3;
+  uint32 total_clients = 4;
+  uint32 max_rounds = 5;
+  uint32 round_timeout_seconds = 6;
+  uint32 minimum_valid_results = 7;
+  uint64 client_selection_seed = 8;
+  string trace_id = 9;
+}
+
+message CreateRunResponse {
+  string run_id = 1;
+  string state = 2;
+}
+
+message StartRunRequest {
+  string run_id = 1;
+  string trace_id = 2;
+}
+
+message PauseRunRequest {
+  string run_id = 1;
+  string reason = 2;
+  string trace_id = 3;
+}
+
+message ResumeRunRequest {
+  string run_id = 1;
+  string trace_id = 2;
+}
+
+message CancelRunRequest {
+  string run_id = 1;
+  string reason = 2;
+  string trace_id = 3;
+}
+
+message RunStateResponse {
+  string run_id = 1;
+  string state = 2;
+  string reason = 3;
+  uint64 current_round = 4;
+  string model_version = 5;
+}
+
+message GetRunRequest {
+  string run_id = 1;
+}
+
+message RunDetails {
+  string run_id = 1;
+  string state = 2;
+  uint64 current_round = 3;
+  uint32 max_rounds = 4;
+  string model_version = 5;
+  string algorithm = 6;
+  uint32 registered_workers = 7;
+  uint32 healthy_workers = 8;
+  string created_at = 9;
+  string updated_at = 10;
+}
+
+message GetRoundRequest {
+  string run_id = 1;
+  uint64 round_id = 2;
+}
+
+message RoundDetails {
+  string run_id = 1;
+  uint64 round_id = 2;
+  string state = 3;
+  repeated string selected_clients = 4;
+  repeated string completed_client_ids = 5;
+  repeated string failed_client_ids = 6;
+  uint32 minimum_valid_results = 7;
+  string started_at = 8;
+  string completed_at = 9;
+}
+
+message GetModelManifestRequest {
+  string run_id = 1;
+}
+
+message AcquireTaskRequest {
+  string worker_id = 1;
+  string run_id = 2;
+  string trace_id = 3;
+}
+
+// Wraps a plain worker.v1.ClientTask with coordinator-owned dispatch
+// metadata (lease, deadline, local hyperparameters, SCAFFOLD control
+// variates). has_task distinguishes "no task available right now" from
+// the zero-value ClientTask, since gRPC has no explicit "empty" response.
+message ClientTrainingTask {
+  // Named task_available, not has_task: protoc auto-generates a
+  // has_task() presence-check accessor for the singular message field
+  // below (task), and an explicit field literally named has_task
+  // collides with it in C++ codegen (duplicate method definition) — only
+  // surfaced once this message was actually compiled with a real C++
+  // protoc/grpc toolchain (see infra/docker/cpp-coordinator.Dockerfile).
+  bool task_available = 1;
+  fl.worker.v1.ClientTask task = 2;
+  string task_id = 3;
+  string lease_id = 4;
+  string lease_expires_at = 5;
+  uint32 local_epochs = 6;
+  uint32 batch_size = 7;
+  double learning_rate = 8;
+  double momentum = 9;
+  double weight_decay = 10;
+  double fedprox_mu = 11;
+  repeated fl.worker.v1.TensorManifest global_control_variate = 12;
+  repeated fl.worker.v1.TensorManifest client_control_variate = 13;
+}
+
+message TaskProgressRequest {
+  string worker_id = 1;
+  string task_id = 2;
+  string lease_id = 3;
+  double progress_fraction = 4;
+  uint64 step_count = 5;
+  string message = 6;
+}
+
+message TaskProgressResponse {
+  bool acknowledged = 1;
+  bool cancel_requested = 2;
+}
+
+message SubmitClientResultRequest {
+  string worker_id = 1;
+  string task_id = 2;
+  string lease_id = 3;
+  fl.worker.v1.ClientResult result = 4;
+  repeated fl.worker.v1.TensorManifest client_control_variate_delta = 5;
+  repeated fl.worker.v1.TensorManifest refreshed_client_control_variate = 6;
+}
+
+message SubmitClientResultResponse {
+  bool accepted = 1;
+  string reason = 2;
+  ErrorDetail error = 3;
+}
+
+message StreamRunEventsRequest {
+  string run_id = 1;
+  string trace_id = 2;
+  string resume_after_event_id = 3;
+}
+
+message HealthRequest {
+  string trace_id = 1;
+}
+
+message HealthResponse {
+  string status = 1;
+  string version = 2;
+  double uptime_seconds = 3;
+  uint32 active_runs = 4;
+  uint32 registered_workers = 5;
+}
+
+service CoordinatorService {
+  rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
+  rpc StartRun(StartRunRequest) returns (RunStateResponse);
+  rpc PauseRun(PauseRunRequest) returns (RunStateResponse);
+  rpc ResumeRun(ResumeRunRequest) returns (RunStateResponse);
+  rpc CancelRun(CancelRunRequest) returns (RunStateResponse);
+
+  rpc GetRun(GetRunRequest) returns (RunDetails);
+  rpc GetRound(GetRoundRequest) returns (RoundDetails);
+  rpc GetModelManifest(GetModelManifestRequest) returns (ModelManifest);
+
+  rpc RegisterWorker(fl.worker.v1.RegisterWorkerRequest) returns (fl.worker.v1.RegisterWorkerResponse);
+  rpc Heartbeat(fl.worker.v1.WorkerHeartbeatRequest) returns (fl.worker.v1.WorkerHeartbeatResponse);
+
+  rpc AcquireTask(AcquireTaskRequest) returns (ClientTrainingTask);
+  rpc ReportTaskProgress(TaskProgressRequest) returns (TaskProgressResponse);
+  rpc SubmitClientResult(SubmitClientResultRequest) returns (SubmitClientResultResponse);
+
+  rpc StreamRunEvents(StreamRunEventsRequest) returns (stream fl.events.v1.CoordinatorEvent);
+
+  rpc Health(HealthRequest) returns (HealthResponse);
 }

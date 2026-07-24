@@ -1,12 +1,33 @@
 import { getDemoOverview, getDemoRunDashboard } from "@/lib/demo-data";
-import type { AuditEvent, AuthSession, Experiment, OverviewData, Project, Run, RunAction, RunDashboardData } from "@/types/api";
+import type {
+  AuditEvent,
+  AuthSession,
+  CoordinatorHealth,
+  CoordinatorRunSnapshot,
+  Experiment,
+  OverviewData,
+  Project,
+  Run,
+  RunAction,
+  RunDashboardData,
+} from "@/types/api";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_FL_API_BASE_URL ?? process.env.FL_API_BASE_URL ?? "http://127.0.0.1:8080";
 
+// Requests to the Go API must never hang indefinitely: callers of
+// getOverviewData()/getRunData() catch failures and fall back to demo
+// data, but that fallback only helps if a dead/unreachable backend fails
+// *fast*. Without an explicit timeout, an environment where the backend
+// connection stalls rather than rejects immediately (observed inside a
+// Docker build with no `api` container running) hangs the entire request
+// — and during `next build`'s static generation, that hangs the build.
+const REQUEST_TIMEOUT_MS = 3_000;
+
 async function requestJSON<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     next: { revalidate: 5 },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
@@ -17,6 +38,7 @@ async function requestJSON<T>(path: string): Promise<T> {
 async function requestMutableJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
@@ -117,6 +139,57 @@ export async function createRunWithToken(
     },
     body: JSON.stringify(payload),
   });
+}
+
+// The Go API collapses "no coordinator client configured" and
+// "coordinator process unreachable" into the same 503 (see
+// writeCoordinatorError in go/internal/transport/httpapi/coordinator_handlers.go)
+// since an operator can't act differently on either — both mean "no live
+// coordinator to talk to right now."
+export type CoordinatorAvailability = "connected" | "unavailable" | "unauthorized" | "unknown";
+
+// Distinguishes "coordinator client configured but the coordinator
+// process is unreachable" (503 from writeCoordinatorError in
+// go/internal/transport/httpapi/coordinator_handlers.go) from "auth
+// failed" and from a genuinely unexpected error, so the operator console
+// can show an accurate status instead of a generic failure banner.
+export async function getCoordinatorHealth(
+  token: string,
+): Promise<{ availability: CoordinatorAvailability; health?: CoordinatorHealth }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/coordinator-health`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.status === 401 || response.status === 403) {
+      return { availability: "unauthorized" };
+    }
+    if (response.status === 503) {
+      return { availability: "unavailable" };
+    }
+    if (!response.ok) {
+      return { availability: "unknown" };
+    }
+    const health = (await response.json()) as CoordinatorHealth;
+    return { availability: "connected", health };
+  } catch {
+    return { availability: "unknown" };
+  }
+}
+
+export async function getCoordinatorRun(runId: string, token: string): Promise<CoordinatorRunSnapshot | undefined> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/coordinator/runs/${runId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    return (await response.json()) as CoordinatorRunSnapshot;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function listAuditEventsWithToken(token: string, limit = 100): Promise<AuditEvent[]> {

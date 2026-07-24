@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package fl.privacy.v1;
 
+option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/privacy/v1;privacyv1";
+
 message PrivacyLedger {
   string run_id = 1;
   string mode = 2;

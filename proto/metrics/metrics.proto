@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package fl.metrics.v1;
 
+option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/metrics/v1;metricsv1";
+
 message MetricPoint {
   string run_id = 1;
   uint64 round_id = 2;

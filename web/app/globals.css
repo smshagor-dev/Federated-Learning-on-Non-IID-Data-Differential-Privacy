@@ -509,6 +509,26 @@ textarea {
   border: 1px solid #86efac;
 }
 
+.event-feed {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.event-feed li {
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .builder-operator-card {
   background:
     radial-gradient(circle at top left, rgba(199, 119, 22, 0.12), transparent 34%),

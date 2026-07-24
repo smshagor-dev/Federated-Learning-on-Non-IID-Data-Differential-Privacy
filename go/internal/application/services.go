@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/auth"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/experiments"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/observability"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/projects"
@@ -31,6 +32,8 @@ type Services struct {
 	Runs        *RunService
 	Auth        *AuthService
 	Audit       *AuditService
+	Coordinator *CoordinatorService
+	Metrics     *observability.MetricsRecorder
 }
 
 func NewServices(
@@ -66,6 +69,24 @@ func NewServicesWithAudit(
 	auditRepo observability.AuditRepository,
 	clock Clock,
 ) *Services {
+	return NewServicesWithCoordinator(projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo, nil, clock)
+}
+
+// NewServicesWithCoordinator is NewServicesWithAudit plus an optional
+// coordinator.Client. coordinatorClient may be nil — e.g. in tests, or in
+// deployments not yet running the C++ coordinator — in which case
+// Services.Coordinator methods return ErrCoordinatorNotConfigured rather
+// than panicking or silently no-oping.
+func NewServicesWithCoordinator(
+	projectRepo projects.Repository,
+	experimentRepo experiments.Repository,
+	runRepo runs.Repository,
+	userRepo auth.UserRepository,
+	sessionRepo auth.SessionRepository,
+	auditRepo observability.AuditRepository,
+	coordinatorClient coordinator.Client,
+	clock Clock,
+) *Services {
 	if clock == nil {
 		clock = time.Now
 	}
@@ -81,12 +102,16 @@ func NewServicesWithAudit(
 		tokenSource: randomToken,
 		audit:       auditService,
 	}
+	metrics := &observability.MetricsRecorder{}
+	coordinatorService := &CoordinatorService{client: coordinatorClient, clock: clock, audit: auditService, metrics: metrics}
 	return &Services{
 		Projects:    projectService,
 		Experiments: experimentService,
 		Runs:        runService,
 		Auth:        authService,
 		Audit:       auditService,
+		Coordinator: coordinatorService,
+		Metrics:     metrics,
 	}
 }
 

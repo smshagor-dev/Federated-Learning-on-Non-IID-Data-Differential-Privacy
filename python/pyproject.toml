@@ -31,4 +31,27 @@ warn_unused_ignores = true
 warn_return_any = true
 exclude = [
     "src/fl_platform.egg-info",
+    # Regenerated on demand by `make proto` (see docs/protobuf-generation.md),
+    # never committed, and not hand-written — excluded from strict checking
+    # for the same reason egg-info is.
+    "src/fl_platform/generated",
 ]
+
+# fl_platform.worker.task_runner intentionally reuses the legacy prototype's
+# proven training implementation (federated.client) rather than
+# reimplementing it (see docs/python-worker.md). That package predates this
+# strict mypy config and is out of this milestone's scope to retrofit;
+# `follow_imports = "skip"` stops mypy from strict-checking it as a side
+# effect of one import, without silencing real issues in python/src itself.
+[[tool.mypy.overrides]]
+module = ["federated", "federated.*", "models", "models.*", "data", "data.*", "utils", "utils.*"]
+follow_imports = "skip"
+
+# grpcio's generated _grpc.py modules import `grpc` directly; type stubs for
+# grpc/protobuf are not part of this milestone's dev dependencies (only the
+# runtime packages are — see docs/grpc-contracts.md), so these two specific
+# untyped-import categories are ignored rather than adding a stub dependency
+# whose only purpose would be silencing this.
+[[tool.mypy.overrides]]
+module = ["grpc.*", "google.protobuf.*"]
+ignore_missing_imports = true

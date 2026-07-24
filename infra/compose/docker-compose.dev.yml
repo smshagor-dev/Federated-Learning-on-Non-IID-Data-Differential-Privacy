@@ -53,6 +53,26 @@ services:
     ports:
       - "5000:5000"
 
+  # Milestone 3: the real gRPC coordinator server (cpp/coordinator/main.cpp),
+  # built here with apt-installed gRPC/Protobuf since that combination is
+  # unavailable on the Windows/MSVC host this repo is otherwise developed
+  # on — see infra/docker/cpp-coordinator.Dockerfile and
+  # docs/coordinator-runtime.md. Host port is configurable via
+  # FL_COORDINATOR_HOST_PORT to avoid clashing with a coordinator/worker
+  # already running on the default 50051 outside Compose.
+  coordinator:
+    build:
+      context: ../..
+      dockerfile: infra/docker/cpp-coordinator.Dockerfile
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/50051' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "${FL_COORDINATOR_HOST_PORT:-50051}:50051"
+
   api:
     build:
       context: ../..
@@ -62,6 +82,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      coordinator:
+        condition: service_healthy
+    environment:
+      FL_COORDINATOR_ADDRESS: coordinator:50051
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 30s
@@ -88,8 +112,10 @@ services:
       context: ../..
       dockerfile: infra/docker/python-worker.Dockerfile
     depends_on:
-      api:
-        condition: service_started
+      coordinator:
+        condition: service_healthy
+    environment:
+      FL_WORKER_COORDINATOR_ADDRESS: coordinator:50051
 
   prometheus:
     image: prom/prometheus:v2.54.1

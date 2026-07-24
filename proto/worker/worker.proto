@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package fl.worker.v1;
 
+option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/worker/v1;workerv1";
+
 message TensorManifest {
   string name = 1;
   repeated uint64 shape = 2;
@@ -44,4 +46,56 @@ message ClientResult {
   string nonce = 13;
   string worker_id = 14;
   string trace_id = 15;
+}
+
+// ---------------------------------------------------------------------
+// Milestone 3 additions. Everything above this line is unchanged from
+// Milestone 1/2 (field numbers preserved); everything below is new
+// messages, not new fields spliced into the messages above, so the
+// backward-compatibility guarantee stays trivial to audit.
+// ---------------------------------------------------------------------
+
+enum WorkerStatus {
+  WORKER_STATUS_UNSPECIFIED = 0;
+  WORKER_STATUS_REGISTERING = 1;
+  WORKER_STATUS_IDLE = 2;
+  WORKER_STATUS_BUSY = 3;
+  WORKER_STATUS_UNHEALTHY = 4;
+  WORKER_STATUS_DISCONNECTED = 5;
+  WORKER_STATUS_DRAINING = 6;
+}
+
+message WorkerCapability {
+  string device = 1;
+  uint32 cpu_count = 2;
+  bool gpu_available = 3;
+  uint32 gpu_count = 4;
+  uint64 available_memory_bytes = 5;
+  repeated string supported_model_formats = 6;
+  repeated string supported_algorithms = 7;
+}
+
+message RegisterWorkerRequest {
+  string worker_id = 1;
+  WorkerCapability capability = 2;
+  string trace_id = 3;
+}
+
+message RegisterWorkerResponse {
+  string worker_id = 1;
+  WorkerStatus status = 2;
+  uint32 heartbeat_interval_seconds = 3;
+  uint32 task_poll_interval_seconds = 4;
+}
+
+message WorkerHeartbeatRequest {
+  string worker_id = 1;
+  WorkerStatus status = 2;
+  string current_task_id = 3;
+  string trace_id = 4;
+}
+
+message WorkerHeartbeatResponse {
+  bool acknowledged = 1;
+  bool should_disconnect = 2;
 }

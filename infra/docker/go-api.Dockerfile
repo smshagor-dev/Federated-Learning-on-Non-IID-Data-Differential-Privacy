@@ -1,9 +1,11 @@
-FROM golang:1.22 AS builder
+FROM golang:1.25 AS builder
 WORKDIR /src
-COPY go/go.mod ./go/go.mod
+COPY go/go.mod go/go.sum ./go/
 COPY go/cmd ./go/cmd
 COPY go/internal ./go/internal
+COPY go/generated ./go/generated
 WORKDIR /src/go
+RUN go mod download
 RUN go build -o /out/api ./cmd/api
 
 FROM debian:bookworm-slim

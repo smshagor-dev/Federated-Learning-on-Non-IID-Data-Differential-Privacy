@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package fl.experiment.v1;
 
+option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/experiment/v1;experimentv1";
+
 message DatasetConfig {
   string name = 1;
   string partitioning = 2;

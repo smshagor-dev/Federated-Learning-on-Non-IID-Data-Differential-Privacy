@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { getLiveRunData, mutateRunLifecycle } from "@/lib/api";
+import { CoordinatorStatusPanel } from "@/features/runs/coordinator-status-panel";
 import { RunDashboard } from "@/features/runs/run-dashboard";
 import type { AuthSession, RunAction, RunDashboardData, RunStatus } from "@/types/api";
 
@@ -138,6 +139,7 @@ export function RunOperatorConsole({
       </article>
 
       <RunDashboard data={data} />
+      <CoordinatorStatusPanel runId={runId} token={session?.token} />
     </div>
   );
 }

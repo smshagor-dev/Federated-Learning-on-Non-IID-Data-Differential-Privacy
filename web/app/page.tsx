@@ -4,6 +4,13 @@ import { AppShell } from "@/components/app-shell";
 import { OverviewPage } from "@/features/overview/overview-page";
 import { getOverviewData } from "@/lib/api";
 
+// This page fetches live backend state on every request; it must not be
+// statically prerendered at build time (there is no live backend during
+// `next build`/`docker build`, and the data would be stale even if there
+// were). See docs/known-limitations.md for the Docker build investigation
+// this fixes.
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const data = await getOverviewData();
 

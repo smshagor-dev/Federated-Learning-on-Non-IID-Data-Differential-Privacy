@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package fl.events.v1;
 
+option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/events/v1;eventsv1";
+
 message CoordinatorEvent {
   string event_id = 1;
   string run_id = 2;
@@ -10,4 +12,39 @@ message CoordinatorEvent {
   string timestamp = 5;
   string trace_id = 6;
   string payload_json = 7;
+
+  // Milestone 3 additions: existing fields (1-7) are unchanged. These are
+  // additive so old consumers that only read event_type/payload_json keep
+  // working; new consumers get structured fields instead of parsing JSON.
+  string client_id = 8;
+  string worker_id = 9;
+  string model_version = 10;
+  CoordinatorEventType type = 11;
+  map<string, string> metadata = 12;
+}
+
+enum CoordinatorEventType {
+  COORDINATOR_EVENT_TYPE_UNSPECIFIED = 0;
+  COORDINATOR_EVENT_TYPE_RUN_CREATED = 1;
+  COORDINATOR_EVENT_TYPE_RUN_VALIDATED = 2;
+  COORDINATOR_EVENT_TYPE_RUN_STARTED = 3;
+  COORDINATOR_EVENT_TYPE_RUN_PAUSED = 4;
+  COORDINATOR_EVENT_TYPE_RUN_RESUMED = 5;
+  COORDINATOR_EVENT_TYPE_RUN_CANCELED = 6;
+  COORDINATOR_EVENT_TYPE_RUN_FAILED = 7;
+  COORDINATOR_EVENT_TYPE_ROUND_STARTED = 8;
+  COORDINATOR_EVENT_TYPE_COHORT_SELECTED = 9;
+  COORDINATOR_EVENT_TYPE_TASK_ASSIGNED = 10;
+  COORDINATOR_EVENT_TYPE_WORKER_REGISTERED = 11;
+  COORDINATOR_EVENT_TYPE_WORKER_UNHEALTHY = 12;
+  COORDINATOR_EVENT_TYPE_TASK_PROGRESS = 13;
+  COORDINATOR_EVENT_TYPE_TASK_COMPLETED = 14;
+  COORDINATOR_EVENT_TYPE_TASK_FAILED = 15;
+  COORDINATOR_EVENT_TYPE_CLIENT_RESULT_ACCEPTED = 16;
+  COORDINATOR_EVENT_TYPE_CLIENT_RESULT_REJECTED = 17;
+  COORDINATOR_EVENT_TYPE_AGGREGATION_STARTED = 18;
+  COORDINATOR_EVENT_TYPE_AGGREGATION_COMPLETED = 19;
+  COORDINATOR_EVENT_TYPE_MODEL_VERSION_UPDATED = 20;
+  COORDINATOR_EVENT_TYPE_CHECKPOINT_COMPLETED = 21;
+  COORDINATOR_EVENT_TYPE_RUN_COMPLETED = 22;
 }

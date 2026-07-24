@@ -39,6 +39,28 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestMetricsEndpoint(t *testing.T) {
+	server := testServer()
+	// One request first so the counter is non-zero and the exposition
+	// format actually has something to assert on beyond "200 OK".
+	warmup := httptest.NewRecorder()
+	server.Handler().ServeHTTP(warmup, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, "fl_api_requests_total") {
+		t.Fatalf("expected fl_api_requests_total in metrics output, got: %s", body)
+	}
+	if !strings.Contains(body, `fl_api_requests_by_route_total{route="GET /healthz"}`) {
+		t.Fatalf("expected per-route counter for GET /healthz, got: %s", body)
+	}
+}
+
 func TestCreateProjectEndpoint(t *testing.T) {
 	server := testServer()
 	body, _ := json.Marshal(map[string]string{
