@@ -1,6 +1,6 @@
 # Deployment Foundation
 
-This milestone establishes a local-first deployment baseline for the federated learning platform.
+This phase establishes a local-first deployment baseline for the federated learning platform.
 
 ## Container Images
 
@@ -51,7 +51,7 @@ These manifests are intentionally conservative and serve as the first deployment
 
 ## Validated Commands
 
-The following command was validated locally during this milestone:
+The following command was validated locally during this phase:
 
 ```bash
 docker compose config

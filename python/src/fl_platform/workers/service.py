@@ -36,7 +36,8 @@ class LocalTrainer(Protocol):
 
 
 class WorkerService:
-    """Milestone 3 local worker shell. RPC transport will wrap this later."""
+    """Coordinator Runtime phase local worker shell. RPC transport will
+    wrap this later."""
 
     def __init__(self, trainer: LocalTrainer, worker_id: str = "local-worker") -> None:
         self._trainer = trainer

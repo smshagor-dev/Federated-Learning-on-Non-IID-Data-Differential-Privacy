@@ -1,4 +1,4 @@
-"""Milestone 1 Python platform package."""
+"""Foundation phase Python platform package."""
 
 __all__ = ["__version__"]
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 class NonceReplayGuard:
     """In-memory replay guard scaffold.
 
-    Milestone scope:
+    Current scope:
     - deterministic registration
     - per-scope nonce uniqueness
     - no distributed persistence yet

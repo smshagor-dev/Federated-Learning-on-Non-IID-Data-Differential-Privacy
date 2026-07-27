@@ -1,0 +1,12 @@
+{
+  "$comment": "Frozen SHA-256 reference value for compute_session_configuration_hash (Work Package C). Same frozen-reference discipline as cohort_commitment_golden.json in this directory -- captured from a single reviewed run, not hand-derivable. Every field not listed under 'input' takes SecureAggregationSessionConfig's documented default (see cpp/coordinator/include/fl_coordinator/secure_aggregation_session.hpp and python/src/fl_platform/secure_aggregation/cohort_state_machine.py's SecureAggregationSessionConfig).",
+  "schema_version": 1,
+  "input": {
+    "session_id": "session-1",
+    "run_id": "run-1",
+    "round_id": 5,
+    "provider": "SECAGG_NO_DROPOUT_EXPERIMENTAL"
+  },
+  "expected_hash_hex": "76e4954d92f097321ee7fd340b88dd0294b29a3181e9416922635bd1b00c4ea2",
+  "known_limitation": "compute_session_configuration_hash includes the top-level scale_factor field (per Work Package C) but does NOT include fixed_point_profile's other sub-fields (rounding_rule, max_input_magnitude, max_client_weight, max_cohort_size, safety_margin) -- a session could change one of those nested fields without changing this hash. Documented as a known gap in docs/known-limitations.md, not fixed in this slice."
+}

@@ -37,14 +37,14 @@ struct TransitionRecord {
 };
 
 class RunStateMachine {
-public:
+  public:
     explicit RunStateMachine(RunState initial = RunState::kCreated);
 
     [[nodiscard]] RunState state() const;
     [[nodiscard]] const std::vector<TransitionRecord>& history() const;
     void transition_to(RunState next, const std::string& reason, const std::string& timestamp);
 
-private:
+  private:
     [[nodiscard]] bool is_transition_allowed(RunState next) const;
 
     RunState state_;
@@ -72,11 +72,9 @@ struct SchedulingOptions {
 };
 
 class ClientScheduler {
-public:
+  public:
     [[nodiscard]] std::vector<std::string> sample_clients(
-        const std::vector<ClientMetadata>& clients,
-        const SchedulingOptions& options
-    ) const;
+        const std::vector<ClientMetadata>& clients, const SchedulingOptions& options) const;
 };
 
 struct RoundContext {
@@ -95,7 +93,7 @@ struct CoordinatorCheckpoint {
 };
 
 class CheckpointStore {
-public:
+  public:
     static std::string serialize(const CoordinatorCheckpoint& checkpoint);
     static CoordinatorCheckpoint deserialize(const std::string& payload);
 };

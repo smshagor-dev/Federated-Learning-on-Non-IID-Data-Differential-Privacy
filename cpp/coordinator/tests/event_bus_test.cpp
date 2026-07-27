@@ -20,12 +20,15 @@ void run_event_bus_tests() {
         b.type = CoordinatorEventType::kRunStarted;
         const auto published_b = bus.publish(b, "2026-01-01T00:00:01Z");
 
-        check(published_a.event_id != published_b.event_id, "each published event gets a distinct event_id");
+        check(published_a.event_id != published_b.event_id,
+              "each published event gets a distinct event_id");
 
         const auto all = bus.poll("run-1", "");
         check(all.size() == 2, "polling from the start returns every published event");
-        check(all[0].type == CoordinatorEventType::kRunCreated, "events are returned in publish order (first)");
-        check(all[1].type == CoordinatorEventType::kRunStarted, "events are returned in publish order (second)");
+        check(all[0].type == CoordinatorEventType::kRunCreated,
+              "events are returned in publish order (first)");
+        check(all[1].type == CoordinatorEventType::kRunStarted,
+              "events are returned in publish order (second)");
 
         const auto after_first = bus.poll("run-1", published_a.event_id);
         check(after_first.size() == 1 && after_first[0].type == CoordinatorEventType::kRunStarted,

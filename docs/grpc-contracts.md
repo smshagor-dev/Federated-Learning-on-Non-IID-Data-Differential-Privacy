@@ -1,6 +1,6 @@
 # gRPC Contracts
 
-## Proto files touched this milestone
+## Proto files touched this phase
 
 * `proto/coordinator/coordinator.proto` — new `CoordinatorService` (13
   RPCs: CreateRun, StartRun, PauseRun, ResumeRun, CancelRun, GetRun,
@@ -47,7 +47,7 @@ cross-file imports use bare top-level names).
 
 `scripts/verify_proto_contracts.py` parses the `.proto` source directly
 (no `protoc` required) and asserts every expected message's field names
-still map to their expected field numbers, plus (new this milestone)
+still map to their expected field numbers, plus (new this phase)
 that expected enums still exist with their expected members. Run via
 `make proto-check`; passes on this machine without `protoc` installed.
 
@@ -58,7 +58,7 @@ that expected enums still exist with their expected members. Run via
 singular message field `task` (field 2) — a duplicate-method compile
 error in C++ codegen only, invisible to Python/Go codegen and invisible
 to `verify_proto_contracts.py`'s field-number check (the field number
-itself was never wrong). Only surfaced once this milestone's Docker build
+itself was never wrong). Only surfaced once this phase's Docker build
 actually compiled the C++ bindings for the first time — see
 [docker-runtime.md](docker-runtime.md). Fixed by renaming the field to
 `task_available`; the one C++ call site

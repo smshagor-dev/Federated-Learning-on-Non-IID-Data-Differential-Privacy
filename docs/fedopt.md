@@ -7,7 +7,7 @@ Reference: Reddi et al., *Adaptive Federated Optimization*, 2020
 
 ## Architecture
 
-Per the explicit Milestone 2 requirement, each optimizer is its own class
+Per the explicit the Aggregation Core phase requirement, each optimizer is its own class
 rather than a branch inside one shared function:
 
 ```cpp
@@ -33,7 +33,7 @@ std::unique_ptr<ServerOptimizer> make_server_optimizer(AggregationAlgorithm);
 `FedOptAggregator` (in `cpp/core/src/aggregation.cpp`) owns cohort
 validation and weighting (shared across all three variants), then
 delegates the moment update and model-delta formula entirely to the
-selected `ServerOptimizer`. This was a refactor during this milestone: the
+selected `ServerOptimizer`. This was a refactor during this phase: the
 original implementation had all three formulas in one function with
 `if (algorithm_ == ...)` branches; it was split apart specifically because
 the requirement says not to combine the formulas into one large
@@ -52,7 +52,7 @@ Every variant, on each call:
 2. Increments `step` by 1.
 3. Computes `aggregated_delta` from client updates using the configured
    `WeightingStrategy` (shared with FedAvg/FedProx — see
-   [cpp-aggregation-architecture.md](cpp-aggregation-architecture.md)).
+   [aggregation-core-architecture.md](aggregation-core-architecture.md)).
 
 ## Per-tensor formulas
 

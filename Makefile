@@ -1,9 +1,15 @@
 PYTHON ?= python
 
-.PHONY: test-baseline proto proto-check cpp-configure cpp-build cpp-test cpp-debug cpp-release cpp-format-check cpp-tidy cpp-asan cpp-ubsan cpp-benchmark
+.PHONY: test-baseline proto proto-check terminology-check pki-verify cpp-configure cpp-build cpp-test cpp-debug cpp-release cpp-format-check cpp-tidy cpp-asan cpp-ubsan cpp-benchmark
 
 test-baseline:
 	$(PYTHON) -m unittest discover -s tests -p "test_*.py"
+
+terminology-check:
+	$(PYTHON) scripts/check_project_terminology.py
+
+pki-verify:
+	bash scripts/pki/verify-pki.sh
 
 proto:
 	$(PYTHON) scripts/verify_proto_contracts.py

@@ -17,7 +17,7 @@ class OrchestratorResult:
 class MultiprocessingOrchestrator:
     """Deterministic execution shell for future process pool integration.
 
-    Milestone scope:
+    Current scope:
     - preserves input ordering
     - applies mode-specific admission rules
     - does not yet spawn child processes or real async workers

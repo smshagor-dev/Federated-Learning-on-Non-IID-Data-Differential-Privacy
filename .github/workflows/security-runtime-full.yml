@@ -1,0 +1,83 @@
+name: security-runtime-full
+
+# Security Runtime Completion and Release Evidence slice, Work Package
+# S/T: the full security runtime-validation matrix -- every group in
+# scripts/security-validation/registry.py, including the worker-
+# lifecycle/event-centralization groups (which poll for real
+# registration and event-delivery timing, so take longer than the PR
+# subset) and the Web Security Center browser suite (security-ui,
+# real Playwright + Chromium against the real running web app). Named
+# for what it runs, not "scheduled-validation" or similar -- this
+# repository's terminology policy (scripts/check_project_terminology.py)
+# rejects vague/roadmap-style naming; "security-runtime-full" states
+# the actual scope directly, matching security-runtime-pr's naming in
+# ci.yml.
+#
+# Not run on every PR/push (see ci.yml's security-runtime-pr job for
+# that): a full run brings up the entire Compose stack including `web`,
+# installs a Chromium browser, and runs every real scenario end to end,
+# which is real coverage worth having but too slow for the fast-inner-
+# loop PR gate every commit already pays for.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily, 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  security-runtime-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Generate the development PKI (CA + coordinator + go-api + worker-1)
+        run: |
+          bash scripts/pki/generate-dev-ca.sh
+          bash scripts/pki/issue-service-cert.sh coordinator
+          bash scripts/pki/issue-service-cert.sh go-api
+          bash scripts/pki/issue-worker-cert.sh worker-1
+
+      - name: Install web dependencies and Playwright's Chromium
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Build the Compose images
+        run: |
+          docker compose -f infra/compose/docker-compose.dev.yml -f infra/compose/docker-compose.security.yml \
+            build coordinator api python-worker web
+
+      - name: Run the full security runtime-validation matrix
+        run: python scripts/security-validation/run.py --output-dir artifacts/security-runtime-validation
+
+      - name: Check the harness's own output for prohibited material
+        if: always()
+        run: python scripts/security-validation/check_artifact_sanitation.py artifacts/security-runtime-validation
+
+      # Playwright's own results.json (list of pass/fail per spec, no
+      # DOM/network content) is uploaded; the trace/screenshot artifacts
+      # under web/e2e-results/artifacts are deliberately NOT uploaded --
+      # see docs/security-ci.md's artifact-sanitation policy. A failure
+      # screenshot of an unexpected app state is not guaranteed
+      # secret-free the way this harness's own redacted JSON/Markdown
+      # summaries are, and this workflow has no independent step that
+      # can verify a screenshot the way check_artifact_sanitation.py
+      # verifies text-based output (see that script's own disclosed
+      # scope). The list-reporter console output above remains visible
+      # in the job log for debugging a real browser-suite failure.
+      - name: Upload sanitized summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-runtime-full-summary
+          path: |
+            artifacts/security-runtime-validation/
+            web/e2e-results/results.json
+          retention-days: 30

@@ -1,17 +1,45 @@
-"""Milestone 4 algorithm scaffolds."""
+"""Federated local-training algorithms: FedAvg/FedProx/SCAFFOLD (thin
+adapters over the Coordinator Runtime phase's proven task_runner.py path) and the real
+FedSAM/Ditto/Per-FedAvg implementations added this phase. See
+docs/algorithm-expansion-architecture.md.
 
-from .ditto import DittoConfig, DittoState, compute_ditto_regularized_weights
-from .fedsam import FedSAMConfig, FedSAMStep, build_fedsam_step
-from .per_fedavg import PerFedAvgConfig, PerFedAvgStep, build_per_fedavg_step
+Use `fl_platform.algorithms.registry.get_algorithm(name)` to look one up
+by the algorithm identifier a task carries, rather than importing a
+specific class directly.
+"""
+
+from .base import (
+    FederatedLocalAlgorithm,
+    LocalEvaluationContext,
+    LocalEvaluationResult,
+    LocalTrainingContext,
+    LocalTrainingResult,
+    TaskCancelled,
+    TaskDeadlineExceeded,
+)
+from .ditto import DittoAlgorithm, DittoConfig
+from .fedsam import FedSamAlgorithm, FedSamConfig
+from .legacy_adapter import LegacyAlgorithmAdapter
+from .per_fedavg import InsufficientSamplesError, PerFedAvgAlgorithm, PerFedAvgConfig
+from .registry import get_algorithm, register_algorithm, registered_algorithm_names
 
 __all__ = [
+    "DittoAlgorithm",
     "DittoConfig",
-    "DittoState",
-    "FedSAMConfig",
-    "FedSAMStep",
+    "FederatedLocalAlgorithm",
+    "FedSamAlgorithm",
+    "FedSamConfig",
+    "InsufficientSamplesError",
+    "LegacyAlgorithmAdapter",
+    "LocalEvaluationContext",
+    "LocalEvaluationResult",
+    "LocalTrainingContext",
+    "LocalTrainingResult",
+    "PerFedAvgAlgorithm",
     "PerFedAvgConfig",
-    "PerFedAvgStep",
-    "build_fedsam_step",
-    "build_per_fedavg_step",
-    "compute_ditto_regularized_weights",
+    "TaskCancelled",
+    "TaskDeadlineExceeded",
+    "get_algorithm",
+    "register_algorithm",
+    "registered_algorithm_names",
 ]

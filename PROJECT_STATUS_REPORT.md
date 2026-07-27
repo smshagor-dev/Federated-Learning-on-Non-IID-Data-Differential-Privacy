@@ -6,12 +6,12 @@ Scope: Checked `plan.md`, repository structure, source code, docs, tests, and lo
 
 ## Executive Summary
 
-The repository has moved from the original Python-only research prototype toward a multi-language federated learning platform. The current state is best described as **Milestone 1 completed with extra foundation work from later milestones started**, not a fully production-ready platform yet.
+The repository has moved from the original Python-only research prototype toward a multi-language federated learning platform. The current state is best described as **the Foundation phase completed with extra foundation work from a later phase started**, not a fully production-ready platform yet.
 
 High-level status:
 
 - **Legacy Python prototype preserved:** Success.
-- **Milestone 1 monorepo foundation:** Mostly success.
+- **the Foundation phase monorepo foundation:** Mostly success.
 - **C++ core foundation:** Success for tensor, aggregation, state-machine, scheduler, checkpoint scaffolding, and tests.
 - **Python package foundation:** Success for registries, worker service, privacy/security/execution/tracking scaffolds, and unit tests.
 - **Go control-plane foundation:** Success for in-memory/file-backed API skeleton, auth, audit, project/experiment/run services, and tests.
@@ -21,7 +21,7 @@ High-level status:
 
 ## Plan.md Interpretation
 
-`plan.md` defines a very large target platform with 10 milestones and release gates. It explicitly says to begin with **Milestone 1 only**.
+`plan.md` defines a very large target platform with 10 phases and release gates. It explicitly says to begin with **the Foundation phase only**.
 
 **Final Architecture:**
 flowchart LR
@@ -51,7 +51,7 @@ flowchart LR
     CPP --> OBS
     PY --> OBS
 
-Milestone 1 includes:
+the Foundation phase includes:
 
 - Full repository audit
 - Legacy preservation
@@ -422,15 +422,15 @@ Current working tree also has many untracked additions:
 - `web/`
 - `PROJECT_STATUS_REPORT.md`
 
-Note: `git diff --stat` only showed tracked-file changes because most milestone files are still untracked.
+Note: `git diff --stat` only showed tracked-file changes because most phase files are still untracked.
 
 ## Overall Verdict
 
-Milestone 1 is in good shape and mostly validated. Some later milestone foundations have also been started, especially for Python privacy/security/execution, Go API/auth/audit, and web dashboard pages.
+the Foundation phase is in good shape and mostly validated. Some later phase foundations have also been started, especially for Python privacy/security/execution, Go API/auth/audit, and web dashboard pages.
 
 However, the full platform from `plan.md` is not complete yet. The current repository should be reported as:
 
-**Milestone 1 foundation: mostly successful. Production federated-learning super system: still in progress.**
+**the Foundation phase foundation: mostly successful. Production federated-learning super system: still in progress.**
 
 ## Recommended Next Steps
 
@@ -438,6 +438,6 @@ However, the full platform from `plan.md` is not complete yet. The current repos
 2. Configure non-interactive ESLint for the Next.js app.
 3. Run full release gate commands again and record results.
 4. Build protobuf generation into scripts/CI.
-5. Start Milestone 2 properly: strengthen C++ tensor validation and aggregation parity.
+5. Start the Aggregation Core phase properly: strengthen C++ tensor validation and aggregation parity.
 6. Add benchmark harness before making performance claims.
 7. Connect Go API, C++ coordinator, and Python worker only after contracts and parity tests are stable.

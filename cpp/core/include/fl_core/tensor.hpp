@@ -25,7 +25,7 @@ struct TensorDescriptor {
 };
 
 class TensorBuffer {
-public:
+  public:
     TensorBuffer() = default;
     TensorBuffer(TensorDescriptor descriptor, std::vector<double> values);
 
@@ -37,13 +37,13 @@ public:
 
     void validate() const;
 
-private:
+  private:
     TensorDescriptor descriptor_;
     std::vector<double> values_;
 };
 
 class TensorCollection {
-public:
+  public:
     void insert(TensorBuffer tensor);
     void assign(TensorBuffer tensor);
     [[nodiscard]] bool contains(const std::string& name) const;
@@ -52,7 +52,7 @@ public:
     [[nodiscard]] const std::map<std::string, TensorBuffer>& tensors() const;
     [[nodiscard]] bool empty() const;
 
-private:
+  private:
     std::map<std::string, TensorBuffer> tensors_;
 };
 

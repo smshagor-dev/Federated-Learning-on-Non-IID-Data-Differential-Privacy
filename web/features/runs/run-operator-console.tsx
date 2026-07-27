@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import { getLiveRunData, mutateRunLifecycle } from "@/lib/api";
 import { CoordinatorStatusPanel } from "@/features/runs/coordinator-status-panel";
+import { PersonalizationPanel } from "@/features/runs/personalization-panel";
+import { PrivacyCenterPanel } from "@/features/runs/privacy-center-panel";
 import { RunDashboard } from "@/features/runs/run-dashboard";
 import type { AuthSession, RunAction, RunDashboardData, RunStatus } from "@/types/api";
 
@@ -140,6 +142,8 @@ export function RunOperatorConsole({
 
       <RunDashboard data={data} />
       <CoordinatorStatusPanel runId={runId} token={session?.token} />
+      <PrivacyCenterPanel runId={runId} token={session?.token} />
+      <PersonalizationPanel runId={runId} token={session?.token} />
     </div>
   );
 }

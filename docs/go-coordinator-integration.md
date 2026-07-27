@@ -13,8 +13,8 @@ HTTP handlers never call gRPC directly. `go/internal/coordinator/`:
   `RunSnapshot`/`CreateRunRequest`/`Event`/`Config`.
 * `grpc_client.go` — `GrpcClient`, a real implementation over the
   generated `coordinatorv1` package. Exercised end-to-end against a live
-  coordinator container this milestone (see
-  [milestone-3-validation.md](milestone-3-validation.md)).
+  coordinator container this phase (see
+  [coordinator-runtime-validation.md](coordinator-runtime-validation.md)).
 * `mock_client.go` — `MockClient`, an in-memory implementation
   replicating the C++ coordinator's idempotency rules (start/pause/
   resume/cancel are idempotent when already in the target state, reject
@@ -27,13 +27,13 @@ HTTP handlers never call gRPC directly. `go/internal/coordinator/`:
 
 ## Why coordinator routes are separate from `/api/v1/runs`
 
-Milestone 1 already defined `/api/v1/runs` for local project/experiment/
+the Foundation phase already defined `/api/v1/runs` for local project/experiment/
 run *bookkeeping* (a `runs.Run` record backed by a file/in-memory
 repository — status, config, timestamps). That is a different concept
 from a live federated round being driven by the C++ coordinator. Rather
 than overloading the same path (which would have required either
-breaking M1's tested behavior or an invasive merge under time pressure),
-Milestone 3's coordinator-backed routes live under a new prefix:
+breaking the Foundation phase's tested behavior or an invasive merge under time pressure),
+the Coordinator Runtime phase's coordinator-backed routes live under a new prefix:
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -51,7 +51,7 @@ Milestone 3's coordinator-backed routes live under a new prefix:
 
 This is a disclosed deviation from the literal endpoint list in the
 original task spec (which assumed `/api/v1/runs` was greenfield) — see
-[milestone-3-report.md](milestone-3-report.md).
+[coordinator-runtime-report.md](coordinator-runtime-report.md).
 
 ## Error mapping
 
@@ -83,4 +83,4 @@ See [event-streaming.md](event-streaming.md).
 health unconfigured/configured, create/lifecycle/get/metrics/events,
 403 on insufficient role, 409 on duplicate, 503 unconfigured) all use
 `MockClient` — no live coordinator needed. `go test -race` is CI-only
-(no cgo locally, same as Milestones 1–2).
+(no cgo locally, same as the Foundation and Aggregation Core phases).

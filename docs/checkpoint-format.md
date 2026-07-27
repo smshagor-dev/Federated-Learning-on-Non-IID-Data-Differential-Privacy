@@ -9,7 +9,7 @@ Implementation: `cpp/core/include/fl_core/checkpoint.hpp` /
 `cpp/core/src/checkpoint.cpp` (`AggregatorCheckpoint`,
 `AggregatorCheckpointStore`). This is deliberately separate from
 `fl_core::coordinator::CheckpointStore` (in `coordinator.hpp`), which
-persists run-state-machine/round metadata and is Milestone 3 coordinator
+persists run-state-machine/round metadata and is the Coordinator Runtime phase coordinator
 scaffolding; `AggregatorCheckpointStore` persists exactly what an
 aggregator/optimizer needs to resume deterministically, independent of any
 coordinator.
@@ -82,7 +82,7 @@ neither the old nor the new checkpoint exists on disk. On POSIX (Linux/macOS)
 triggers. This is documented here rather than silently assumed away; a
 fully crash-safe Windows story would need a platform-specific
 `ReplaceFile`/`MoveFileEx` call, which was not implemented in this
-milestone.
+phase.
 
 ## Load / corruption handling
 
@@ -135,7 +135,7 @@ every failure mode above raises before constructing an `AggregatorCheckpoint`.
 process was killed can be re-read afterward, correctly, or is rejected if
 incomplete. It does **not** mean this has been tested against an actual
 coordinator process that crashes mid-round in a running system — no such
-coordinator/round-lifecycle integration exists yet in this milestone (see
+coordinator/round-lifecycle integration exists yet in this phase (see
 [known-limitations.md](known-limitations.md)). Calling this
 "production-ready crash recovery" would overstate what has actually been
 exercised.

@@ -1,4 +1,4 @@
-"""Milestone 3 cross-language integration tests: Go/Python/C++ working
+"""Coordinator Runtime phase cross-language integration tests: Go/Python/C++ working
 together through the real, tested coordinator domain layer.
 
 The C++ side of this is driven through ``fl_coordinator_cli`` (the local

@@ -59,7 +59,8 @@ std::vector<std::string> split(const std::string& value, char delimiter) {
 void write_collection(std::ostringstream& out, const fl::core::TensorCollection& collection) {
     out << "control_variate_count=" << collection.tensors().size() << "\n";
     for (const auto& [name, tensor] : collection.tensors()) {
-        out << "control_variate_tensor=" << name << "|" << dtype_to_tag(tensor.descriptor().dtype) << "|";
+        out << "control_variate_tensor=" << name << "|" << dtype_to_tag(tensor.descriptor().dtype)
+            << "|";
         const auto& shape = tensor.descriptor().shape;
         for (std::size_t index = 0; index < shape.size(); ++index) {
             if (index > 0) {
@@ -104,7 +105,8 @@ fl::core::TensorBuffer parse_tensor_field(const std::string& field) {
     return fl::core::TensorBuffer(std::move(descriptor), std::move(values));
 }
 
-fl::core::TensorCollection read_collection(const std::vector<std::pair<std::string, std::string>>& fields) {
+fl::core::TensorCollection read_collection(
+    const std::vector<std::pair<std::string, std::string>>& fields) {
     fl::core::TensorCollection collection;
     std::size_t expected = 0;
     bool has_count = false;
@@ -124,8 +126,7 @@ fl::core::TensorCollection read_collection(const std::vector<std::pair<std::stri
     if (found != expected) {
         throw ClientAlgorithmStateCorruptionError(
             "client state truncated: expected " + std::to_string(expected) +
-            " control variate tensors, found " + std::to_string(found)
-        );
+            " control variate tensors, found " + std::to_string(found));
     }
     return collection;
 }
@@ -157,7 +158,8 @@ std::string FilesystemClientAlgorithmStateStore::serialize(const ClientAlgorithm
 ClientAlgorithmState FilesystemClientAlgorithmStateStore::deserialize(const std::string& payload) {
     const auto marker = payload.rfind("\nchecksum=");
     if (marker == std::string::npos) {
-        throw ClientAlgorithmStateCorruptionError("client state payload is truncated or missing checksum");
+        throw ClientAlgorithmStateCorruptionError(
+            "client state payload is truncated or missing checksum");
     }
     const std::string body = payload.substr(0, marker + 1);
     const std::string checksum_line = payload.substr(marker + 1);
@@ -167,13 +169,15 @@ ClientAlgorithmState FilesystemClientAlgorithmStateStore::deserialize(const std:
         throw ClientAlgorithmStateCorruptionError("client state checksum line is malformed");
     }
     std::string checksum_value = checksum_line.substr(equals + 1);
-    while (!checksum_value.empty() && (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
+    while (!checksum_value.empty() &&
+           (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
         checksum_value.pop_back();
     }
 
     const auto computed = hash_to_hex(fnv1a_hash(body));
     if (computed != checksum_value) {
-        throw ClientAlgorithmStateCorruptionError("client state checksum mismatch: file is corrupt or was truncated");
+        throw ClientAlgorithmStateCorruptionError(
+            "client state checksum mismatch: file is corrupt or was truncated");
     }
 
     std::vector<std::pair<std::string, std::string>> fields;
@@ -210,16 +214,16 @@ ClientAlgorithmState FilesystemClientAlgorithmStateStore::deserialize(const std:
     } catch (const ClientAlgorithmStateCorruptionError&) {
         throw;
     } catch (const std::exception& error) {
-        throw ClientAlgorithmStateCorruptionError(std::string("client state field parse failure: ") + error.what());
+        throw ClientAlgorithmStateCorruptionError(
+            std::string("client state field parse failure: ") + error.what());
     }
 
     if (!has_schema_version) {
         throw ClientAlgorithmStateCorruptionError("client state missing schema_version");
     }
     if (state.schema_version != ClientAlgorithmState::kSchemaVersion) {
-        throw ClientAlgorithmStateCorruptionError(
-            "unsupported client state schema version " + std::to_string(state.schema_version)
-        );
+        throw ClientAlgorithmStateCorruptionError("unsupported client state schema version " +
+                                                  std::to_string(state.schema_version));
     }
 
     try {
@@ -227,7 +231,8 @@ ClientAlgorithmState FilesystemClientAlgorithmStateStore::deserialize(const std:
     } catch (const ClientAlgorithmStateCorruptionError&) {
         throw;
     } catch (const std::exception& error) {
-        throw ClientAlgorithmStateCorruptionError(std::string("client state tensor parse failure: ") + error.what());
+        throw ClientAlgorithmStateCorruptionError(
+            std::string("client state tensor parse failure: ") + error.what());
     }
 
     return state;
@@ -236,9 +241,8 @@ ClientAlgorithmState FilesystemClientAlgorithmStateStore::deserialize(const std:
 FilesystemClientAlgorithmStateStore::FilesystemClientAlgorithmStateStore(std::string root_directory)
     : root_directory_(std::move(root_directory)) {}
 
-std::string FilesystemClientAlgorithmStateStore::path_for(
-    const std::string& run_id, const std::string& client_id
-) const {
+std::string FilesystemClientAlgorithmStateStore::path_for(const std::string& run_id,
+                                                          const std::string& client_id) const {
     // Client/run identifiers are trusted call-site inputs (already
     // validated as non-empty, ASCII identifiers by the aggregation core's
     // UpdateValidator before ever reaching here); no path sanitization
@@ -247,10 +251,7 @@ std::string FilesystemClientAlgorithmStateStore::path_for(
 }
 
 std::optional<ClientAlgorithmState> FilesystemClientAlgorithmStateStore::load(
-    const std::string& run_id,
-    const std::string& client_id,
-    const std::string& model_version
-) {
+    const std::string& run_id, const std::string& client_id, const std::string& model_version) {
     const auto path = path_for(run_id, client_id);
     if (!std::filesystem::exists(path)) {
         return std::nullopt;
@@ -258,7 +259,8 @@ std::optional<ClientAlgorithmState> FilesystemClientAlgorithmStateStore::load(
 
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        throw ClientAlgorithmStateCorruptionError("client state file exists but could not be opened: " + path);
+        throw ClientAlgorithmStateCorruptionError(
+            "client state file exists but could not be opened: " + path);
     }
     std::ostringstream buffer;
     buffer << in.rdbuf();
@@ -266,24 +268,20 @@ std::optional<ClientAlgorithmState> FilesystemClientAlgorithmStateStore::load(
 
     if (state.run_id != run_id || state.client_id != client_id) {
         throw ClientAlgorithmStateCorruptionError(
-            "client state file identity mismatch: expected run_id=" + run_id + " client_id=" + client_id +
-            ", found run_id=" + state.run_id + " client_id=" + state.client_id
-        );
+            "client state file identity mismatch: expected run_id=" + run_id + " client_id=" +
+            client_id + ", found run_id=" + state.run_id + " client_id=" + state.client_id);
     }
     if (state.model_version != model_version) {
         throw StaleClientAlgorithmStateError(
-            "client state for '" + client_id + "' was saved against model_version='" + state.model_version +
-            "' but model_version='" + model_version + "' was requested"
-        );
+            "client state for '" + client_id + "' was saved against model_version='" +
+            state.model_version + "' but model_version='" + model_version + "' was requested");
     }
     return state;
 }
 
-void FilesystemClientAlgorithmStateStore::save(
-    const std::string& run_id,
-    const std::string& client_id,
-    const ClientAlgorithmState& state
-) {
+void FilesystemClientAlgorithmStateStore::save(const std::string& run_id,
+                                               const std::string& client_id,
+                                               const ClientAlgorithmState& state) {
     const auto path = path_for(run_id, client_id);
     const std::filesystem::path target(path);
     std::filesystem::create_directories(target.parent_path());
@@ -293,12 +291,14 @@ void FilesystemClientAlgorithmStateStore::save(
     {
         std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
         if (!out) {
-            throw std::runtime_error("failed to open client state temp file for write: " + temp_path.string());
+            throw std::runtime_error("failed to open client state temp file for write: " +
+                                     temp_path.string());
         }
         out << payload;
         out.flush();
         if (!out) {
-            throw std::runtime_error("failed to write client state temp file: " + temp_path.string());
+            throw std::runtime_error("failed to write client state temp file: " +
+                                     temp_path.string());
         }
     }
 
@@ -308,7 +308,8 @@ void FilesystemClientAlgorithmStateStore::save(
         std::filesystem::remove(target, error_code);
         std::filesystem::rename(temp_path, target, error_code);
         if (error_code) {
-            throw std::runtime_error("failed to atomically move client state into place: " + error_code.message());
+            throw std::runtime_error("failed to atomically move client state into place: " +
+                                     error_code.message());
         }
     }
 }

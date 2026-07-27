@@ -6,29 +6,37 @@ import (
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/application"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/auth"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/datasets"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/experiments"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/models"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/observability"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/projects"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/runs"
 )
 
 type PersistencePaths struct {
-	Projects    string
-	Experiments string
-	Runs        string
-	Users       string
-	Sessions    string
-	AuditEvents string
+	Projects          string
+	Experiments       string
+	Runs              string
+	Users             string
+	Sessions          string
+	AuditEvents       string
+	Models            string
+	Datasets          string
+	DatasetPartitions string
 }
 
 func PathsForDataDir(dataDir string) PersistencePaths {
 	return PersistencePaths{
-		Projects:    filepath.Join(dataDir, "projects.json"),
-		Experiments: filepath.Join(dataDir, "experiments.json"),
-		Runs:        filepath.Join(dataDir, "runs.json"),
-		Users:       filepath.Join(dataDir, "users.json"),
-		Sessions:    filepath.Join(dataDir, "sessions.json"),
-		AuditEvents: filepath.Join(dataDir, "audit-events.json"),
+		Projects:          filepath.Join(dataDir, "projects.json"),
+		Experiments:       filepath.Join(dataDir, "experiments.json"),
+		Runs:              filepath.Join(dataDir, "runs.json"),
+		Users:             filepath.Join(dataDir, "users.json"),
+		Sessions:          filepath.Join(dataDir, "sessions.json"),
+		AuditEvents:       filepath.Join(dataDir, "audit-events.json"),
+		Models:            filepath.Join(dataDir, "models.json"),
+		Datasets:          filepath.Join(dataDir, "datasets.json"),
+		DatasetPartitions: filepath.Join(dataDir, "dataset-partitions.json"),
 	}
 }
 
@@ -65,5 +73,16 @@ func NewPersistentServicesWithCoordinator(paths PersistencePaths, coordinatorCli
 	if err != nil {
 		return nil, err
 	}
-	return application.NewServicesWithCoordinator(projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo, coordinatorClient, clock), nil
+	modelRepo, err := models.NewFileRepository(paths.Models)
+	if err != nil {
+		return nil, err
+	}
+	datasetRepo, err := datasets.NewFileRepository(paths.Datasets, paths.DatasetPartitions)
+	if err != nil {
+		return nil, err
+	}
+	return application.NewServicesWithRegistries(
+		projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo,
+		modelRepo, datasetRepo, coordinatorClient, clock,
+	), nil
 }

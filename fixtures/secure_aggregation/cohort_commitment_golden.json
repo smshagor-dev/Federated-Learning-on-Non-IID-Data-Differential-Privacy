@@ -1,0 +1,13 @@
+{
+  "$comment": "Frozen SHA-256 reference value for compute_cohort_commitment (Work Package O). Unlike fixed_point_encoding_golden.json's hand-derived arithmetic vectors, a SHA-256 digest cannot be independently hand-derived -- it was captured from a single reviewed run of cpp/coordinator/src/secure_aggregation_crypto.cpp's compute_cohort_commitment against the exact inputs below (Docker/Ubuntu 24.04, OpenSSL 3.0.13), then frozen here. Both cpp/coordinator/tests/secure_aggregation_crypto_test.cpp and python/tests/test_secure_aggregation_crypto.py assert against this same frozen value -- never against each other's live output -- so a regression in either implementation is caught by comparison to this fixed reference, not by the two implementations silently drifting together.",
+  "schema_version": 1,
+  "input": {
+    "session_id": "session-a",
+    "run_id": "run-1",
+    "round_id": 3,
+    "model_version": "v1",
+    "ordered_participant_ids": ["worker-1", "worker-2", "worker-3"]
+  },
+  "expected_commitment_hex": "aa2eb188daa1c75e42960d4c76d5b4422c8651c1023f70e5073b73b191ef3195",
+  "canonical_serialization_note": "domain-separation prefix 'FL_PLATFORM_SECAGG_COHORT_COMMITMENT_V1' followed by one embedded NUL byte, then 'key=value' fields each terminated by ASCII Record Separator (0x1E), in this exact order: session_id, run_id, round_id, model_version, participant_count, participant[0..n-1] -- see compute_cohort_commitment's implementation for the byte-exact construction."
+}

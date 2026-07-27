@@ -13,17 +13,17 @@ processes; two separate front ends drive them:
    implementing all 13 `CoordinatorService` RPCs. Only configured when
    CMake finds Protobuf *and* gRPC (`cpp/CMakeLists.txt`), which is not
    the case on this Windows/MSVC development machine. As of this
-   milestone it has been built and run for real — see
+   phase it has been built and run for real — see
    [docker-runtime.md](docker-runtime.md) — using
    `infra/docker/cpp-coordinator.Dockerfile`'s Ubuntu base (apt has
    `libgrpc++-dev`/`protobuf-compiler-grpc`; MSVC has neither locally).
 
 2. **`fl_coordinator_cli`** (`cpp/coordinator/tools/coordinator_cli.cpp`)
-   — a process-per-call CLI, extending Milestone 2's `aggregate_cli.cpp`
+   — a process-per-call CLI, extending the Aggregation Core phase's `aggregate_cli.cpp`
    precedent. Each invocation constructs a fresh `RunManager`, restores
    state from checkpoint files on disk, performs one action
    (create-run/start-run/acquire-task/submit-result/...), and exits. This
-   is what the Milestone 3 cross-language integration tests
+   is what the Coordinator Runtime phase cross-language integration tests
    (`tests/baseline/test_coordinator_worker_integration.py`) actually
    drive, and what runs natively on this development machine.
 

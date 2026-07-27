@@ -7,9 +7,10 @@ import {
   createExperimentWithToken,
   createProjectWithToken,
   createRunWithToken,
+  listAlgorithmsWithToken,
   listProjectsWithToken,
 } from "@/lib/api";
-import type { AuthSession, Project } from "@/types/api";
+import type { AlgorithmDescriptor, AuthSession, Project } from "@/types/api";
 
 const builderSections = [
   "Dataset",
@@ -26,14 +27,31 @@ const builderSections = [
   "Evaluation",
 ];
 
-const algorithmMap: Record<string, string> = {
-  FedAvg: "fedavg",
-  FedProx: "fedprox",
-  SCAFFOLD: "scaffold",
-  FedSAM: "fedsam",
-  Ditto: "ditto",
-  "Per-FedAvg": "per_fedavg",
-};
+// Fallback shown before GET /api/v1/algorithms resolves (or if a session
+// isn't signed in yet, since that endpoint requires auth) — kept in sync
+// with go/internal/algorithms's registry names, but the *fields* only
+// ever come from the live descriptor so validation always matches the
+// backend that will actually reject the config (see
+// go/internal/application/services.go's validateExperimentAlgorithmConfig).
+const fallbackAlgorithmNames = ["fedavg", "fedprox", "scaffold", "fedsam", "ditto", "per_fedavg"];
+
+function defaultFieldValue(field: AlgorithmDescriptor["config_fields"][number]): string {
+  if (field.default === undefined || field.default === null) {
+    return "";
+  }
+  return String(field.default);
+}
+
+function coerceFieldValue(type: string, raw: string): unknown {
+  if (type === "bool") {
+    return raw === "true";
+  }
+  if (type === "int" || type === "float") {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : raw;
+  }
+  return raw;
+}
 
 export function ExperimentBuilder() {
   const router = useRouter();
@@ -45,7 +63,9 @@ export function ExperimentBuilder() {
   const [projectDescription, setProjectDescription] = useState("Live-created research workspace from the web builder.");
   const [experimentName, setExperimentName] = useState("CIFAR10 Privacy Frontier");
   const [dataset, setDataset] = useState("CIFAR10");
-  const [algorithm, setAlgorithm] = useState("FedProx");
+  const [algorithms, setAlgorithms] = useState<AlgorithmDescriptor[]>([]);
+  const [algorithm, setAlgorithm] = useState("fedprox");
+  const [algorithmFieldValues, setAlgorithmFieldValues] = useState<Record<string, string>>({});
   const [executionMode, setExecutionMode] = useState("synchronous");
   const [rounds, setRounds] = useState("50");
   const [targetClients, setTargetClients] = useState("8");
@@ -66,6 +86,7 @@ export function ExperimentBuilder() {
       const parsed = JSON.parse(cached) as AuthSession;
       setSession(parsed);
       void hydrateProjects(parsed.token);
+      void hydrateAlgorithms(parsed.token);
     } catch {
       window.localStorage.removeItem("fl-platform-session");
     }
@@ -84,12 +105,46 @@ export function ExperimentBuilder() {
     }
   }
 
+  async function hydrateAlgorithms(token: string) {
+    try {
+      setAlgorithms(await listAlgorithmsWithToken(token));
+    } catch {
+      setAlgorithms([]);
+    }
+  }
+
+  const selectedDescriptor = algorithms.find((descriptor) => descriptor.name === algorithm);
+
+  // Reset field values to the selected algorithm's defaults whenever the
+  // algorithm or the loaded descriptor list changes — a stale field from
+  // a previously selected algorithm (e.g. FedSAM's "rho" left over after
+  // switching to Ditto) must never be sent to the backend.
+  useEffect(() => {
+    const fields = selectedDescriptor?.config_fields ?? [];
+    setAlgorithmFieldValues(
+      Object.fromEntries(fields.map((field) => [field.name, defaultFieldValue(field)])),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [algorithm, algorithms]);
+
+  const algorithmConfig = useMemo(() => {
+    const fields = selectedDescriptor?.config_fields ?? [];
+    const values: Record<string, unknown> = { name: algorithm };
+    for (const field of fields) {
+      const raw = algorithmFieldValues[field.name];
+      if (raw !== undefined && raw !== "") {
+        values[field.name] = coerceFieldValue(field.type, raw);
+      }
+    }
+    return values;
+  }, [algorithm, algorithmFieldValues, selectedDescriptor]);
+
   const previewConfig = useMemo(
     () => ({
       dataset,
       partitioning: { mode: "dirichlet", alpha: 0.1 },
       model: { name: "groupnorm_cnn" },
-      algorithm: { name: algorithmMap[algorithm] ?? algorithm.toLowerCase(), mu: algorithm === "FedProx" ? 0.01 : undefined },
+      algorithm: algorithmConfig,
       privacy: { mode: privacyMode, noise_multiplier: 0.8, clipping_bound: 1.5 },
       scheduling: {
         mode: executionMode,
@@ -99,7 +154,7 @@ export function ExperimentBuilder() {
       training: { rounds: Number(rounds) },
       notes,
     }),
-    [algorithm, dataset, executionMode, notes, privacyMode, rounds, targetClients],
+    [algorithmConfig, dataset, executionMode, notes, privacyMode, rounds, targetClients],
   );
 
   function handleCreateFlow() {
@@ -239,12 +294,13 @@ export function ExperimentBuilder() {
             <label className="field-card">
               <span className="field-label">Algorithm</span>
               <select className="select" value={algorithm} onChange={(event) => setAlgorithm(event.target.value)}>
-                <option>FedAvg</option>
-                <option>FedProx</option>
-                <option>SCAFFOLD</option>
-                <option>FedSAM</option>
-                <option>Ditto</option>
-                <option>Per-FedAvg</option>
+                {(algorithms.length > 0 ? algorithms.map((descriptor) => descriptor.name) : fallbackAlgorithmNames).map(
+                  (name) => (
+                    <option key={name} value={name}>
+                      {algorithms.find((descriptor) => descriptor.name === name)?.display_name ?? name}
+                    </option>
+                  ),
+                )}
               </select>
             </label>
             <label className="field-card">
@@ -292,6 +348,51 @@ export function ExperimentBuilder() {
           </div>
         </article>
       </div>
+
+      <article className="card">
+        <h2 className="card-title">Algorithm Configuration</h2>
+        <p className="card-copy">
+          {selectedDescriptor?.description ?? "Sign in and select an algorithm to load its live config schema from the Go control plane."}
+        </p>
+        {selectedDescriptor && selectedDescriptor.config_fields.length > 0 ? (
+          <div className="section-grid">
+            {selectedDescriptor.config_fields.map((field) => (
+              <label className="field-card" key={field.name}>
+                <span className="field-label">{field.name}</span>
+                {field.type === "bool" ? (
+                  <select
+                    className="select"
+                    value={algorithmFieldValues[field.name] ?? "false"}
+                    onChange={(event) =>
+                      setAlgorithmFieldValues((current) => ({ ...current, [field.name]: event.target.value }))
+                    }
+                  >
+                    <option value="false">false</option>
+                    <option value="true">true</option>
+                  </select>
+                ) : (
+                  <input
+                    className="input"
+                    type={field.type === "int" || field.type === "float" ? "number" : "text"}
+                    step={field.type === "float" ? "any" : undefined}
+                    value={algorithmFieldValues[field.name] ?? ""}
+                    onChange={(event) =>
+                      setAlgorithmFieldValues((current) => ({ ...current, [field.name]: event.target.value }))
+                    }
+                  />
+                )}
+                <div className="muted">{field.description}</div>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="muted">
+            {session?.token
+              ? "This algorithm has no additional config fields."
+              : "Sign in from the auth page to load live algorithm config fields; a fallback field-free config is used otherwise."}
+          </div>
+        )}
+      </article>
 
       <div className="double-grid">
         <article className="card">

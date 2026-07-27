@@ -1,11 +1,21 @@
 import { getDemoOverview, getDemoRunDashboard } from "@/lib/demo-data";
 import type {
+  AlgorithmDescriptor,
+  AlgorithmSummary,
   AuditEvent,
   AuthSession,
   CoordinatorHealth,
   CoordinatorRunSnapshot,
+  DatasetEntry,
   Experiment,
+  ModelEntry,
   OverviewData,
+  PartitionEntry,
+  PersonalizationMetrics,
+  PersonalizationRecord,
+  PrivacyLedger,
+  PrivacyMetricsSnapshot,
+  PrivacyProjection,
   Project,
   Run,
   RunAction,
@@ -199,4 +209,202 @@ export async function listAuditEventsWithToken(token: string, limit = 100): Prom
       Authorization: `Bearer ${token}`,
     },
   });
+}
+
+// --- the Algorithm Expansion phase: algorithm metadata --------------------------------------
+
+export async function listAlgorithmsWithToken(token: string): Promise<AlgorithmDescriptor[]> {
+  return await requestMutableJSON<AlgorithmDescriptor[]>("/api/v1/algorithms", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// --- the Algorithm Expansion phase: model registry ------------------------------------------
+
+export async function listModelsWithToken(token: string): Promise<ModelEntry[]> {
+  return await requestMutableJSON<ModelEntry[]>("/api/v1/models", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function registerModelWithToken(token: string, model: Partial<ModelEntry>): Promise<ModelEntry> {
+  return await requestMutableJSON<ModelEntry>("/api/v1/models", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(model),
+  });
+}
+
+export async function transitionModelWithToken(
+  token: string,
+  name: string,
+  version: string,
+  action: "validate" | "activate" | "deprecate" | "archive",
+  body?: Record<string, unknown>,
+): Promise<ModelEntry> {
+  return await requestMutableJSON<ModelEntry>(`/api/v1/models/${name}/${version}/${action}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+// --- the Algorithm Expansion phase: dataset registry -----------------------------------------
+
+export async function listDatasetsWithToken(token: string): Promise<DatasetEntry[]> {
+  return await requestMutableJSON<DatasetEntry[]>("/api/v1/datasets", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function registerDatasetWithToken(token: string, dataset: Partial<DatasetEntry>): Promise<DatasetEntry> {
+  return await requestMutableJSON<DatasetEntry>("/api/v1/datasets", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(dataset),
+  });
+}
+
+export async function transitionDatasetWithToken(
+  token: string,
+  datasetId: string,
+  action: "validate" | "activate" | "deprecate",
+): Promise<DatasetEntry> {
+  return await requestMutableJSON<DatasetEntry>(`/api/v1/datasets/${datasetId}/${action}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function listPartitionsWithToken(token: string, datasetId: string): Promise<PartitionEntry[]> {
+  return await requestMutableJSON<PartitionEntry[]>(`/api/v1/datasets/${datasetId}/partitions`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function createPartitionWithToken(
+  token: string,
+  datasetId: string,
+  partition: Partial<PartitionEntry>,
+): Promise<PartitionEntry> {
+  return await requestMutableJSON<PartitionEntry>(`/api/v1/datasets/${datasetId}/partitions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(partition),
+  });
+}
+
+// --- the Algorithm Expansion phase: personalization / fairness -------------------------------
+
+// These three calls return undefined (rather than throwing) for the
+// common "coordinator not configured" / "coordinator unreachable" (503)
+// case, so callers can render an explicit empty/unavailable state instead
+// of a generic error banner — mirroring getCoordinatorRun's contract.
+export async function getPersonalizationRecordsWithToken(
+  token: string,
+  runId: string,
+): Promise<PersonalizationRecord[] | undefined> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/coordinator/runs/${runId}/personalization`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    const payload = (await response.json()) as { records: PersonalizationRecord[] };
+    return payload.records;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getFairnessWithToken(token: string, runId: string): Promise<PersonalizationMetrics | undefined> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/coordinator/runs/${runId}/fairness`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    return (await response.json()) as PersonalizationMetrics;
+  } catch {
+    return undefined;
+  }
+}
+
+// Privacy Engineering phase: the three read-only privacy endpoints
+// (docs/privacy-ledger.md). Same undefined-on-503/network-failure
+// contract as getFairnessWithToken above — the Privacy Center panel
+// renders an explicit "coordinator unreachable" state, not a generic
+// error banner, when these return undefined.
+export async function getPrivacyMetricsWithToken(
+  token: string,
+  runId: string,
+): Promise<PrivacyMetricsSnapshot | undefined> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/coordinator/runs/${runId}/privacy/metrics`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    return (await response.json()) as PrivacyMetricsSnapshot;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getPrivacyLedgerWithToken(token: string, runId: string): Promise<PrivacyLedger | undefined> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/coordinator/runs/${runId}/privacy/ledger`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    return (await response.json()) as PrivacyLedger;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getPrivacyProjectionWithToken(
+  token: string,
+  runId: string,
+): Promise<PrivacyProjection | undefined> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/coordinator/runs/${runId}/privacy/projection`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    return (await response.json()) as PrivacyProjection;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getAlgorithmSummaryWithToken(token: string, runId: string): Promise<AlgorithmSummary | undefined> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/coordinator/runs/${runId}/algorithm-summary`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    return (await response.json()) as AlgorithmSummary;
+  } catch {
+    return undefined;
+  }
 }

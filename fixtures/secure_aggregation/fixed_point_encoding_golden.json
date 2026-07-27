@@ -1,0 +1,51 @@
+{
+  "$comment": "Fixed, reviewed golden fixtures for the secure-aggregation fixed-point encoding profile (Work Packages F, G, H, AL). Every 'encoded' value below was computed independently of the C++/Python implementation under test -- by hand, using plain round-half-away-from-zero arithmetic on value * scale_factor -- and is checked against the real implementation's output in cpp/coordinator/tests/fixed_point_encoding_test.cpp (C++) and (once written) python/tests/secure_aggregation/test_fixed_point_encoding.py (Python). Do not regenerate this file by running the implementation and capturing its output -- that would defeat the purpose of an independent fixture. Any change to these values requires re-deriving them by hand and re-reviewing, not re-running the code.",
+  "schema_version": 1,
+  "profile": {
+    "schema_version": 1,
+    "rounding_rule": "round_half_away_from_zero",
+    "scale_factor": 1048576.0,
+    "scale_factor_note": "2^20 -- power of two, so value * scale_factor is exact in IEEE-754 double arithmetic for every value used below",
+    "max_input_magnitude": 100.0,
+    "max_client_weight": 1000000,
+    "max_cohort_size": 10000,
+    "safety_margin": 256
+  },
+  "encode_cases": [
+    { "id": "positive_exact", "value": 3.5, "scaled_before_rounding": 3670016.0, "expected_encoded": 3670016, "ok": true, "note": "3.5 * 2^20 is an exact integer; no rounding actually occurs" },
+    { "id": "negative_exact", "value": -3.5, "scaled_before_rounding": -3670016.0, "expected_encoded": -3670016, "ok": true },
+    { "id": "zero", "value": 0.0, "scaled_before_rounding": 0.0, "expected_encoded": 0, "ok": true },
+    { "id": "negative_zero", "value": -0.0, "scaled_before_rounding": -0.0, "expected_encoded": 0, "ok": true, "note": "IEEE-754 -0.0 == 0.0 and -0.0 * scale_factor == 0.0 (or -0.0, which casts to integer 0 either way); no special-case branch needed in the implementation" },
+    { "id": "halfway_positive", "value": 0.000000476837158203125, "scaled_before_rounding": 0.5, "expected_encoded": 1, "ok": true, "note": "value is exactly 0.5 / scale_factor; a genuine round-half case, not a floating-point-imprecision artifact, since scale_factor is a power of two" },
+    { "id": "halfway_negative", "value": -0.000000476837158203125, "scaled_before_rounding": -0.5, "expected_encoded": -1, "ok": true, "note": "round-half-away-from-zero: rounds to -1, not 0" },
+    { "id": "non_terminating_positive", "value": 0.3333333333333333, "scaled_before_rounding": 349525.3333333333, "expected_encoded": 349525, "ok": true, "note": "1/3 -- rounds down since the fractional part (.333) is below .5" },
+    { "id": "non_terminating_negative", "value": -0.3333333333333333, "scaled_before_rounding": -349525.3333333333, "expected_encoded": -349525, "ok": true },
+    { "id": "max_safe_positive", "value": 100.0, "scaled_before_rounding": 104857600.0, "expected_encoded": 104857600, "ok": true, "note": "exactly at max_input_magnitude -- inclusive boundary, must be accepted" },
+    { "id": "max_safe_negative", "value": -100.0, "scaled_before_rounding": -104857600.0, "expected_encoded": -104857600, "ok": true },
+    { "id": "near_max_positive", "value": 99.999999, "scaled_before_rounding": 104857598.951424, "expected_encoded": 104857599, "ok": true },
+    { "id": "near_max_negative", "value": -99.999999, "scaled_before_rounding": -104857598.951424, "expected_encoded": -104857599, "ok": true },
+    { "id": "magnitude_overflow_positive", "value": 100.0000001, "ok": false, "expected_rejection_reason": "magnitude_overflow", "note": "strictly greater than max_input_magnitude" },
+    { "id": "magnitude_overflow_negative", "value": -100.0000001, "ok": false, "expected_rejection_reason": "magnitude_overflow" },
+    { "id": "nan", "value": "NaN", "ok": false, "expected_rejection_reason": "non_finite_input" },
+    { "id": "positive_infinity", "value": "Infinity", "ok": false, "expected_rejection_reason": "non_finite_input" },
+    { "id": "negative_infinity", "value": "-Infinity", "ok": false, "expected_rejection_reason": "non_finite_input" }
+  ],
+  "decode_cases": [
+    { "id": "decode_positive_exact", "ring_value": 3670016, "expected_value": 3.5 },
+    { "id": "decode_negative_exact", "ring_value": -3670016, "expected_value": -3.5 },
+    { "id": "decode_zero", "ring_value": 0, "expected_value": 0.0 }
+  ],
+  "domain_bounds_case": {
+    "id": "default_profile_is_safe",
+    "worst_case_single_encoded": 104857601,
+    "worst_case_single_encoded_note": "ceil(max_input_magnitude * scale_factor + 0.5) = ceil(104857600.5) = 104857601",
+    "weighted": 104857601000000,
+    "weighted_note": "worst_case_single_encoded * max_client_weight = 104857601 * 1,000,000",
+    "worst_case_aggregate_magnitude": 1048576010000000000,
+    "worst_case_aggregate_magnitude_note": "weighted * max_cohort_size = 104857601000000 * 10,000",
+    "aggregate_with_margin": 1048576010000000256,
+    "signed_decoding_boundary": 9223372036854775807,
+    "expected_safe": true,
+    "note": "1048576010000000256 < 9223372036854775807 (2^63 - 1), with roughly 3 more orders of magnitude of headroom -- comfortably safe without needing 128-bit intermediate arithmetic, as analyzed in docs/fixed-point-secure-encoding.md"
+  }
+}

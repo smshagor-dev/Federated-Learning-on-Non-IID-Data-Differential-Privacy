@@ -9,7 +9,7 @@ ASYNC_INCOMPATIBLE_MESSAGE = (
 )
 SEMI_SYNC_WARNING = (
     "semi-synchronous secure aggregation requires stricter cohort compatibility "
-    "in a future milestone"
+    "in a future phase"
 )
 DROPOUT_WARNING = (
     "dropout recovery is declared but not yet backed by a cryptographic "

@@ -12,13 +12,14 @@ fl::core::ModelManifest make_manifest() {
     return fl::core::ModelManifest{
         .model_id = "toy",
         .model_version = "v1",
-        .tensors = {
-            fl::core::TensorDescriptor{
-                .name = "weight",
-                .shape = {1},
-                .dtype = fl::core::DType::kFloat32,
+        .tensors =
+            {
+                fl::core::TensorDescriptor{
+                    .name = "weight",
+                    .shape = {1},
+                    .dtype = fl::core::DType::kFloat32,
+                },
             },
-        },
     };
 }
 
@@ -27,8 +28,7 @@ fl::core::ClientUpdate make_update(
     std::uint64_t sample_count,
     double delta,
     double control = 0.0,
-    fl::core::AggregationAlgorithm algorithm = fl::core::AggregationAlgorithm::kFedAvg
-) {
+    fl::core::AggregationAlgorithm algorithm = fl::core::AggregationAlgorithm::kFedAvg) {
     const auto descriptor = fl::core::TensorDescriptor{
         .name = "weight",
         .shape = {1},
@@ -79,9 +79,8 @@ int main() {
         fl::core::AggregationOptions options;
         options.run_id = "run-smoke";
         options.round_id = 1;
-        const auto result = aggregator->aggregate(
-            manifest, weighted_updates, options, fl::core::OptimizerState{}
-        );
+        const auto result =
+            aggregator->aggregate(manifest, weighted_updates, options, fl::core::OptimizerState{});
         ensure_close(result.model_delta.at("weight").values().at(0), 0.75, 1e-9, "fedavg");
     }
 
@@ -97,16 +96,17 @@ int main() {
         options.round_id = 1;
         options.total_clients = 10;
         const auto result = aggregator->aggregate(
-            manifest, scaffold_algorithm_updates, options, fl::core::OptimizerState{}
-        );
+            manifest, scaffold_algorithm_updates, options, fl::core::OptimizerState{});
         ensure_close(result.model_delta.at("weight").values().at(0), 2.0, 1e-9, "scaffold delta");
-        ensure_close(result.control_delta.at("weight").values().at(0), 0.12, 1e-9, "scaffold control");
+        ensure_close(
+            result.control_delta.at("weight").values().at(0), 0.12, 1e-9, "scaffold control");
     }
 
     {
         fl::core::RunStateMachine machine;
         machine.transition_to(fl::core::RunState::kValidating, "unit-test", "2026-07-22T19:45:00Z");
-        machine.transition_to(fl::core::RunState::kInitializing, "unit-test", "2026-07-22T19:45:01Z");
+        machine.transition_to(
+            fl::core::RunState::kInitializing, "unit-test", "2026-07-22T19:45:01Z");
         machine.transition_to(fl::core::RunState::kReady, "unit-test", "2026-07-22T19:45:02Z");
         if (machine.state() != fl::core::RunState::kReady) {
             throw std::runtime_error("state machine mismatch");

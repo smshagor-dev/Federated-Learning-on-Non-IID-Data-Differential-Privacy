@@ -370,6 +370,47 @@ textarea {
   border: 1px solid #fdba74;
 }
 
+/* Secure User-Level DP Operations, Observability, and Release Evidence
+   slice, Work Area M: prominent, always-visible trust-limitation
+   warnings -- same warning palette as .notice, rendered as a real list
+   (not a tooltip/collapsed disclosure). */
+.limitation-list {
+  margin: 12px 0 0;
+  padding: 14px 16px 14px 34px;
+  border-radius: 18px;
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.limitation-list li {
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.definition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px 20px;
+  margin: 12px 0 0;
+}
+
+.definition-grid dt {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #667085);
+}
+
+.definition-grid dd {
+  margin: 2px 0 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
 .auth-hero-grid {
   align-items: stretch;
 }
@@ -589,6 +630,79 @@ textarea {
 
 .audit-timeline {
   max-height: 520px;
+}
+
+.status-pill.sec-good {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill.sec-warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-pill.sec-bad {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-pill.sec-neutral {
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 30, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 40;
+}
+
+.modal-card {
+  background: var(--panel);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 24px;
+  max-width: 560px;
+  width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-ack-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.modal-idempotency-note {
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.security-hero-card {
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 36%),
+    linear-gradient(180deg, #ffffff 0%, #f6fbfa 100%);
+}
+
+.security-limitation-banner {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+  line-height: 1.6;
 }
 
 @media (max-width: 1200px) {

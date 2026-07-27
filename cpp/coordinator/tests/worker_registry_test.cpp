@@ -9,7 +9,8 @@ void run_worker_registry_tests() {
     using fl::coordinator::WorkerStatus;
 
     {
-        WorkerRegistry registry(/*missed_heartbeat_threshold=*/3, /*heartbeat_interval_seconds=*/10);
+        WorkerRegistry registry(/*missed_heartbeat_threshold=*/3,
+                                /*heartbeat_interval_seconds=*/10);
         WorkerCapability capability;
         capability.device = "cpu";
         capability.cpu_count = 4;
@@ -22,7 +23,8 @@ void run_worker_registry_tests() {
         // rather than rejecting.
         const auto refreshed = registry.register_worker("worker-1", capability, /*now=*/5.0);
         check(refreshed.last_heartbeat_unix_s == 5.0, "re-registration refreshes last_heartbeat");
-        check(registry.registered_count() == 1, "re-registration does not create a duplicate entry");
+        check(registry.registered_count() == 1,
+              "re-registration does not create a duplicate entry");
     }
 
     {
@@ -34,8 +36,10 @@ void run_worker_registry_tests() {
         // threshold(3) * interval(10) = 30s; at t=31 the worker has missed
         // its heartbeat window and must be marked unhealthy.
         const auto newly_unhealthy = registry.sweep_unhealthy(31.0);
-        check(newly_unhealthy.size() == 1 && newly_unhealthy[0] == "worker-1", "missed-heartbeat sweep marks worker unhealthy");
-        check(registry.get("worker-1")->status == WorkerStatus::kUnhealthy, "worker status updated to UNHEALTHY");
+        check(newly_unhealthy.size() == 1 && newly_unhealthy[0] == "worker-1",
+              "missed-heartbeat sweep marks worker unhealthy");
+        check(registry.get("worker-1")->status == WorkerStatus::kUnhealthy,
+              "worker status updated to UNHEALTHY");
         check(registry.healthy_count() == 0, "unhealthy worker no longer counts as healthy");
 
         // A second sweep should not re-report an already-unhealthy worker.
@@ -47,23 +51,26 @@ void run_worker_registry_tests() {
         WorkerRegistry registry(3, 10);
         expect_throw(
             [&]() { registry.heartbeat("never-registered", WorkerStatus::kIdle, "", 0.0); },
-            "heartbeat from an unregistered worker_id is rejected"
-        );
+            "heartbeat from an unregistered worker_id is rejected");
     }
 
     {
         WorkerRegistry registry(3, 10);
         registry.register_worker("worker-1", WorkerCapability{}, 0.0);
         registry.set_current_task("worker-1", "task-1");
-        check(registry.get("worker-1")->status == WorkerStatus::kBusy, "assigning a task marks the worker BUSY");
+        check(registry.get("worker-1")->status == WorkerStatus::kBusy,
+              "assigning a task marks the worker BUSY");
         registry.clear_current_task("worker-1");
-        check(registry.get("worker-1")->status == WorkerStatus::kIdle, "clearing the task returns the worker to IDLE");
+        check(registry.get("worker-1")->status == WorkerStatus::kIdle,
+              "clearing the task returns the worker to IDLE");
 
         registry.record_failure("worker-1");
         registry.record_failure("worker-1");
-        check(registry.get("worker-1")->consecutive_failures == 2, "consecutive_failures accumulates");
+        check(registry.get("worker-1")->consecutive_failures == 2,
+              "consecutive_failures accumulates");
         registry.record_success("worker-1");
-        check(registry.get("worker-1")->consecutive_failures == 0, "a success resets consecutive_failures");
+        check(registry.get("worker-1")->consecutive_failures == 0,
+              "a success resets consecutive_failures");
     }
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Milestone 3 change from Milestone 2: Go and Python now *consume* these
+# Coordinator Runtime phase change from the Aggregation Core phase: Go and Python now *consume* these
 # generated bindings for real gRPC (not just a freshness/descriptor check),
 # so each language's stubs go to a fixed, predictable location inside that
 # language's own module/package rather than an arbitrary scratch dir:
@@ -47,9 +47,23 @@ fi
 # Prefer grpcio-tools (bundles its own protoc + the grpc_python plugin);
 # fall back to plain protoc if grpcio-tools isn't installed, generating
 # message types only (no gRPC service stubs).
+#
+# python_bin resolution: many Debian/Ubuntu base images (including this
+# project's own gRPC Docker build image) provide only `python3`, not a
+# `python` alias -- a real defect found during the Secure Aggregation
+# Wire Protocol slice's own Docker validation: this script's `python`
+# invocation silently failed the availability check on such images and
+# fell through to the plain-protoc (no gRPC stub, no .pyi) branch even
+# with grpcio-tools correctly installed, meaning real Python gRPC
+# stubs were never actually regenerated there before. Fixed by
+# resolving whichever interpreter actually exists, `python3` preferred.
+python_bin="python3"
+if ! command -v python3 >/dev/null 2>&1; then
+  python_bin="python"
+fi
 mkdir -p python/src/fl_platform/generated
-if python -c "import grpc_tools.protoc" >/dev/null 2>&1; then
-  python -m grpc_tools.protoc \
+if "$python_bin" -c "import grpc_tools.protoc" >/dev/null 2>&1; then
+  "$python_bin" -m grpc_tools.protoc \
     --proto_path=proto \
     --python_out=python/src/fl_platform/generated \
     --grpc_python_out=python/src/fl_platform/generated \

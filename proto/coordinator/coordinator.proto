@@ -8,6 +8,7 @@ import "worker/worker.proto";
 import "experiment/experiment.proto";
 import "events/events.proto";
 import "common/artifact.proto";
+import "privacy/privacy.proto";
 
 message RoundState {
   string run_id = 1;
@@ -23,8 +24,8 @@ message RunState {
 }
 
 // ---------------------------------------------------------------------
-// Milestone 3 additions. RoundState/RunState above are unchanged from
-// Milestone 1/2 (field numbers preserved).
+// the Coordinator Runtime phase additions. RoundState/RunState above are unchanged from
+// the Foundation/Aggregation Core phases (field numbers preserved).
 // ---------------------------------------------------------------------
 
 message ErrorDetail {
@@ -43,6 +44,21 @@ message ModelManifest {
   uint64 total_bytes = 6;
   fl.common.v1.ArtifactReference artifact_reference = 7;
   uint32 schema_version = 8;
+  // the Algorithm Expansion phase: which tensors are aggregatable vs. personalized-only.
+  // See docs/aggregation-manifests.md.
+  AggregationManifest aggregation_manifest = 9;
+}
+
+// the Algorithm Expansion phase: identifies which parameter tensors the coordinator may
+// aggregate (shared backbone) vs. which must never leave/enter
+// aggregation (personalized head, frozen). The coordinator validates a
+// submitted result's tensor names against this manifest without knowing
+// anything about PyTorch — see docs/aggregation-manifests.md.
+message AggregationManifest {
+  repeated string shared_parameter_names = 1;
+  repeated string personalized_parameter_names = 2;
+  repeated string frozen_parameter_names = 3;
+  string schema_hash = 4;
 }
 
 message OptimizerConfig {
@@ -65,6 +81,39 @@ message CreateRunRequest {
   uint32 minimum_valid_results = 7;
   uint64 client_selection_seed = 8;
   string trace_id = 9;
+  // Privacy Engineering phase: closes the CreateRun wire-mapping gap —
+  // see docs/create-run-wire-mapping.md. RunConfig (the C++ domain
+  // type) already carried every one of these fields; only the gRPC
+  // transport never did (the local-dev CLI-bridge transport already
+  // carried the equivalent fields — see coordinator_cli.cpp's
+  // parse_run_config). Without client_ids in particular, AcquireTask
+  // could never select a client, so no worker could ever receive a
+  // real task through the live gRPC path.
+  repeated string client_ids = 10;
+  uint32 local_epochs = 11;
+  uint32 batch_size = 12;
+  double learning_rate = 13;
+  double momentum = 14;
+  double weight_decay = 15;
+  double fedprox_mu = 16;
+  uint32 task_lease_seconds = 17;
+  uint32 max_task_retries = 18;
+  // Canonical aggregatable-tensor manifest plus the shared/personalized/
+  // frozen parameter-name declaration (ModelManifest.aggregation_manifest)
+  // — see docs/aggregation-manifests.md. Optional: an empty manifest
+  // (no tensors) is permitted and means "this run's clients submit no
+  // tensor payload over gRPC yet" (unchanged pre-existing behavior);
+  // it does not disable the run.
+  ModelManifest model_manifest = 19;
+  // Idempotency key for retried CreateRun calls (e.g. after a client
+  // timeout that may or may not have actually reached the coordinator).
+  // Not yet enforced by the coordinator — see
+  // docs/create-run-wire-mapping.md's "Known non-goals" section.
+  string request_id = 20;
+  // Privacy Engineering phase: unset/PRIVACY_MODE_NONE means no privacy
+  // mechanism is active — unchanged pre-existing non-private behavior.
+  // See docs/privacy-mathematics.md.
+  fl.privacy.v1.PrivacyConfig privacy_config = 21;
 }
 
 message CreateRunResponse {
@@ -170,6 +219,180 @@ message ClientTrainingTask {
   double fedprox_mu = 11;
   repeated fl.worker.v1.TensorManifest global_control_variate = 12;
   repeated fl.worker.v1.TensorManifest client_control_variate = 13;
+  // the Algorithm Expansion phase: which of `task.model_manifest`'s tensors are
+  // aggregatable vs. personalized-only/frozen for this task's algorithm.
+  AggregationManifest aggregation_manifest = 14;
+  // Privacy Engineering phase: present (sample_level_dp_active = true)
+  // only when this run's privacy mode is SAMPLE_LEVEL_DP or HYBRID_DP —
+  // the worker must apply real Opacus-based sample-level DP using this
+  // config, and must never silently train non-privately when this is
+  // set. See docs/sample-level-dp.md.
+  bool sample_level_dp_active = 15;
+  fl.privacy.v1.SampleLevelDPConfig sample_level_privacy = 16;
+  // Coordinator-Signed Tasks slice (docs/signed-coordinator-tasks.md):
+  // present only when the coordinator has a signing identity
+  // configured (FL_COORDINATOR_SIGNING_KEY_PATH). Binds every field
+  // above (via task_payload_hash) plus worker/lease/attempt/sequence
+  // metadata under a real Ed25519 signature -- see
+  // SignedCoordinatorTask below. Absent (default value) on a
+  // coordinator running without a signing identity, exactly like
+  // signed_capability/envelope on the worker->coordinator messages
+  // being optional on a coordinator without identity_registry_.
+  uint32 attempt = 17;
+  SignedCoordinatorTask signed_task = 18;
+  // Secure Cohort Handshake and Signed Roster Runtime slice
+  // (docs/secure-cohort-handshake-foundation.md), Work item 4. Present
+  // only when this task's round has a live secure-aggregation session
+  // (RunInstance::begin_round created one because the coordinator
+  // process opted in via FL_SECURE_AGGREGATION_ENABLED -- see that
+  // doc for why this is a coordinator-wide switch, not yet a
+  // per-run wire-configurable flag). Absent (default value) means
+  // secure_aggregation_active is false and every other sub-field is
+  // meaningless -- workers must check that flag first, never infer
+  // activity from a non-empty session_id alone.
+  SecureAggregationTaskBinding secure_aggregation = 19;
+}
+
+// Secure Cohort Handshake and Signed Roster Runtime slice, Work item 4;
+// extended by the Masked Update Runtime and No-Dropout Secure FedAvg
+// Finalization slice, Work Area C. Still deliberately does not carry
+// the frozen roster's own fields (cohort_commitment, tensor_manifest_hash,
+// fixed_point_profile_hash, cryptographic_profile_hash, roster
+// payload_hash) -- those cannot exist yet when this binding is signed
+// (every participant's task is signed independently, before any of
+// them advertise a key, long before the cohort can freeze), so binding
+// them here would either be impossible or would require delaying task
+// issuance until after freeze, which breaks the handshake's own
+// architecture. A worker instead obtains those fields from the
+// FrozenCohortRoster itself once verified (already independently
+// signed and already required to be verified before training in the
+// existing architecture -- see
+// docs/secure-aggregation-masked-runtime-audit.md's explicit decision).
+// What this binding *does* carry, additively: the policy/bounds that
+// genuinely are knowable at task-issuance time (sourced directly from
+// SecureAggregationSessionConfig, which already exists before
+// AcquireTask returns) -- everything a worker needs to validate before
+// committing to secure local training, and everything the coordinator
+// needs signed proof the worker was told about. Bound into the real
+// coordinator signature via
+// SignedCoordinatorTask.secure_aggregation_configuration_hash below,
+// not left unauthenticated.
+message SecureAggregationTaskBinding {
+  bool secure_aggregation_active = 1;
+  fl.worker.v1.SecureAggregationProvider provider = 2;
+  uint32 protocol_version = 3;
+  string session_id = 4;
+  string session_configuration_hash = 5;
+  double key_advertisement_deadline_unix_s = 6;
+  uint64 minimum_cohort_size = 7;
+  double masked_update_deadline_unix_s = 8;
+  double session_expiry_unix_s = 9;
+  double max_absolute_update_bound = 10;
+  uint64 max_client_weight = 11;
+  uint64 max_aggregate_bound = 12;
+  // 0 means "whole tensor, no chunking" -- this slice's documented
+  // simplification (see the audit doc's canonical-mask-context
+  // section); present so a future slice can populate it without
+  // another wire-contract change.
+  uint64 tensor_chunk_size = 13;
+  // Work Area AB: whether this task's configured privacy mode is
+  // compatible with secure aggregation (only NONE/SAMPLE_LEVEL are,
+  // this slice -- USER_LEVEL/HYBRID/adaptive clipping are not).
+  // False + a non-empty reason means the coordinator itself detected
+  // an incompatible combination at session-creation time; a worker
+  // must treat that as fatal for this task, matching the coordinator's
+  // own SubmitMaskedClientUpdate-side enforcement (defense in depth,
+  // not the only check).
+  bool privacy_mode_compatible = 14;
+  string privacy_incompatibility_reason = 15;
+  // Secure User-Level Differential Privacy Runtime slice, Work Area E:
+  // present only when this session's privacy_mode is USER_LEVEL_DP and
+  // it passed every secure-user-level-DP compatibility check (Work
+  // Area T) -- when false/unset, the fields below are all zero-valued
+  // and a worker must not attempt worker-side clipping for this task.
+  // See docs/secure-user-level-dp-semantics.md for the exact meaning
+  // of every field below; all are decided once at session-creation
+  // time (AcquireTask), never re-derived per participant.
+  bool secure_user_level_dp_active = 16;
+  SecureUserLevelAdjacencyModel secure_user_level_adjacency_model = 17;
+  double secure_user_level_clip_norm = 18;
+  double secure_user_level_quantization_margin = 19;
+  double secure_user_level_effective_sensitivity = 20;
+  double secure_user_level_noise_multiplier = 21;
+  double secure_user_level_target_delta = 22;
+  // 0 (unset) means "no budget enforced beyond target_delta itself" --
+  // mirrors fl::core::UserLevelDPConfig::epsilon_budget's own
+  // documented convention exactly.
+  double secure_user_level_max_epsilon = 23;
+  // Always 1 this slice -- see the Initial Weighting Restriction.
+  uint64 secure_user_level_fixed_weight = 24;
+  SecureUserLevelSamplingAssumption secure_user_level_sampling_assumption = 25;
+  string secure_user_level_dp_configuration_hash = 26;
+}
+
+// Secure User-Level Differential Privacy Runtime slice, Work Area B:
+// exactly one adjacency model is selected and active this slice
+// (ADD_REMOVE_ONE) -- REPLACE_ONE is reserved for a future slice with
+// its own separately reviewed sensitivity proof (2C, not C) and is
+// never produced by this coordinator today. See
+// docs/secure-user-level-dp-semantics.md section 2.
+enum SecureUserLevelAdjacencyModel {
+  SECURE_USER_LEVEL_ADJACENCY_MODEL_UNSPECIFIED = 0;
+  SECURE_USER_LEVEL_ADJACENCY_MODEL_ADD_REMOVE_ONE = 1;
+  SECURE_USER_LEVEL_ADJACENCY_MODEL_REPLACE_ONE = 2;
+}
+
+// Work Area O: NO_AMPLIFICATION (q=1) is the only value this
+// coordinator ever produces this slice -- RANDOM_SUBSAMPLING is
+// reserved for a future slice with its own validated sampling
+// mechanism and accountant-compatibility proof, never wired to
+// anything real today. See docs/secure-user-level-dp-semantics.md
+// section 7.
+enum SecureUserLevelSamplingAssumption {
+  SECURE_USER_LEVEL_SAMPLING_ASSUMPTION_UNSPECIFIED = 0;
+  SECURE_USER_LEVEL_SAMPLING_ASSUMPTION_NO_AMPLIFICATION = 1;
+  SECURE_USER_LEVEL_SAMPLING_ASSUMPTION_RANDOM_SUBSAMPLING = 2;
+}
+
+// Coordinator-Signed Tasks slice (docs/signed-coordinator-tasks.md).
+// Deliberately does not duplicate ClientTrainingTask's own fields --
+// task_payload_hash binds to them instead (same "payload_hash covers
+// sibling domain fields" convention as fl.worker.v1.SignedWorkerEnvelope).
+message SignedCoordinatorTask {
+  uint32 schema_version = 1;
+  string coordinator_signing_key_id = 2;
+  string worker_id = 3;
+  string task_id = 4;
+  string lease_id = 5;
+  uint32 attempt = 6;
+  double issued_at = 7;
+  double expires_at = 8;
+  string nonce = 9;
+  // Per (coordinator_signing_key_id, worker_id) track -- see
+  // docs/signed-coordinator-tasks.md. Starting value for a brand-new
+  // track is 1, matching every other sequence stream in this codebase.
+  uint64 sequence_number = 10;
+  string training_configuration_hash = 11;
+  string model_configuration_hash = 12;
+  string dataset_partition_hash = 13;
+  string privacy_configuration_hash = 14;
+  string personalization_configuration_hash = 15;
+  string task_payload_hash = 16;
+  string signature = 17;
+  // Secure Cohort Handshake and Signed Roster Runtime slice, Work item
+  // 4. A sibling hash, exactly like personalization_configuration_hash
+  // above -- never folded into task_payload_hash's own canonical JSON
+  // (that computation is stable, already-tested, and deliberately left
+  // untouched), but folded into the real signed bytes
+  // (coordinator_task_signing_bytes) so this binding is authenticated
+  // by the same signature as everything else on this task.
+  string secure_aggregation_configuration_hash = 18;
+  // Secure User-Level Differential Privacy Runtime slice, Work Area E.
+  // A second sibling hash, same convention as
+  // secure_aggregation_configuration_hash immediately above -- never
+  // folded into task_payload_hash, folded into
+  // coordinator_task_signing_bytes instead.
+  string secure_user_level_dp_configuration_hash = 19;
 }
 
 message TaskProgressRequest {
@@ -193,12 +416,136 @@ message SubmitClientResultRequest {
   fl.worker.v1.ClientResult result = 4;
   repeated fl.worker.v1.TensorManifest client_control_variate_delta = 5;
   repeated fl.worker.v1.TensorManifest refreshed_client_control_variate = 6;
+  // the Algorithm Expansion phase: optional — present only for algorithms that produce a
+  // personalized model (Ditto, Per-FedAvg). Ingested and stored by the
+  // coordinator alongside the training result; no tensor values, scalar
+  // metrics only. See docs/personalized-evaluation.md.
+  PersonalizationMetricRecord personalization_metrics = 7;
+  // Privacy Engineering phase: present only when this task ran under
+  // sample-level (or hybrid) DP. The Python worker is the sole authority
+  // for this accounting step — see docs/privacy-ledger.md's
+  // authority-split note; the coordinator stores/relays it without
+  // recomputing epsilon.
+  fl.privacy.v1.SampleLevelLedgerEntry sample_level_privacy = 8;
+  // Signed Client Results and Worker Lifecycle Enforcement slice
+  // (docs/signed-client-results.md): optional. Absent means "legacy,
+  // unsigned submission" -- see coordinator_service.cpp's
+  // SubmitClientResult for the explicit, opt-in-only development
+  // compatibility policy this triggers when absent.
+  // envelope.message_type must be MESSAGE_TYPE_CLIENT_RESULT.
+  fl.worker.v1.SignedWorkerEnvelope envelope = 9;
+  // Privacy Record Authenticity, Signing-Key Lifecycle, and
+  // Coordinator-Signed Tasks slice (docs/signed-privacy-records.md):
+  // present only alongside sample_level_privacy, when the submitting
+  // worker has a signing identity configured. privacy_record_payload
+  // carries the domain fields; privacy_record_envelope carries the
+  // cryptographic metadata and signature (message_type =
+  // MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD, message_stream =
+  // MESSAGE_STREAM_PRIVACY_RECORD, payload_hash = SHA-256 of
+  // privacy_record_payload's canonical JSON). Independent of `envelope`
+  // above -- do not rely on the outer client-result signature alone to
+  // authenticate privacy-relevant values.
+  fl.privacy.v1.SignedSamplePrivacyRecord privacy_record_payload = 10;
+  fl.worker.v1.SignedWorkerEnvelope privacy_record_envelope = 11;
 }
 
 message SubmitClientResultResponse {
   bool accepted = 1;
   string reason = 2;
   ErrorDetail error = 3;
+  // Stable machine-readable rejection reason -- empty on success. See
+  // docs/signed-client-results.md for the fixed set of values.
+  string rejection_code = 4;
+}
+
+// the Algorithm Expansion phase: one client's personalization-relevant metrics for one
+// round, as ingested by SubmitClientResult and returned (unaggregated —
+// callers compute fairness statistics themselves, see
+// docs/fairness-metrics.md) by GetPersonalizationSummary.
+message PersonalizationMetricRecord {
+  string client_id = 1;
+  uint64 round_id = 2;
+  string algorithm = 3;
+  double global_local_accuracy = 4;
+  double personalized_local_accuracy = 5;
+  double global_local_loss = 6;
+  double personalized_local_loss = 7;
+  uint64 sample_count = 8;
+  double personalized_improvement = 9;
+  uint32 personalized_model_version = 10;
+  string recorded_at = 11;
+  map<string, double> algorithm_metrics = 12;
+  bool has_personalized_model = 13;
+}
+
+// Privacy Engineering phase: see docs/worker-privacy-capabilities.md.
+message ListWorkersRequest {}
+
+message WorkerSummary {
+  string worker_id = 1;
+  fl.worker.v1.WorkerStatus status = 2;
+  fl.worker.v1.WorkerCapability capability = 3;
+  double registered_at_unix_s = 4;
+  double last_heartbeat_unix_s = 5;
+}
+
+message ListWorkersResponse {
+  repeated WorkerSummary workers = 1;
+}
+
+message GetPersonalizationSummaryRequest {
+  string run_id = 1;
+}
+
+message PersonalizationSummaryResponse {
+  string run_id = 1;
+  // Latest record per client (not full history) — one entry per client
+  // that has ever submitted personalization metrics for this run.
+  repeated PersonalizationMetricRecord records = 2;
+}
+
+// ---------------------------------------------------------------------
+// Privacy Engineering phase: privacy observability. Sample/user/clipping
+// epsilon-delta are always kept separate — see the Critical Privacy Rule
+// note in proto/privacy/privacy.proto. None of these RPCs ever expose
+// raw client updates, per-client norms, noise values, private training
+// samples, or personalized model tensors.
+// ---------------------------------------------------------------------
+
+message GetPrivacyMetricsRequest {
+  string run_id = 1;
+}
+
+message GetPrivacyLedgerRequest {
+  string run_id = 1;
+  string page_token = 2;
+  uint32 page_size = 3;
+}
+
+message GetPrivacyLedgerResponse {
+  repeated fl.privacy.v1.SampleLevelLedgerEntry sample_level_entries = 1;
+  repeated fl.privacy.v1.UserLevelLedgerEntry user_level_entries = 2;
+  repeated fl.privacy.v1.AdaptiveClippingLedgerEntry clipping_entries = 3;
+  string next_page_token = 4;
+}
+
+message GetPrivacyProjectionRequest {
+  string run_id = 1;
+}
+
+message PrivacyProjection {
+  bool has_sample_level = 1;
+  double sample_current_epsilon = 2;
+  double sample_projected_next_epsilon = 3;
+  double sample_budget_remaining = 4;
+  bool has_user_level = 5;
+  double user_current_epsilon = 6;
+  double user_projected_next_epsilon = 7;
+  double user_budget_remaining = 8;
+  bool has_clipping = 9;
+  double clipping_current_epsilon = 10;
+  double clipping_projected_next_epsilon = 11;
+  double clipping_budget_remaining = 12;
 }
 
 message StreamRunEventsRequest {
@@ -219,6 +566,829 @@ message HealthResponse {
   uint32 registered_workers = 5;
 }
 
+// ---------------------------------------------------------------------
+// Signed Client Results and Worker Lifecycle Enforcement slice, Work
+// Package G. Safe metadata only -- see docs/worker-revocation.md and
+// docs/worker-suspension.md. Never exposes signing_public_key bytes
+// (not needed for suspend/activate/revoke administration) or any
+// private key material.
+// ---------------------------------------------------------------------
+
+message WorkerIdentitySummary {
+  string worker_id = 1;
+  string certificate_identity = 2;
+  string certificate_fingerprint = 3;
+  string signing_key_id = 4;
+  // "pending" | "active" | "suspended" | "revoked" | "expired" -- mirrors
+  // fl::coordinator::WorkerIdentityStatus's to_string().
+  string registration_status = 5;
+  string software_version = 6;
+  string build_id = 7;
+  double created_at_unix_s = 8;
+  double updated_at_unix_s = 9;
+  double expires_at_unix_s = 10;
+  double suspended_at_unix_s = 11;
+  double revoked_at_unix_s = 12;
+  string revocation_reason = 13;
+}
+
+message GetWorkerIdentityRequest {
+  string worker_id = 1;
+  string trace_id = 2;
+}
+
+message ListWorkerIdentitiesRequest {
+  string trace_id = 1;
+}
+
+message ListWorkerIdentitiesResponse {
+  repeated WorkerIdentitySummary identities = 1;
+}
+
+message SuspendWorkerRequest {
+  string worker_id = 1;
+  string reason = 2;
+  string request_id = 3;
+  string trace_id = 4;
+}
+
+message ActivateWorkerRequest {
+  string worker_id = 1;
+  string reason = 2;
+  string request_id = 3;
+  string trace_id = 4;
+}
+
+message RevokeWorkerRequest {
+  string worker_id = 1;
+  string reason = 2;
+  string request_id = 3;
+  string trace_id = 4;
+}
+
+message WorkerLifecycleResponse {
+  WorkerIdentitySummary identity = 1;
+  // False when this call was an idempotent no-op (the worker was
+  // already in the requested target state) -- see
+  // docs/worker-suspension.md / docs/worker-revocation.md's idempotency
+  // requirements.
+  bool changed = 2;
+  // Work Package M: how many active task leases (across every run) were
+  // canceled as a result of this call -- always 0 for Suspend/Activate,
+  // may be >0 for Revoke.
+  uint32 leases_canceled = 3;
+}
+
+// ---------------------------------------------------------------------
+// Signing-Key Lifecycle slice (docs/signing-key-management.md): safe
+// metadata only, mirroring WorkerIdentitySummary's convention exactly
+// -- never exposes public_key_hex bytes over an admin listing (not
+// needed for lifecycle administration) or any private key material.
+// ---------------------------------------------------------------------
+
+message SigningKeyRecordSummary {
+  string worker_id = 1;
+  string signing_key_id = 2;
+  // SHA-256 hex digest of the raw Ed25519 public key bytes -- a
+  // stronger uniqueness check than signing_key_id (which is only the
+  // first 8 bytes, per WorkerSigningIdentity's existing convention).
+  string public_key_fingerprint = 3;
+  // "pending" | "active" | "grace_period" | "revoked" | "expired" --
+  // mirrors fl::coordinator::SigningKeyStatus's to_string().
+  string status = 4;
+  double created_at_unix_s = 5;
+  double activated_at_unix_s = 6;
+  double expires_at_unix_s = 7;
+  double grace_period_start_unix_s = 8;
+  double grace_period_end_unix_s = 9;
+  string rotated_from_key_id = 10;
+  string rotated_to_key_id = 11;
+  double revoked_at_unix_s = 12;
+  string revocation_reason = 13;
+  // "migration" | "registration" | "rotation" -- how this key came to
+  // be registered; see docs/signing-key-migration.md.
+  string registration_source = 14;
+}
+
+message RotateWorkerSigningKeyRequest {
+  string worker_id = 1;
+  fl.worker.v1.WorkerKeyRotationPayload payload = 2;
+  // envelope.message_type must be MESSAGE_TYPE_KEY_ROTATION_REQUEST,
+  // signed by the CURRENT key named in payload.current_signing_key_id.
+  fl.worker.v1.SignedWorkerEnvelope envelope = 3;
+}
+
+message RotateWorkerSigningKeyResponse {
+  bool accepted = 1;
+  string reason = 2;
+  string rejection_code = 3;
+  SigningKeyRecordSummary new_key = 4;
+  SigningKeyRecordSummary previous_key = 5;
+}
+
+message GetWorkerSigningKeysRequest {
+  string worker_id = 1;
+  string trace_id = 2;
+}
+
+message GetWorkerSigningKeysResponse {
+  repeated SigningKeyRecordSummary keys = 1;
+}
+
+message RevokeWorkerSigningKeyRequest {
+  string worker_id = 1;
+  string signing_key_id = 2;
+  string reason = 3;
+  string request_id = 4;
+  string trace_id = 5;
+}
+
+message RevokeWorkerSigningKeyResponse {
+  SigningKeyRecordSummary key = 1;
+  bool changed = 2;
+  // True if this revocation left the worker with no remaining
+  // ACTIVE/GRACE_PERIOD key and the worker was therefore transitioned
+  // to SUSPENDED -- see docs/signing-key-revocation.md.
+  bool worker_suspended = 3;
+}
+
+// Coordinator-Signed Tasks slice (docs/signed-coordinator-tasks.md):
+// operational visibility only -- NOT how a worker bootstraps trust in
+// a coordinator key (that must come from the out-of-band
+// FL_WORKER_TRUSTED_COORDINATOR_KEYS_PATH bundle file, never from an
+// RPC reachable over the same connection whose task authenticity is
+// in question). Mirrors SigningKeyRecordSummary's status vocabulary
+// (active/grace_period/revoked/expired -- no "pending", the
+// coordinator's own identity is ACTIVE from the moment it is created).
+message CoordinatorSigningKeyRecordSummary {
+  string signing_key_id = 1;
+  string public_key_fingerprint = 2;
+  string status = 3;
+  double created_at_unix_s = 4;
+  double expires_at_unix_s = 5;
+  double grace_period_end_unix_s = 6;
+  string rotated_from_key_id = 7;
+  string rotated_to_key_id = 8;
+  double revoked_at_unix_s = 9;
+  string revocation_reason = 10;
+}
+
+message GetCoordinatorSigningKeysRequest {
+  string trace_id = 1;
+}
+
+message GetCoordinatorSigningKeysResponse {
+  repeated CoordinatorSigningKeyRecordSummary keys = 1;
+}
+
+// Security Administration slice, Work Package A
+// (docs/coordinator-signing-key-rotation.md): the live operational
+// counterpart to CoordinatorSigningKeyRegistry::validate_rotation/
+// commit_rotation, which this slice's predecessor implemented and
+// unit-tested but never wired to an RPC. No private key ever appears
+// in this request or response -- the coordinator generates the new
+// keypair itself, server-side.
+message RotateCoordinatorSigningKeyRequest {
+  string request_id = 1;
+  string trace_id = 2;
+  string reason = 3;
+  // Must match the registry's current ACTIVE key, or the rotation is
+  // rejected (kUnknownCurrentKey / kCurrentKeyNotActive) -- the same
+  // "prove you know the current state before mutating it" discipline
+  // WorkerKeyRotationPayload.current_signing_key_id already uses.
+  string expected_current_signing_key_id = 4;
+  // 0 means never-expires; otherwise must be a real time strictly
+  // after now and within kMaxCoordinatorKeyLifetimeSeconds of it.
+  double new_key_expires_at_unix_s = 5;
+  double requested_grace_period_seconds = 6;
+  // A repeated request presenting the same idempotency_key returns the
+  // original result rather than minting a second new key -- see
+  // IdempotencyStore.
+  string idempotency_key = 7;
+}
+
+message RotateCoordinatorSigningKeyResponse {
+  bool accepted = 1;
+  string reason = 2;
+  string rejection_code = 3;
+  CoordinatorSigningKeyRecordSummary new_key = 4;
+  CoordinatorSigningKeyRecordSummary previous_key = 5;
+  // True when this exact result was served from a prior identical
+  // request (same idempotency_key), not freshly computed this call.
+  bool idempotent_replay = 6;
+}
+
+message RevokeCoordinatorSigningKeyRequest {
+  string signing_key_id = 1;
+  string reason = 2;
+  string request_id = 3;
+  string trace_id = 4;
+  string idempotency_key = 5;
+  // "" means "no expectation" (always allowed); otherwise the
+  // revocation is rejected if the key's current status does not match
+  // -- the compare-and-set discipline Work Package K requires for
+  // concurrent-mutation safety.
+  string expected_status = 6;
+}
+
+message RevokeCoordinatorSigningKeyResponse {
+  CoordinatorSigningKeyRecordSummary key = 1;
+  bool changed = 2;
+  // True if this revocation left the registry with no remaining
+  // ACTIVE key -- production task issuance (AcquireTask's signing
+  // path) stops until a new key is rotated in. Mirrors
+  // RevokeWorkerSigningKeyResponse.worker_suspended's "tell the caller
+  // what else just happened" convention.
+  bool production_task_issuance_stopped = 3;
+  bool idempotent_replay = 4;
+}
+
+// Security Operations and Administration slice
+// (docs/security-api.md): a small, read-only status summary intended
+// for the Go control plane's security dashboard -- not a substitute
+// for a per-RPC transport audit. Reports the coordinator's OWN
+// configured transport mode (fl::coordinator::TransportMode), the same
+// value it already logs to stdout at startup, not a live inspection of
+// any individual connection.
+message GetTransportSecurityStatusRequest {
+  string trace_id = 1;
+}
+
+message TransportSecurityStatusResponse {
+  // "insecure_development" | "tls" | "mtls" -- matches
+  // fl::coordinator::to_string(TransportMode) exactly, not a
+  // reformatted/friendlier string, so Go/web callers can rely on the
+  // literal value.
+  string transport_mode = 1;
+  bool mutual_tls_enforced = 2;
+  double checked_at_unix_s = 3;
+}
+
+// A read-only aggregate summary of what this coordinator process
+// currently trusts -- counts and the active key id only, never a full
+// key/worker listing (that is what ListWorkerIdentities/
+// GetCoordinatorSigningKeys are for). Intended as the backing data for
+// a security dashboard's top-level "trust model" panel.
+message GetSecurityTrustModelRequest {
+  string trace_id = 1;
+}
+
+message SecurityTrustModelResponse {
+  string active_coordinator_signing_key_id = 1;
+  uint64 trusted_coordinator_key_count = 2;
+  uint64 trusted_key_bundle_version = 3;
+  uint64 registered_worker_count = 4;
+  uint64 worker_signing_key_total_count = 5;
+  double checked_at_unix_s = 6;
+}
+
+// Security Events, Metrics, and Durable Audit Journal slice
+// (docs/security-events.md). Wire form of fl::coordinator::SecurityEvent
+// -- field-for-field the same shared schema Python and Go mirror; see
+// docs/security-observability-inventory.md. Never carries private keys,
+// raw signatures, raw nonces, raw certificate PEM, full signed payloads,
+// tensor values, dataset samples, privacy noise, or secret-share data.
+message SecurityEventRecord {
+  int32 schema_version = 1;
+  string event_id = 2;
+  string event_type = 3;
+  string severity = 4;
+  string timestamp = 5;
+  string source_service = 6;
+  string source_component = 7;
+  string actor_type = 8;
+  string safe_actor_id = 9;
+  string subject_type = 10;
+  string safe_subject_id = 11;
+  string worker_id = 12;
+  string run_id = 13;
+  uint64 round_id = 14;
+  string task_id = 15;
+  string safe_signing_key_id = 16;
+  string request_id = 17;
+  string trace_id = 18;
+  string outcome = 19;
+  string reason_code = 20;
+  map<string, string> safe_details = 21;
+  string payload_checksum = 22;
+}
+
+// Cursor-paginated, optionally filtered read of the coordinator's own
+// durable security-event journal -- ADMIN_CONTROL, gated identically to
+// GetSecurityTrustModel. Only serves the journal's currently-active
+// (not yet rotated) file -- see security_event_journal.hpp.
+message ListSecurityEventsRequest {
+  string trace_id = 1;
+  string after_event_id = 2;
+  uint32 limit = 3;
+  string min_severity = 4;   // "" == no minimum; else one of INFO/WARNING/HIGH/CRITICAL
+  string subject_type = 5;   // "" == no filter
+  string event_type = 6;     // "" == no filter
+}
+
+message ListSecurityEventsResponse {
+  repeated SecurityEventRecord events = 1;
+  string next_cursor = 2;  // "" when there is no further page
+}
+
+// Web Security Center, Event Centralization, and Security CI slice,
+// Work Package N: per-source health, aggregated centrally because it is
+// only computable centrally -- individual worker queue depth is
+// inherently worker-local and is never reported here (see
+// docs/security-event-source-health.md; a worker may self-report a
+// queue-depth hint inside its own batch submissions, which is a
+// different, explicitly-untrusted signal, not this RPC).
+message GetSecurityEventSourceHealthRequest {
+  string trace_id = 1;
+}
+
+message SecurityEventSourceHealthEntry {
+  // Low-cardinality source identifier: "coordinator" or "python-worker"
+  // -- "go-api" is not reported here, since Go already knows its own
+  // local journal's health directly (see the /api/v1/security/overview
+  // endpoint) and does not need to ask the coordinator about itself.
+  string source_service = 1;
+  string last_event_at = 2;   // ISO-8601 UTC, "" if none yet
+  uint64 record_count = 3;
+  uint64 recovered_line_count = 4;
+  bool corrupted = 5;
+  bool retention_active = 6;
+  // Populated only for source_service == "python-worker" (0 otherwise):
+  // aggregate counters fed by SubmitWorkerSecurityEvents, not a per-
+  // worker breakdown.
+  uint64 batches_accepted = 7;
+  uint64 batches_rejected = 8;
+  uint64 distinct_workers_seen = 9;
+}
+
+message GetSecurityEventSourceHealthResponse {
+  repeated SecurityEventSourceHealthEntry sources = 1;
+  double checked_at_unix_s = 2;
+}
+
+// Secure User-Level DP Operations, Observability, and Release Evidence
+// slice, Work Area G/H. Deliberately never carries: a clear update,
+// individual norm, clipping factor, individual weight, noise tensor/
+// generator state, masked bytes, shared secret, key, or nonce -- only
+// aggregate/scalar accounting state and static mechanism description,
+// the same bounded-field discipline every other Security* message in
+// this file already follows.
+//
+// capability describes the STATIC mechanism (unchanging config/design
+// facts -- adjacency model, sensitivity formula, provider), separate
+// from the RUNTIME health fields below it. Go's
+// GetSecureUserLevelPrivacyStatus client method is served entirely from
+// this embedded message (no separate C++ RPC exists for "status" alone
+// -- a deliberate simplification, since status is a strict subset of
+// what health already returns; see docs/secure-user-level-operations-audit.md).
+message SecureUserLevelPrivacyCapabilityInfo {
+  bool available = 1;
+  string provider = 2;               // "SECAGG_NO_DROPOUT_EXPERIMENTAL"
+  string adjacency_model = 3;        // "ADD_REMOVE_ONE"
+  string sampling_assumption = 4;    // "NO_AMPLIFICATION"
+  string sensitivity_formula = 5;    // human-readable, not evaluable
+  string noise_placement = 6;        // "sum_before_divide"
+  double fixed_weight = 7;
+  repeated string trust_limitations = 8;
+}
+
+message GetSecureUserLevelPrivacyHealthRequest {
+  string trace_id = 1;
+}
+
+// Every *_status field below is one of: "ok", "degraded", "unavailable"
+// -- a small fixed vocabulary, never a raw error string (which could
+// leak internal detail into a role-visible API response).
+message SecureUserLevelPrivacyHealthResponse {
+  SecureUserLevelPrivacyCapabilityInfo capability = 1;
+  string provider_status = 2;
+  string noise_provider_status = 3;
+  string accountant_status = 4;
+  string ledger_status = 5;
+  string event_journal_status = 6;
+  string last_successful_round_at = 7;  // ISO-8601 UTC, "" if none yet
+  uint64 active_runs_with_user_level_dp = 8;
+  bool reconciliation_required = 9;
+  string degraded_reason = 10;  // "" when nothing is degraded
+  double checked_at_unix_s = 11;
+}
+
+message GetSecureUserLevelPrivacyBudgetRequest {
+  string trace_id = 1;
+  string run_id = 2;
+}
+
+message SecureUserLevelPrivacyBudgetResponse {
+  string run_id = 1;
+  bool budget_configured = 2;  // false when epsilon_budget <= 0 (unbounded)
+  double epsilon_spent = 3;
+  double epsilon_budget = 4;
+  double epsilon_remaining = 5;  // 0.0 when !budget_configured
+  double target_delta = 6;
+  uint64 rounds_committed = 7;
+}
+
+message ListSecureUserLevelPrivacyRoundsRequest {
+  string trace_id = 1;
+  string run_id = 2;
+  string after_cursor = 3;  // "" for the first page
+  uint32 limit = 4;         // 0 == server default
+}
+
+message SecureUserLevelPrivacyRoundSummary {
+  string run_id = 1;
+  uint64 round_id = 2;
+  double epsilon_after_round = 3;
+  double target_delta = 4;
+  double noise_multiplier = 5;
+  double clipping_bound = 6;
+  uint32 num_clients = 7;
+  double committed_at_unix_s = 8;
+}
+
+message ListSecureUserLevelPrivacyRoundsResponse {
+  repeated SecureUserLevelPrivacyRoundSummary rounds = 1;
+  string next_cursor = 2;  // "" when there is no further page
+}
+
+message GetSecureUserLevelPrivacyRoundRequest {
+  string trace_id = 1;
+  string run_id = 2;
+  uint64 round_id = 3;
+}
+
+message GetSecureUserLevelPrivacyRoundResponse {
+  bool found = 1;
+  SecureUserLevelPrivacyRoundSummary round = 2;
+}
+
+// Web Security Center, Event Centralization, and Security CI slice,
+// Work Package L: SIGNED_WORKER_MESSAGE RPC (mTLS + a valid signed
+// envelope from the worker's own current ACTIVE/GRACE_PERIOD key,
+// same verification pipeline as RotateWorkerSigningKey -- see
+// docs/security-event-centralization.md). Accepted events are
+// journaled into the coordinator's own SecurityEventJournal tagged
+// source_service="python-worker" -- there is no second, parallel event
+// store for worker-originated events.
+message SubmitWorkerSecurityEventsRequest {
+  string worker_id = 1;
+  fl.worker.v1.SignedWorkerSecurityEventBatch batch = 2;
+  // envelope.message_type must be MESSAGE_TYPE_SECURITY_EVENT_BATCH,
+  // envelope.message_stream must be MESSAGE_STREAM_SECURITY_EVENTS,
+  // signed by the worker's own current key.
+  fl.worker.v1.SignedWorkerEnvelope envelope = 3;
+}
+
+message SubmitWorkerSecurityEventsResponse {
+  bool accepted = 1;
+  // Stable machine-readable reason for a whole-batch rejection (mirrors
+  // WorkerHeartbeatResponse.rejection_code's vocabulary where
+  // applicable, plus batch-specific codes: "batch_too_large",
+  // "event_too_large", "worker_suspended", "worker_revoked"). Empty on
+  // acceptance.
+  string rejection_code = 2;
+  uint32 accepted_event_count = 3;
+  // Individual malformed events within an otherwise-accepted batch are
+  // skipped, not fatal to the whole batch -- see
+  // docs/security-event-centralization.md's per-event validation rules
+  // (unknown event_type, oversized safe_details, etc). This is distinct
+  // from a whole-batch rejection_code, which means accepted_event_count
+  // is always 0.
+  uint32 rejected_event_count = 4;
+  string last_accepted_event_id = 5;
+}
+
+// ---------------------------------------------------------------------
+// Secure Aggregation Wire Protocol and Live No-Dropout Execution slice,
+// Work Package B. RPC wrapper/dispatch messages -- domain payloads
+// signed inside a SignedWorkerEnvelope live in worker.proto instead
+// (SecureAggregationKeyAdvertisement, MaskedClientUpdate), mirroring
+// SignedCoordinatorTask's existing split from ClientTrainingTask.
+// Provider is fl.worker.v1.SecureAggregationProvider throughout (see
+// that enum's own comment for why it lives in worker.proto, not here
+// -- the import graph is acyclic only in that direction). Additive
+// only this pass: every message/RPC below compiles and generates real
+// bindings, but no RPC handler is implemented yet -- see
+// docs/secure-aggregation-wire-protocol-foundation.md's Tier 2 scope
+// (the same precedent as GetRound above, already UNIMPLEMENTED).
+// ---------------------------------------------------------------------
+
+enum SecureAggregationSessionState {
+  SECURE_AGGREGATION_SESSION_STATE_UNSPECIFIED = 0;
+  SECURE_AGGREGATION_SESSION_STATE_COHORT_FORMING = 1;
+  SECURE_AGGREGATION_SESSION_STATE_KEY_ADVERTISEMENT = 2;
+  SECURE_AGGREGATION_SESSION_STATE_COHORT_FROZEN = 3;
+  SECURE_AGGREGATION_SESSION_STATE_MASKED_UPDATE_COLLECTION = 4;
+  SECURE_AGGREGATION_SESSION_STATE_AGGREGATE_VALIDATION = 5;
+  SECURE_AGGREGATION_SESSION_STATE_COMPLETED = 6;
+  SECURE_AGGREGATION_SESSION_STATE_ABORTED = 7;
+  SECURE_AGGREGATION_SESSION_STATE_FAILED = 8;
+}
+
+enum SecureAggregationAbortReason {
+  SECURE_AGGREGATION_ABORT_REASON_UNSPECIFIED = 0;
+  SECURE_AGGREGATION_ABORT_REASON_DROPOUT = 1;
+  SECURE_AGGREGATION_ABORT_REASON_DEADLINE_EXCEEDED = 2;
+  SECURE_AGGREGATION_ABORT_REASON_COHORT_MISMATCH = 3;
+  SECURE_AGGREGATION_ABORT_REASON_ENCODING_REJECTED = 4;
+  SECURE_AGGREGATION_ABORT_REASON_OVERFLOW_REJECTED = 5;
+  SECURE_AGGREGATION_ABORT_REASON_MASK_CANCELLATION_FAILED = 6;
+  SECURE_AGGREGATION_ABORT_REASON_COORDINATOR_RESTART = 7;
+  SECURE_AGGREGATION_ABORT_REASON_SESSION_EXPIRED = 8;
+  SECURE_AGGREGATION_ABORT_REASON_MANUAL_ABORT = 9;
+  SECURE_AGGREGATION_ABORT_REASON_INVALID_TRANSITION_REQUESTED = 10;
+  // Masked Update Runtime and No-Dropout Secure FedAvg Finalization
+  // slice, Work Area AB: the run's algorithm/privacy mode is not one
+  // secure aggregation supports this slice (only fedavg with no
+  // privacy or SAMPLE_LEVEL DP) -- see
+  // SecureAggregationSessionConfig.privacy_incompatibility_reason for
+  // the specific structured reason string.
+  SECURE_AGGREGATION_ABORT_REASON_PRIVACY_MODE_INCOMPATIBLE = 11;
+}
+
+enum SecureAggregationRejectionReason {
+  SECURE_AGGREGATION_REJECTION_REASON_UNSPECIFIED = 0;
+  SECURE_AGGREGATION_REJECTION_REASON_INVALID_SIGNATURE = 1;
+  SECURE_AGGREGATION_REJECTION_REASON_UNKNOWN_SESSION = 2;
+  SECURE_AGGREGATION_REJECTION_REASON_WRONG_SESSION_STATE = 3;
+  SECURE_AGGREGATION_REJECTION_REASON_DUPLICATE_ADVERTISEMENT = 4;
+  SECURE_AGGREGATION_REJECTION_REASON_DUPLICATE_CONTRIBUTION = 5;
+  SECURE_AGGREGATION_REJECTION_REASON_INVALID_PUBLIC_KEY = 6;
+  SECURE_AGGREGATION_REJECTION_REASON_COHORT_MISMATCH = 7;
+  SECURE_AGGREGATION_REJECTION_REASON_MANIFEST_MISMATCH = 8;
+  SECURE_AGGREGATION_REJECTION_REASON_PROFILE_MISMATCH = 9;
+  SECURE_AGGREGATION_REJECTION_REASON_CHECKSUM_MISMATCH = 10;
+  SECURE_AGGREGATION_REJECTION_REASON_CLEARTEXT_RESULT_FORBIDDEN = 11;
+  SECURE_AGGREGATION_REJECTION_REASON_DEADLINE_EXCEEDED = 12;
+  SECURE_AGGREGATION_REJECTION_REASON_NOT_A_PARTICIPANT = 13;
+  // Secure User-Level Differential Privacy Runtime slice, Work Area L.
+  SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_MISSING = 14;
+  SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_INVALID_SIGNATURE = 15;
+  SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_BINDING_MISMATCH = 16;
+  SECURE_AGGREGATION_REJECTION_REASON_VARIABLE_WEIGHT_UNSUPPORTED = 17;
+  // Secure Hybrid Differential Privacy Runtime slice: the sample-level
+  // half of a hybrid submission's own signed
+  // fl.privacy.v1.SignedSamplePrivacyRecord, carried alongside
+  // MaskedClientUpdate on SubmitMaskedClientUpdateRequest -- mirrors
+  // the ATTESTATION_* reasons above field-for-field, for the other
+  // (sample-level) privacy record instead of the user-level one.
+  SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_MISSING = 18;
+  SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_INVALID_SIGNATURE = 19;
+  SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_BINDING_MISMATCH = 20;
+}
+
+// Mirrors fl::coordinator::FixedPointEncodingProfile
+// (secure_aggregation_encoding.hpp) field-for-field -- the wire
+// representation of the same profile already implemented and tested
+// as a pure C++/Python struct in the prior slice.
+message FixedPointEncodingProfile {
+  uint32 schema_version = 1;
+  string rounding_rule = 2;
+  double scale_factor = 3;
+  double max_input_magnitude = 4;
+  uint64 max_client_weight = 5;
+  uint64 max_cohort_size = 6;
+  uint64 safety_margin = 7;
+}
+
+// Mirrors docs/secure-aggregation-cryptographic-provider.md's selected
+// primitive names -- a wire-visible record of which concrete
+// primitives a session used, not a negotiable capability list (this
+// provider has exactly one supported combination today).
+message CryptographicProviderProfile {
+  string mask_generator_profile = 1;
+  string key_agreement_profile = 2;
+  string key_derivation_profile = 3;
+  string digest_profile = 4;
+}
+
+// Mirrors fl::coordinator::SecureAggregationSessionConfig
+// (secure_aggregation_session.hpp) field-for-field.
+message SecureAggregationSessionConfig {
+  uint32 schema_version = 1;
+  uint32 protocol_version = 2;
+  fl.worker.v1.SecureAggregationProvider provider = 3;
+  string session_id = 4;
+  string run_id = 5;
+  uint64 round_id = 6;
+  string model_version = 7;
+  string aggregation_algorithm = 8;
+  uint64 cohort_size = 9;
+  uint64 minimum_cohort_size = 10;
+  repeated string ordered_participant_ids = 11;
+  string tensor_manifest_hash = 12;
+  string model_manifest_hash = 13;
+  FixedPointEncodingProfile fixed_point_profile = 14;
+  string domain_profile = 15;
+  double scale_factor = 16;
+  double max_absolute_update_bound = 17;
+  uint64 max_client_weight = 18;
+  uint64 max_aggregate_bound = 19;
+  CryptographicProviderProfile cryptographic_profile = 20;
+  double session_created_at_unix_s = 21;
+  double key_advertisement_deadline_unix_s = 22;
+  double masked_update_deadline_unix_s = 23;
+  double session_expiry_unix_s = 24;
+  string coordinator_signing_key_id = 25;
+  string session_configuration_hash = 26;
+  // Masked Update Runtime and No-Dropout Secure FedAvg Finalization
+  // slice, Work Area AB: decided once, at session-creation time (the
+  // run's privacy mode does not change mid-round), and copied
+  // verbatim onto every participant's SecureAggregationTaskBinding by
+  // find_binding_for_participant -- see that function and
+  // AcquireTask's session-creation block.
+  bool privacy_mode_compatible = 27;
+  string privacy_incompatibility_reason = 28;
+  // Secure User-Level Differential Privacy Runtime slice, Work Area C:
+  // mirrors SecureAggregationTaskBinding's own fields 16-26 field-for-
+  // field -- find_binding_for_participant copies these verbatim, same
+  // as every other session-config field.
+  bool secure_user_level_dp_active = 29;
+  SecureUserLevelAdjacencyModel secure_user_level_adjacency_model = 30;
+  double secure_user_level_clip_norm = 31;
+  double secure_user_level_quantization_margin = 32;
+  double secure_user_level_effective_sensitivity = 33;
+  double secure_user_level_noise_multiplier = 34;
+  double secure_user_level_target_delta = 35;
+  double secure_user_level_max_epsilon = 36;
+  uint64 secure_user_level_fixed_weight = 37;
+  SecureUserLevelSamplingAssumption secure_user_level_sampling_assumption = 38;
+  string secure_user_level_dp_configuration_hash = 39;
+}
+
+// A lightweight pointer to one session, used where a full config would
+// be redundant (e.g. inside a request message that only needs to name
+// which session it targets).
+message SecureAggregationSessionReference {
+  string session_id = 1;
+  string run_id = 2;
+  uint64 round_id = 3;
+}
+
+// One entry in a frozen cohort's ordered participant list --
+// participant_index is the position in that immutable order, which
+// the pairwise sign rule's cancellation property depends on every
+// participant observing identically (see secure_aggregation_mask.hpp).
+message FrozenCohortParticipant {
+  uint32 participant_index = 1;
+  string worker_id = 2;
+  string client_id = 3;
+  string ephemeral_public_key_x25519 = 4;
+  string public_key_fingerprint = 5;
+}
+
+// Work Package J: the coordinator-signed frozen roster. Binds every
+// field a worker must independently verify before deriving any
+// pairwise mask -- see
+// docs/secure-aggregation-wire-protocol-foundation.md for the still-
+// deferred signing/verification code (this message compiles and is a
+// real wire contract this pass; nothing constructs or signs one yet).
+message FrozenCohortRoster {
+  uint32 schema_version = 1;
+  uint32 protocol_version = 2;
+  fl.worker.v1.SecureAggregationProvider provider = 3;
+  string session_id = 4;
+  string run_id = 5;
+  uint64 round_id = 6;
+  string model_version = 7;
+  repeated FrozenCohortParticipant participants = 8;
+  string tensor_manifest_hash = 9;
+  string fixed_point_profile_hash = 10;
+  string cryptographic_profile_hash = 11;
+  // Matches fl::coordinator::compute_cohort_commitment's output
+  // exactly (secure_aggregation_crypto.cpp) -- the same function,
+  // reused, not a second implementation.
+  string cohort_commitment = 12;
+  double freeze_timestamp = 13;
+  double expiry = 14;
+  string coordinator_signing_key_id = 15;
+  string payload_hash = 16;
+  string signature = 17;
+}
+
+// Session-status-level aggregate encoding-quality reporting -- distinct
+// from fl.worker.v1.SecureAggregationEncodingStatistics, which reports
+// this same kind of information per-contribution, not per-session.
+message SecureAggregationQuantizationSummary {
+  double worst_case_quantization_error = 1;
+  double average_quantization_error = 2;
+  uint64 sample_count = 3;
+}
+
+message SecureAggregationSessionStatus {
+  string session_id = 1;
+  string run_id = 2;
+  uint64 round_id = 3;
+  string model_version = 4;
+  fl.worker.v1.SecureAggregationProvider provider = 5;
+  SecureAggregationSessionState state = 6;
+  uint64 cohort_size = 7;
+  uint64 minimum_cohort_size = 8;
+  uint64 key_advertisement_count = 9;
+  uint64 masked_contribution_count = 10;
+  double key_advertisement_deadline_unix_s = 11;
+  double masked_update_deadline_unix_s = 12;
+  double session_expiry_unix_s = 13;
+  double created_at_unix_s = 14;
+  double completed_at_unix_s = 15;
+  SecureAggregationAbortReason abort_reason = 16;
+  string failure_reason = 17;
+  string aggregate_checksum = 18;
+  SecureAggregationQuantizationSummary quantization_summary = 19;
+}
+
+// A lighter-weight projection of SecureAggregationSessionStatus for
+// list views (Work Package Z's Go/web observability surface) --
+// mirrors SecurityEventRecord vs the full audit record's existing
+// "detail view has more fields than list view" convention.
+message SecureAggregationSessionSummary {
+  string session_id = 1;
+  string run_id = 2;
+  uint64 round_id = 3;
+  fl.worker.v1.SecureAggregationProvider provider = 4;
+  SecureAggregationSessionState state = 5;
+  double created_at_unix_s = 6;
+  double completed_at_unix_s = 7;
+}
+
+message AdvertiseSecureAggregationKeyRequest {
+  fl.worker.v1.SignedWorkerEnvelope envelope = 1;
+  fl.worker.v1.SecureAggregationKeyAdvertisement key_advertisement = 2;
+}
+
+message AdvertiseSecureAggregationKeyResponse {
+  bool accepted = 1;
+  string reason = 2;
+  SecureAggregationRejectionReason rejection_reason = 3;
+}
+
+message GetFrozenCohortRosterRequest {
+  string worker_id = 1;
+  string session_id = 2;
+}
+
+message GetFrozenCohortRosterResponse {
+  // False before COHORT_FROZEN -- the roster must never be exposed
+  // before freeze (Work Package G's "do not expose the complete
+  // roster until cohort freeze" requirement).
+  bool available = 1;
+  string reason = 2;
+  FrozenCohortRoster roster = 3;
+}
+
+message SubmitMaskedClientUpdateRequest {
+  fl.worker.v1.SignedWorkerEnvelope envelope = 1;
+  fl.worker.v1.MaskedClientUpdate masked_update = 2;
+  // Secure Hybrid Differential Privacy Runtime slice: present only
+  // when privacy_mode is HYBRID_DP (or, closing a pre-existing gap,
+  // SAMPLE_LEVEL_DP under secure aggregation) -- mirrors
+  // SubmitClientResultRequest's existing privacy_record_envelope/
+  // privacy_record_payload two-message pattern exactly. The record's
+  // own payload_hash must equal masked_update.sample_privacy_record_hash
+  // (itself already covered by the outer envelope's signature, see
+  // signed_envelope_verifier.cpp's masked_client_update_payload_hash_input) --
+  // no third, redundant signature is introduced.
+  fl.worker.v1.SignedWorkerEnvelope sample_privacy_record_envelope = 3;
+  fl.privacy.v1.SignedSamplePrivacyRecord sample_privacy_record_payload = 4;
+}
+
+message SubmitMaskedClientUpdateResponse {
+  bool accepted = 1;
+  string reason = 2;
+  SecureAggregationRejectionReason rejection_reason = 3;
+}
+
+message GetSecureAggregationSessionRequest {
+  string session_id = 1;
+}
+
+message GetSecureAggregationSessionResponse {
+  bool found = 1;
+  SecureAggregationSessionStatus status = 2;
+}
+
+message ListSecureAggregationSessionsRequest {
+  string run_id = 1;
+  SecureAggregationSessionState state_filter = 2;
+  uint32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListSecureAggregationSessionsResponse {
+  repeated SecureAggregationSessionSummary sessions = 1;
+  string next_page_token = 2;
+}
+
+message AbortSecureAggregationSessionRequest {
+  string session_id = 1;
+  string reason = 2;
+}
+
+message AbortSecureAggregationSessionResponse {
+  bool accepted = 1;
+  string reason = 2;
+}
+
 service CoordinatorService {
   rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
   rpc StartRun(StartRunRequest) returns (RunStateResponse);
@@ -232,12 +1402,96 @@ service CoordinatorService {
 
   rpc RegisterWorker(fl.worker.v1.RegisterWorkerRequest) returns (fl.worker.v1.RegisterWorkerResponse);
   rpc Heartbeat(fl.worker.v1.WorkerHeartbeatRequest) returns (fl.worker.v1.WorkerHeartbeatResponse);
+  // Privacy Engineering phase: lets the Go control plane (and the web
+  // Privacy Center UI built on it) see which registered workers actually
+  // advertise sample-level-DP support — see docs/worker-privacy-
+  // capabilities.md. Run-agnostic, like RegisterWorker/Heartbeat: workers
+  // register with the coordinator process, not a specific run.
+  rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
 
   rpc AcquireTask(AcquireTaskRequest) returns (ClientTrainingTask);
   rpc ReportTaskProgress(TaskProgressRequest) returns (TaskProgressResponse);
   rpc SubmitClientResult(SubmitClientResultRequest) returns (SubmitClientResultResponse);
 
+  // the Algorithm Expansion phase.
+  rpc GetPersonalizationSummary(GetPersonalizationSummaryRequest) returns (PersonalizationSummaryResponse);
+
+  // Privacy Engineering phase.
+  rpc GetPrivacyMetrics(GetPrivacyMetricsRequest) returns (fl.privacy.v1.PrivacyMetricsSnapshot);
+  rpc GetPrivacyLedger(GetPrivacyLedgerRequest) returns (GetPrivacyLedgerResponse);
+  rpc GetPrivacyProjection(GetPrivacyProjectionRequest) returns (PrivacyProjection);
+
   rpc StreamRunEvents(StreamRunEventsRequest) returns (stream fl.events.v1.CoordinatorEvent);
 
   rpc Health(HealthRequest) returns (HealthResponse);
+
+  // Signed Client Results and Worker Lifecycle Enforcement slice, Work
+  // Package G: ADMIN_CONTROL RPCs. Require an authenticated
+  // spiffe://federated-platform/service/go-api certificate identity --
+  // see docs/rpc-security-policy.md. A worker certificate calling any
+  // of these is rejected.
+  rpc GetWorkerIdentity(GetWorkerIdentityRequest) returns (WorkerIdentitySummary);
+  rpc ListWorkerIdentities(ListWorkerIdentitiesRequest) returns (ListWorkerIdentitiesResponse);
+  rpc SuspendWorker(SuspendWorkerRequest) returns (WorkerLifecycleResponse);
+  rpc ActivateWorker(ActivateWorkerRequest) returns (WorkerLifecycleResponse);
+  rpc RevokeWorker(RevokeWorkerRequest) returns (WorkerLifecycleResponse);
+
+  // Signing-Key Lifecycle slice (docs/signing-key-management.md).
+  // RotateWorkerSigningKey is a SIGNED_WORKER_MESSAGE (mTLS + a valid
+  // signed envelope from the worker's own CURRENT key); the other two
+  // are ADMIN_CONTROL, gated identically to the five RPCs above.
+  rpc RotateWorkerSigningKey(RotateWorkerSigningKeyRequest) returns (RotateWorkerSigningKeyResponse);
+  rpc GetWorkerSigningKeys(GetWorkerSigningKeysRequest) returns (GetWorkerSigningKeysResponse);
+  rpc RevokeWorkerSigningKey(RevokeWorkerSigningKeyRequest) returns (RevokeWorkerSigningKeyResponse);
+
+  // Coordinator-Signed Tasks slice (docs/signed-coordinator-tasks.md).
+  // ADMIN_CONTROL, gated identically to the RPCs above -- operational
+  // visibility only, see CoordinatorSigningKeyRecordSummary's comment.
+  rpc GetCoordinatorSigningKeys(GetCoordinatorSigningKeysRequest) returns (GetCoordinatorSigningKeysResponse);
+
+  // Security Administration slice (docs/coordinator-signing-key-rotation.md,
+  // docs/coordinator-signing-key-revocation.md). ADMIN_CONTROL, gated
+  // identically to the RPCs above.
+  rpc RotateCoordinatorSigningKey(RotateCoordinatorSigningKeyRequest) returns (RotateCoordinatorSigningKeyResponse);
+  rpc RevokeCoordinatorSigningKey(RevokeCoordinatorSigningKeyRequest) returns (RevokeCoordinatorSigningKeyResponse);
+
+  // Security Operations and Administration slice (docs/security-api.md).
+  // ADMIN_CONTROL, gated identically to the RPCs above -- read-only.
+  rpc GetTransportSecurityStatus(GetTransportSecurityStatusRequest) returns (TransportSecurityStatusResponse);
+  rpc GetSecurityTrustModel(GetSecurityTrustModelRequest) returns (SecurityTrustModelResponse);
+
+  // Security Events, Metrics, and Durable Audit Journal slice
+  // (docs/security-events.md). ADMIN_CONTROL, gated identically to the
+  // RPCs above -- read-only.
+  rpc ListSecurityEvents(ListSecurityEventsRequest) returns (ListSecurityEventsResponse);
+  rpc GetSecurityEventSourceHealth(GetSecurityEventSourceHealthRequest) returns (GetSecurityEventSourceHealthResponse);
+
+  // Web Security Center, Event Centralization, and Security CI slice
+  // (docs/security-event-centralization.md). SIGNED_WORKER_MESSAGE --
+  // see SubmitWorkerSecurityEventsRequest's comment.
+  rpc SubmitWorkerSecurityEvents(SubmitWorkerSecurityEventsRequest) returns (SubmitWorkerSecurityEventsResponse);
+
+  // Secure Aggregation Wire Protocol and Live No-Dropout Execution
+  // slice (docs/secure-aggregation-wire-protocol-foundation.md).
+  // Declared, generates real bindings, but deliberately not
+  // implemented in CoordinatorServiceImpl this pass -- same precedent
+  // as GetRound above (UNIMPLEMENTED via gRPC's default service
+  // behavior). SIGNED_WORKER_MESSAGE (advertise/submit) or
+  // mTLS-authenticated-read (get/list/abort) once implemented.
+  rpc AdvertiseSecureAggregationKey(AdvertiseSecureAggregationKeyRequest) returns (AdvertiseSecureAggregationKeyResponse);
+  rpc GetFrozenCohortRoster(GetFrozenCohortRosterRequest) returns (GetFrozenCohortRosterResponse);
+  rpc SubmitMaskedClientUpdate(SubmitMaskedClientUpdateRequest) returns (SubmitMaskedClientUpdateResponse);
+  rpc GetSecureAggregationSession(GetSecureAggregationSessionRequest) returns (GetSecureAggregationSessionResponse);
+  rpc ListSecureAggregationSessions(ListSecureAggregationSessionsRequest) returns (ListSecureAggregationSessionsResponse);
+  rpc AbortSecureAggregationSession(AbortSecureAggregationSessionRequest) returns (AbortSecureAggregationSessionResponse);
+
+  // Secure User-Level DP Operations, Observability, and Release Evidence
+  // slice (docs/secure-user-level-operations-audit.md). ADMIN_CONTROL,
+  // gated identically to the RPCs above -- read-only, never exposes a
+  // clear update, individual norm, clipping factor, noise value, or key
+  // material (see each message's own comment).
+  rpc GetSecureUserLevelPrivacyHealth(GetSecureUserLevelPrivacyHealthRequest) returns (SecureUserLevelPrivacyHealthResponse);
+  rpc GetSecureUserLevelPrivacyBudget(GetSecureUserLevelPrivacyBudgetRequest) returns (SecureUserLevelPrivacyBudgetResponse);
+  rpc ListSecureUserLevelPrivacyRounds(ListSecureUserLevelPrivacyRoundsRequest) returns (ListSecureUserLevelPrivacyRoundsResponse);
+  rpc GetSecureUserLevelPrivacyRound(GetSecureUserLevelPrivacyRoundRequest) returns (GetSecureUserLevelPrivacyRoundResponse);
 }

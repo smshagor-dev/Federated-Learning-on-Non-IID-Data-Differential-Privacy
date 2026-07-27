@@ -5,3 +5,17 @@ scipy>=1.10.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 PyYAML>=6.0
+# Privacy Engineering phase: opacus backs real sample-level DP-SGD
+# training (fl_platform.worker.task_runner); prometheus_client backs
+# fl_platform.privacy.metrics, imported unconditionally by
+# fl_platform.privacy so ANY worker (private or not) needs it just to
+# start. See docs/known-limitations.md's Privacy Engineering Phase
+# section.
+opacus>=1.5.0
+prometheus_client>=0.20.0
+# Secure Transport and Worker Identity Hardening slice: pynacl backs
+# Ed25519 worker signing identities and capability-statement signing
+# (fl_platform.security); cryptography backs X.509 certificate loading
+# for mTLS channel construction. See docs/cryptographic-primitives.md.
+pynacl>=1.5,<2
+cryptography>=42,<50

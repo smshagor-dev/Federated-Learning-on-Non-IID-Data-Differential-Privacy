@@ -1,0 +1,15 @@
+# Shell scripts must always check out with LF line endings, regardless
+# of the platform/user's core.autocrlf setting -- discovered live while
+# validating the Secure Cohort Handshake and Signed Roster Runtime
+# slice (docs/secure-cohort-handshake-foundation.md): on a Windows
+# checkout with the common core.autocrlf=true setting,
+# scripts/generate_protos.sh (the only tracked *.sh file at the time)
+# checked out with CRLF line endings; infra/docker/cpp-coordinator.Dockerfile
+# and infra/docker/python-worker.Dockerfile both COPY it into a Linux
+# build context and run it via `bash scripts/generate_protos.sh`, which
+# failed with "set: pipefail: invalid option name" (bash chokes on the
+# embedded \r in `set -euo pipefail\r`) -- breaking every Docker Compose
+# build of the coordinator/python-worker images from a fresh Windows
+# clone. This was a real, previously-undiscovered, repo-wide bug, not
+# specific to this slice; fixed here rather than worked around locally.
+*.sh text eol=lf

@@ -43,7 +43,9 @@ DType dtype_from_tag(const std::string& tag) {
     throw CheckpointCorruptionError("unknown tensor dtype tag in checkpoint: " + tag);
 }
 
-void write_collection(std::ostringstream& out, const std::string& key, const TensorCollection& collection) {
+void write_collection(std::ostringstream& out,
+                      const std::string& key,
+                      const TensorCollection& collection) {
     out << key << "_count=" << collection.tensors().size() << "\n";
     for (const auto& [name, tensor] : collection.tensors()) {
         out << key << "_tensor=" << name << "|" << dtype_to_tag(tensor.descriptor().dtype) << "|";
@@ -98,10 +100,8 @@ TensorBuffer parse_tensor_field(const std::string& field) {
     return TensorBuffer(std::move(descriptor), std::move(values));
 }
 
-TensorCollection read_collection(
-    const std::vector<std::pair<std::string, std::string>>& fields,
-    const std::string& key
-) {
+TensorCollection read_collection(const std::vector<std::pair<std::string, std::string>>& fields,
+                                 const std::string& key) {
     TensorCollection collection;
     std::size_t expected = 0;
     bool has_count = false;
@@ -120,7 +120,8 @@ TensorCollection read_collection(
     }
     if (found != expected) {
         throw CheckpointCorruptionError("checkpoint truncated: expected " +
-            std::to_string(expected) + " tensors for " + key + ", found " + std::to_string(found));
+                                        std::to_string(expected) + " tensors for " + key +
+                                        ", found " + std::to_string(found));
     }
     return collection;
 }
@@ -175,13 +176,15 @@ AggregatorCheckpoint AggregatorCheckpointStore::deserialize(const std::string& p
         throw CheckpointCorruptionError("checkpoint checksum line is malformed");
     }
     std::string checksum_value = checksum_line.substr(equals + 1);
-    while (!checksum_value.empty() && (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
+    while (!checksum_value.empty() &&
+           (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
         checksum_value.pop_back();
     }
 
     const auto computed = hash_to_hex(fnv1a_hash(body));
     if (computed != checksum_value) {
-        throw CheckpointCorruptionError("checkpoint checksum mismatch: file is corrupt or was truncated");
+        throw CheckpointCorruptionError(
+            "checkpoint checksum mismatch: file is corrupt or was truncated");
     }
 
     std::vector<std::pair<std::string, std::string>> fields;
@@ -231,7 +234,8 @@ AggregatorCheckpoint AggregatorCheckpointStore::deserialize(const std::string& p
                 } else if (value == "normalized_bounded") {
                     checkpoint.weighting = WeightingStrategyType::kNormalizedBounded;
                 } else {
-                    throw CheckpointCorruptionError("unknown weighting strategy in checkpoint: " + value);
+                    throw CheckpointCorruptionError("unknown weighting strategy in checkpoint: " +
+                                                    value);
                 }
             } else if (key == "model_version") {
                 checkpoint.model_version = value;
@@ -244,16 +248,16 @@ AggregatorCheckpoint AggregatorCheckpointStore::deserialize(const std::string& p
     } catch (const CheckpointCorruptionError&) {
         throw;
     } catch (const std::exception& error) {
-        throw CheckpointCorruptionError(std::string("checkpoint field parse failure: ") + error.what());
+        throw CheckpointCorruptionError(std::string("checkpoint field parse failure: ") +
+                                        error.what());
     }
 
     if (!has_schema_version) {
         throw CheckpointCorruptionError("checkpoint missing schema_version");
     }
     if (checkpoint.schema_version != AggregatorCheckpoint::kSchemaVersion) {
-        throw CheckpointCorruptionError(
-            "unsupported checkpoint schema version " + std::to_string(checkpoint.schema_version)
-        );
+        throw CheckpointCorruptionError("unsupported checkpoint schema version " +
+                                        std::to_string(checkpoint.schema_version));
     }
 
     try {
@@ -263,13 +267,15 @@ AggregatorCheckpoint AggregatorCheckpointStore::deserialize(const std::string& p
     } catch (const CheckpointCorruptionError&) {
         throw;
     } catch (const std::exception& error) {
-        throw CheckpointCorruptionError(std::string("checkpoint tensor parse failure: ") + error.what());
+        throw CheckpointCorruptionError(std::string("checkpoint tensor parse failure: ") +
+                                        error.what());
     }
 
     return checkpoint;
 }
 
-void AggregatorCheckpointStore::save_to_file(const std::string& path, const AggregatorCheckpoint& checkpoint) {
+void AggregatorCheckpointStore::save_to_file(const std::string& path,
+                                             const AggregatorCheckpoint& checkpoint) {
     const auto payload = serialize(checkpoint);
     const std::filesystem::path target(path);
     const std::filesystem::path temp_path = target.string() + ".tmp";
@@ -277,7 +283,8 @@ void AggregatorCheckpointStore::save_to_file(const std::string& path, const Aggr
     {
         std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
         if (!out) {
-            throw std::runtime_error("failed to open checkpoint temp file for write: " + temp_path.string());
+            throw std::runtime_error("failed to open checkpoint temp file for write: " +
+                                     temp_path.string());
         }
         out << payload;
         out.flush();
@@ -295,9 +302,8 @@ void AggregatorCheckpointStore::save_to_file(const std::string& path, const Aggr
         std::filesystem::remove(target, error_code);
         std::filesystem::rename(temp_path, target, error_code);
         if (error_code) {
-            throw std::runtime_error(
-                "failed to atomically move checkpoint into place: " + error_code.message()
-            );
+            throw std::runtime_error("failed to atomically move checkpoint into place: " +
+                                     error_code.message());
         }
     }
 }

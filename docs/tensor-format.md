@@ -21,7 +21,7 @@ class TensorBuffer {
 
 Only `DType::kFloat32` is implemented. FP64, FP16, BF16, INT8, and sparse
 top-K formats from `plan.md`'s long-term contract are **not** implemented —
-they are out of scope for Milestone 2 (see
+they are out of scope for the Aggregation Core phase (see
 [known-limitations.md](known-limitations.md)). Internally, values are
 always stored as `double` regardless of declared dtype, so accumulation
 (sums across many clients) does not lose precision; the declared `dtype`
@@ -82,5 +82,5 @@ producers/consumers live in this repository. The protobuf contracts under
 `proto/worker/worker.proto` (`TensorManifest`) define the intended
 production wire format once workers exchange tensors over gRPC — see
 [protobuf-generation.md](protobuf-generation.md). The two are not yet
-unified; that unification is Milestone 3+ scope (real gRPC worker/tensor
+unified; that unification is later-phase scope (real gRPC worker/tensor
 streaming), tracked in [known-limitations.md](known-limitations.md).

@@ -47,7 +47,7 @@ sequenceDiagram
 A checkpoint file alone does not carry the original `RunConfig` (client
 pool, hyperparameters, manifest) — in a full system that would come from
 wherever `CreateRun`'s request was persisted (the Go control plane's own
-run record, out of this milestone's scope). Recovery is therefore always
+run record, out of this phase's scope). Recovery is therefore always
 two steps: `create_run()` with the original config to get a fresh
 `RunInstance`, then `restore_from_checkpoint()` to overwrite its state
 from disk before serving any requests.

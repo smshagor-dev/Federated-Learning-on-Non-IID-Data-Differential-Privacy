@@ -21,13 +21,22 @@ std::vector<RunState> allowed_next_states(RunState state) {
         case RunState::kQueued:
             return {RunState::kRunning, RunState::kCanceling, RunState::kFailed};
         case RunState::kRunning:
-            return {RunState::kWaitingForClients, RunState::kPausing, RunState::kCanceling, RunState::kFailed};
+            return {RunState::kWaitingForClients,
+                    RunState::kPausing,
+                    RunState::kCanceling,
+                    RunState::kFailed};
         case RunState::kWaitingForClients:
-            return {RunState::kAggregating, RunState::kPausing, RunState::kCanceling, RunState::kFailed};
+            return {RunState::kAggregating,
+                    RunState::kPausing,
+                    RunState::kCanceling,
+                    RunState::kFailed};
         case RunState::kAggregating:
             return {RunState::kEvaluating, RunState::kCheckpointing, RunState::kFailed};
         case RunState::kEvaluating:
-            return {RunState::kCheckpointing, RunState::kRunning, RunState::kCompleted, RunState::kFailed};
+            return {RunState::kCheckpointing,
+                    RunState::kRunning,
+                    RunState::kCompleted,
+                    RunState::kFailed};
         case RunState::kCheckpointing:
             return {RunState::kRunning, RunState::kPaused, RunState::kCompleted, RunState::kFailed};
         case RunState::kPausing:
@@ -67,11 +76,9 @@ const std::vector<TransitionRecord>& RunStateMachine::history() const {
     return history_;
 }
 
-void RunStateMachine::transition_to(
-    RunState next,
-    const std::string& reason,
-    const std::string& timestamp
-) {
+void RunStateMachine::transition_to(RunState next,
+                                    const std::string& reason,
+                                    const std::string& timestamp) {
     if (!is_transition_allowed(next)) {
         throw std::invalid_argument("invalid state transition");
     }
@@ -89,17 +96,14 @@ bool RunStateMachine::is_transition_allowed(RunState next) const {
     return std::find(next_states.begin(), next_states.end(), next) != next_states.end();
 }
 
-std::vector<std::string> ClientScheduler::sample_clients(
-    const std::vector<ClientMetadata>& clients,
-    const SchedulingOptions& options
-) const {
+std::vector<std::string> ClientScheduler::sample_clients(const std::vector<ClientMetadata>& clients,
+                                                         const SchedulingOptions& options) const {
     std::vector<ClientMetadata> eligible;
     for (const auto& client : clients) {
         if (client.excluded) {
             continue;
         }
-        if (options.cooldown_rounds > 0 &&
-            client.last_selected_round > 0 &&
+        if (options.cooldown_rounds > 0 && client.last_selected_round > 0 &&
             options.current_round > client.last_selected_round &&
             options.current_round - client.last_selected_round <= options.cooldown_rounds) {
             continue;
@@ -113,12 +117,9 @@ std::vector<std::string> ClientScheduler::sample_clients(
     std::mt19937_64 rng(options.seed);
     std::shuffle(eligible.begin(), eligible.end(), rng);
     std::stable_sort(
-        eligible.begin(),
-        eligible.end(),
-        [](const ClientMetadata& lhs, const ClientMetadata& rhs) {
+        eligible.begin(), eligible.end(), [](const ClientMetadata& lhs, const ClientMetadata& rhs) {
             return lhs.availability_score > rhs.availability_score;
-        }
-    );
+        });
 
     std::vector<std::string> selected;
     const auto limit = std::min(options.target_clients, eligible.size());
@@ -187,7 +188,8 @@ CoordinatorCheckpoint CheckpointStore::deserialize(const std::string& payload) {
                 throw std::invalid_argument("unknown algorithm string");
             }
         } else if (key == "clients") {
-            checkpoint.round.selected_clients = value.empty() ? std::vector<std::string>{} : split(value, ',');
+            checkpoint.round.selected_clients =
+                value.empty() ? std::vector<std::string>{} : split(value, ',');
         } else if (key == "optimizer_step") {
             checkpoint.optimizer_state.step = std::stoull(value);
         }
@@ -235,22 +237,38 @@ std::string to_string(RunState state) {
 }
 
 RunState run_state_from_string(const std::string& value) {
-    if (value == "CREATED") return RunState::kCreated;
-    if (value == "VALIDATING") return RunState::kValidating;
-    if (value == "INITIALIZING") return RunState::kInitializing;
-    if (value == "READY") return RunState::kReady;
-    if (value == "QUEUED") return RunState::kQueued;
-    if (value == "RUNNING") return RunState::kRunning;
-    if (value == "WAITING_FOR_CLIENTS") return RunState::kWaitingForClients;
-    if (value == "AGGREGATING") return RunState::kAggregating;
-    if (value == "EVALUATING") return RunState::kEvaluating;
-    if (value == "CHECKPOINTING") return RunState::kCheckpointing;
-    if (value == "PAUSING") return RunState::kPausing;
-    if (value == "PAUSED") return RunState::kPaused;
-    if (value == "COMPLETED") return RunState::kCompleted;
-    if (value == "FAILED") return RunState::kFailed;
-    if (value == "CANCELING") return RunState::kCanceling;
-    if (value == "CANCELED") return RunState::kCanceled;
+    if (value == "CREATED")
+        return RunState::kCreated;
+    if (value == "VALIDATING")
+        return RunState::kValidating;
+    if (value == "INITIALIZING")
+        return RunState::kInitializing;
+    if (value == "READY")
+        return RunState::kReady;
+    if (value == "QUEUED")
+        return RunState::kQueued;
+    if (value == "RUNNING")
+        return RunState::kRunning;
+    if (value == "WAITING_FOR_CLIENTS")
+        return RunState::kWaitingForClients;
+    if (value == "AGGREGATING")
+        return RunState::kAggregating;
+    if (value == "EVALUATING")
+        return RunState::kEvaluating;
+    if (value == "CHECKPOINTING")
+        return RunState::kCheckpointing;
+    if (value == "PAUSING")
+        return RunState::kPausing;
+    if (value == "PAUSED")
+        return RunState::kPaused;
+    if (value == "COMPLETED")
+        return RunState::kCompleted;
+    if (value == "FAILED")
+        return RunState::kFailed;
+    if (value == "CANCELING")
+        return RunState::kCanceling;
+    if (value == "CANCELED")
+        return RunState::kCanceled;
     throw std::invalid_argument("unknown run state");
 }
 

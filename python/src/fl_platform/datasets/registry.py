@@ -27,7 +27,7 @@ class DatasetRegistry:
         return sorted(self._datasets)
 
     @classmethod
-    def with_milestone_defaults(cls) -> DatasetRegistry:
+    def with_default_registry(cls) -> DatasetRegistry:
         registry = cls()
         partitioning = ["iid", "dirichlet", "pathological"]
         for name, classes in [

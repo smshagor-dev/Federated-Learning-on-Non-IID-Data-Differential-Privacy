@@ -6,7 +6,37 @@ on:
 
 jobs:
   # ------------------------------------------------------------------ #
-  # C++ (Milestone 1 + Milestone 2)
+  # Repository terminology policy — runs first, before doc/build jobs.
+  # ------------------------------------------------------------------ #
+  terminology:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Terminology check
+        run: python scripts/check_project_terminology.py
+
+  # ------------------------------------------------------------------ #
+  # Development PKI — end-to-end verify-pki.sh lifecycle check (CA
+  # generation, issuance, SAN inspection, chain validation, revocation,
+  # CRL regeneration, tracked-secret scan). See docs/development-pki.md.
+  # ------------------------------------------------------------------ #
+  pki-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cryptography (for inspect-certificates.py)
+        run: python -m pip install "cryptography>=42,<50"
+      - name: Verify development PKI lifecycle
+        run: make pki-verify
+
+  # ------------------------------------------------------------------ #
+  # C++ (Foundation phase + Aggregation Core phase)
   # ------------------------------------------------------------------ #
   cpp-debug:
     runs-on: ubuntu-latest
@@ -79,7 +109,72 @@ jobs:
           path: build/cpp-release/fl_aggregation_benchmark
 
   # ------------------------------------------------------------------ #
-  # Python (Milestone 1 tooling + Milestone 2 compatibility tests)
+  # gRPC-gated C++ coordinator -- Web Security Center, Event
+  # Centralization, and Security CI slice. cpp-debug/cpp-release above
+  # only build the protobuf-free `fl_coordinator` target set (see
+  # docs/coordinator-runtime.md); the real gRPC service implementation
+  # (coordinator_service.cpp, including every signed-message RPC:
+  # RegisterWorker, Heartbeat, SubmitClientResult, RotateWorkerSigningKey,
+  # SubmitWorkerSecurityEvents, etc) and its own test suite
+  # (fl_coordinator_grpc_tests, fl_signed_envelope_verifier_tests,
+  # fl_capability_statement_verifier_tests, fl_coordinator_task_signing_tests,
+  # fl_peer_identity_tests) were previously only exercised via ad hoc local
+  # Docker builds, never in CI -- a real, previously-disclosed gap (see
+  # docs/known-limitations.md) this job closes. ubuntu-latest already
+  # provides apt, so this runs directly on the runner rather than nesting
+  # another Docker build, unlike infra/docker/cpp-coordinator.Dockerfile
+  # (which exists for local/Compose use, not CI).
+  #
+  # fl_secure_aggregation_crypto_tests/fl_secure_aggregation_tensor_mask_tests
+  # (crypto/mask core, prior slice) and
+  # fl_secure_aggregation_session_manager_tests (session store/manager,
+  # Secure Cohort Handshake and Signed Roster Runtime slice -- see
+  # docs/secure-cohort-handshake-foundation.md) were the same kind of
+  # ad-hoc-Docker-only gap and are now built/tested here too.
+  # ------------------------------------------------------------------ #
+  cpp-grpc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install protoc + gRPC C++ dev packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            protobuf-compiler protobuf-compiler-grpc libprotobuf-dev libgrpc++-dev pkg-config
+      - name: Generate protobuf/gRPC C++ bindings
+        run: bash scripts/generate_protos.sh generated
+      - name: Configure (Release)
+        run: cmake -S cpp -B build/cpp-grpc -DCMAKE_BUILD_TYPE=Release
+      - name: Build gRPC-gated targets
+        run: |
+          cmake --build build/cpp-grpc --target \
+            fl_coordinator_grpc_server \
+            fl_coordinator_grpc_tests \
+            fl_signed_envelope_verifier_tests \
+            fl_capability_statement_verifier_tests \
+            fl_coordinator_task_signing_tests \
+            fl_peer_identity_tests \
+            fl_secure_aggregation_crypto_tests \
+            fl_secure_aggregation_tensor_mask_tests \
+            fl_secure_aggregation_session_manager_tests \
+            -j"$(nproc)"
+      - name: Test gRPC-gated targets
+        # -R restricts ctest to exactly the test executables built above.
+        # CMake registers ctest entries for every add_test() in the tree
+        # at configure time, regardless of whether --target actually
+        # built that executable -- without this filter, ctest also tries
+        # to run the protobuf-free fl_coordinator/fl_core test binaries
+        # (covered instead by the cpp-debug/cpp-release jobs above,
+        # never built in this job) and reports them "Not Run" as
+        # failures, which was a real, previously-undetected bug in this
+        # job (found while validating this slice's own CI additions --
+        # see docs/secure-cohort-handshake-foundation.md).
+        run: |
+          ctest --test-dir build/cpp-grpc --output-on-failure -R \
+            '^(fl_coordinator_grpc_tests|fl_signed_envelope_verifier_tests|fl_capability_statement_verifier_tests|fl_coordinator_task_signing_tests|fl_peer_identity_tests|fl_secure_aggregation_crypto_tests|fl_secure_aggregation_tensor_mask_tests|fl_secure_aggregation_session_manager_tests)$'
+
+  # ------------------------------------------------------------------ #
+  # Python (the Foundation phase tooling + the Aggregation Core phase compatibility tests)
   # ------------------------------------------------------------------ #
   python:
     runs-on: ubuntu-latest
@@ -103,7 +198,12 @@ jobs:
       - name: Ruff (format check)
         run: python -m ruff format --check .
       - name: mypy
-        run: python -m mypy python/src
+        # --config-file is required: mypy's default config discovery only
+        # looks in the current working directory (repo root), but this
+        # project's [tool.mypy] section lives in python/pyproject.toml —
+        # without this flag every exclude/override below is silently
+        # ignored. See docs/known-limitations.md.
+        run: python -m mypy --config-file=python/pyproject.toml python/src
 
   # ------------------------------------------------------------------ #
   # Go
@@ -117,8 +217,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
-          cache: false  # no go.sum: this module has no external dependencies
+          # Must be >= go.mod's `go 1.25.0` directive (added when the
+          # grpc/protobuf dependencies were introduced) — a lower pinned
+          # version here makes `go vet`/`go test`/`go build` fail while
+          # `gofmt` (which doesn't consult go.mod) still passes, since
+          # GOTOOLCHAIN auto-switching isn't guaranteed in every CI
+          # network environment. See docs/known-limitations.md.
+          go-version: "1.25"
+          cache: true
+          cache-dependency-path: go/go.sum
       - name: gofmt check
         run: |
           unformatted=$(gofmt -l .)
@@ -179,6 +286,38 @@ jobs:
         run: make proto
 
   # ------------------------------------------------------------------ #
+  # Secret scanning -- Web Security Center, Event Centralization, and
+  # Security CI slice's CI Security Artifact Policy. Broader than
+  # pki-verify's existing tracked-secret check (which only inspects
+  # certs/dev*/*.key.pem, the development-PKI fixture paths -- see
+  # scripts/pki/verify-pki.sh): this scans every git-tracked file in the
+  # repository for private-key material and common cloud-credential
+  # patterns, so a private key accidentally committed anywhere (not just
+  # under the PKI fixture directories) fails CI. Pattern-based, not a
+  # dedicated secret-scanning tool (gitleaks/trufflehog) -- deliberately
+  # scoped to the highest-confidence, lowest-false-positive patterns
+  # (PEM private-key headers, AWS access key IDs) rather than a broad
+  # entropy-based scan that would need per-repo tuning; see
+  # docs/known-limitations.md for the disclosed narrower scope.
+  # ------------------------------------------------------------------ #
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan tracked files for private-key/credential markers
+        run: |
+          set +e
+          MATCHES="$(git grep -InE -- '-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----|AKIA[0-9A-Z]{16}' -- . 2>/dev/null)"
+          STATUS=$?
+          set -e
+          if [ "${STATUS}" -eq 0 ]; then
+            echo "Found tracked private-key/credential material:"
+            echo "${MATCHES}"
+            exit 1
+          fi
+          echo "No tracked private-key/credential markers found."
+
+  # ------------------------------------------------------------------ #
   # Infrastructure
   # ------------------------------------------------------------------ #
   infra:
@@ -190,3 +329,58 @@ jobs:
       - name: docker compose build
         continue-on-error: true  # optional: base-image pulls can be flaky/slow in CI
         run: docker compose build
+
+  # ------------------------------------------------------------------ #
+  # Security runtime validation (PR subset) -- Security Runtime
+  # Completion and Release Evidence slice, Work Package S/T. Runs a
+  # required, fast subset of the real live-Docker-Compose scenario
+  # harness (scripts/security-validation/run.py) against real mTLS,
+  # real signing, and the real coordinator/api/python-worker containers
+  # -- not a mock of any of it. The full matrix, including the
+  # browser (Web Security Center) suite and the worker-lifecycle/
+  # event-centralization groups (slower: they poll for real
+  # registration/event-delivery timing), runs on a schedule instead --
+  # see .github/workflows/security-runtime-full.yml -- so every PR still
+  # gets fast, real coverage of the parts most likely to break silently
+  # (transport, the security HTTP API, metrics correctness, the event/
+  # audit journals, and the terminology/protobuf regression gates)
+  # without every PR paying for a ~10+ minute full run. This job is what
+  # would have caught, on the very next PR, each of the three live-only
+  # defects this slice's own manual harness run found (the python-worker
+  # image missing the `security` extra, the health-poll path never
+  # calling RegisterWorker, and the worker_id/certificate mismatch) --
+  # none of which any unit test could have caught, since unit tests
+  # never build the real Docker image or bring up the real mTLS stack.
+  # ------------------------------------------------------------------ #
+  security-runtime-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Generate the development PKI (CA + coordinator + go-api + worker-1)
+        run: |
+          bash scripts/pki/generate-dev-ca.sh
+          bash scripts/pki/issue-service-cert.sh coordinator
+          bash scripts/pki/issue-service-cert.sh go-api
+          bash scripts/pki/issue-worker-cert.sh worker-1
+      - name: Build the Compose images
+        run: |
+          docker compose -f infra/compose/docker-compose.dev.yml -f infra/compose/docker-compose.security.yml \
+            build coordinator api python-worker
+      - name: Run the required security-runtime-validation subset
+        run: |
+          python scripts/security-validation/run.py \
+            --group transport,security-api,metrics,event-journal,audit-journal,secure-aggregation-user-level-dp,regression \
+            --output-dir artifacts/security-runtime-validation
+      - name: Check the harness's own output for prohibited material
+        if: always()
+        run: python scripts/security-validation/check_artifact_sanitation.py artifacts/security-runtime-validation
+      - name: Upload sanitized summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-runtime-pr-summary
+          path: artifacts/security-runtime-validation/
+          retention-days: 14

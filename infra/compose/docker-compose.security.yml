@@ -1,0 +1,111 @@
+# Security Operations and Administration slice (docs/security-api.md):
+# an override file, not a replacement for docker-compose.dev.yml. Real
+# mTLS between the Go API and the C++ coordinator has been validated in
+# this project before, but only via direct `docker run` with hand-mounted
+# certs (see docs/docker-runtime.md) -- neither compose file mounted any
+# PKI material for any service (confirmed by direct inspection at the
+# start of this slice). This file adds exactly that, for exactly the two
+# services this slice's HTTP API surface actually needs: `coordinator`
+# and `api`.
+#
+# `web` is deliberately NOT included: the web app talks to the Go API
+# over plain HTTP/JSON (see docs/current-architecture.md), not gRPC, so
+# it has no mTLS surface of its own to configure here.
+#
+# `python-worker` WAS excluded through the Security Events, Metrics,
+# and Durable Audit Journal slice (python-worker's own
+# __main__.py/configuration.py never read WorkerConfig's tls_enabled/
+# tls_ca_cert_path fields at all, regardless of this override) --
+# closed in the Security Runtime Completion and Release Evidence slice
+# (see docs/security-event-centralization.md): __main__.py now
+# constructs a real WorkerTLSConfig, a real persistent signing
+# identity, and a real security-event journal when the corresponding
+# FL_WORKER_* variables below are set. The signing key and security-
+# event journal are NOT bind-mounted to a host path -- like the
+# coordinator's own signing-key bundle above, they live in the
+# container's own writable layer, ephemeral across a full recreate but
+# stable across a plain `docker compose restart python-worker` (the
+# same restart boundary docs/security-runtime-validation.md already
+# uses for the `api` container).
+#
+# Usage:
+#   docker compose -f infra/compose/docker-compose.dev.yml \
+#                   -f infra/compose/docker-compose.security.yml \
+#                   up -d postgres redis coordinator api python-worker
+services:
+  coordinator:
+    volumes:
+      - ../../certs/dev:/app/certs/dev:ro
+    environment:
+      FL_TRANSPORT_MODE: mtls
+      FL_COORDINATOR_SERVER_CERT: /app/certs/dev/services/coordinator/tls.cert.pem
+      FL_COORDINATOR_SERVER_KEY: /app/certs/dev/services/coordinator/tls.key.pem
+      FL_COORDINATOR_CLIENT_CA: /app/certs/dev/ca/ca.cert.pem
+      # Unlike every other coordinator-side store, main.cpp's default
+      # for this one is an empty string (the bundle is treated as
+      # optional at startup) -- discovered live, since this override
+      # previously omitted it and every rotate/revoke call failed with
+      # "no ... trusted-key bundle path configured." Every other store
+      # path below already has a real relative-path default and does
+      # not need to be set explicitly.
+      FL_COORDINATOR_SIGNING_KEY_BUNDLE_PATH: /app/coordinator_signing_key_bundle.json
+
+  api:
+    volumes:
+      - ../../certs/dev:/app/certs/dev:ro
+    environment:
+      FL_TRANSPORT_MODE: mtls
+      FL_COORDINATOR_CA: /app/certs/dev/ca/ca.cert.pem
+      FL_COORDINATOR_CLIENT_CERT: /app/certs/dev/services/go-api/tls.cert.pem
+      FL_COORDINATOR_CLIENT_KEY: /app/certs/dev/services/go-api/tls.key.pem
+      # The coordinator's server certificate carries a
+      # spiffe://federated-platform/service/coordinator URI SAN plus
+      # DNS SANs for localhost/coordinator (see certs/dev/services/
+      # coordinator's ext.cnf) -- Go's standard-library crypto/tls
+      # hostname verification (tls.Config.ServerName) only ever checks
+      # DNS/IP SANs, never URI SANs, so FL_COORDINATOR_SERVER_NAME must
+      # be a DNS name actually present on the cert, not the SPIFFE URI.
+      # "coordinator" also happens to be this container's real Compose
+      # service-discovery hostname, so this is not merely a workaround --
+      # it is the technically correct value. Discovered live: the SPIFFE
+      # URI value shown as an example in docs/mtls.md has never actually
+      # been exercised against a running mTLS handshake before this
+      # slice (no Compose file mounted any PKI material until now), and
+      # does not work as written -- see docs/known-limitations.md.
+      FL_COORDINATOR_SERVER_NAME: coordinator
+
+  python-worker:
+    volumes:
+      - ../../certs/dev:/app/certs/dev:ro
+    environment:
+      # The mTLS client certificate mounted below (FL_WORKER_TLS_CLIENT_CERT_PATH)
+      # was issued for the SPIFFE identity spiffe://federated-platform/worker/worker-1
+      # (certs/dev/workers/worker-1) -- overrides the Dockerfile's
+      # FL_WORKER_WORKER_ID=python-worker-1 default so the worker_id this
+      # process claims in every signed RPC actually matches its
+      # authenticated certificate identity. Discovered live: with the
+      # Dockerfile default left in place, the coordinator correctly
+      # rejected every signed request (RegisterWorker,
+      # SubmitWorkerSecurityEvents) with PERMISSION_DENIED ("worker_id
+      # 'python-worker-1' does not match the authenticated certificate
+      # identity"), which this slice's live Docker Compose validation
+      # caught -- see docs/security-event-centralization.md.
+      FL_WORKER_WORKER_ID: worker-1
+      FL_WORKER_TLS_ENABLED: "true"
+      FL_WORKER_TLS_CA_CERT_PATH: /app/certs/dev/ca/ca.cert.pem
+      FL_WORKER_TLS_CLIENT_CERT_PATH: /app/certs/dev/workers/worker-1/tls.cert.pem
+      FL_WORKER_TLS_CLIENT_KEY_PATH: /app/certs/dev/workers/worker-1/tls.key.pem
+      # Same "DNS SAN present on the coordinator's cert, not the SPIFFE
+      # URI" constraint as the `api` service's FL_COORDINATOR_SERVER_NAME
+      # above -- see that variable's comment.
+      FL_WORKER_TLS_SERVER_NAME: coordinator
+      # First boot generates and persists this worker's Ed25519 signing
+      # identity into the container's own writable layer (trust-on-
+      # first-use, bootstrapped into the coordinator's
+      # WorkerIdentityRegistry/SigningKeyRegistry via the signed
+      # capability statement RegisterWorker already sends whenever a
+      # signing identity is configured -- see
+      # docs/security-event-centralization.md).
+      FL_WORKER_SIGNING_KEY_DIR: /app/.fl_worker_signing_keys
+      FL_WORKER_SECURITY_EVENT_JOURNAL_PATH: /app/.fl_worker_security_events/events.jsonl
+      FL_WORKER_SECURITY_EVENT_FLUSH_INTERVAL_SECONDS: "5"

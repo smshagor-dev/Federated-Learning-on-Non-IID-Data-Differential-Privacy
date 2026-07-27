@@ -1,0 +1,134 @@
+{
+  "id": null,
+  "uid": "fl-security-operations",
+  "title": "Security Operations",
+  "description": "Security Runtime Completion and Release Evidence slice, Work Package R. Transport/signing-key/message-authenticity event volume, worker security-event centralization health, and journal source lag -- built from the low-cardinality fl_security_events_total / fl_security_event_source_* metrics documented in docs/security-metrics.md and docs/security-event-source-health.md. This dashboard does not chart secure-aggregation activity (not implemented -- see docs/known-limitations.md).",
+  "tags": ["security", "fl-platform"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Security events rate by severity",
+      "description": "sum by (severity) (rate(fl_security_events_total[5m])). A sustained rise in CRITICAL/HIGH is the primary alerting signal this dashboard exists to surface.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "targets": [
+        {
+          "expr": "sum by (severity) (rate(fl_security_events_total[5m]))",
+          "legendFormat": "{{severity}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CRITICAL" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+          { "matcher": { "id": "byName", "options": "HIGH" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Security events rate by category and outcome",
+      "description": "sum by (category, outcome) (rate(fl_security_events_total[5m])). category is the coarse, fixed set (transport/worker_identity/worker_signing_key/signed_message/coordinator_task/administration/other), never the raw ~55-value event_type -- see docs/security-metrics.md's cardinality discipline.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "targets": [
+        {
+          "expr": "sum by (category, outcome) (rate(fl_security_events_total[5m]))",
+          "legendFormat": "{{category}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Event source lag (seconds since last accepted event/batch)",
+      "description": "fl_security_event_source_lag_seconds by source_service (go-api / coordinator / python-worker). The fixed staleness threshold (docs/security-event-source-health.md) is 120s -- a source crossing that line for an extended period indicates it has stopped reporting, not merely a quiet period.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "targets": [
+        {
+          "expr": "fl_security_event_source_lag_seconds",
+          "legendFormat": "{{source_service}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 120 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Event source record counts",
+      "description": "fl_security_event_source_records by source_service -- last-observed journal size per source, a monotonically-nondecreasing snapshot (not a rate).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "targets": [
+        {
+          "expr": "fl_security_event_source_records",
+          "legendFormat": "{{source_service}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Worker security-event batch outcomes",
+      "description": "fl_security_event_source_batches{outcome=\"accepted\"|\"rejected\"} -- a sustained rejected count above zero means a worker is producing batches the coordinator's SubmitWorkerSecurityEvents verification is rejecting (bad signature, replay, schema mismatch, etc).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "targets": [
+        {
+          "expr": "fl_security_event_source_batches",
+          "legendFormat": "{{source_service}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".*rejected.*" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Distinct workers seen (coordinator source)",
+      "description": "fl_security_event_source_distinct_workers{source_service=\"coordinator\"} -- an aggregate count only, never a list of worker IDs (see docs/security-event-source-health.md's explicit no-per-worker-label discipline).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "targets": [
+        {
+          "expr": "fl_security_event_source_distinct_workers{source_service=\"coordinator\"}",
+          "legendFormat": "distinct workers",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    }
+  ]
+}

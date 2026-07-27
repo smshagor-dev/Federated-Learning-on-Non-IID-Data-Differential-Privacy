@@ -16,6 +16,14 @@ EXPECTED_FIELDS = {
             "algorithm": 5,
             "rounds": 6,
         },
+        "AlgorithmConfig": {
+            "name": 1,
+            "mu": 2,
+            "fedsam": 3,
+            "ditto": 4,
+            "per_fedavg": 5,
+            "personalization": 6,
+        },
     },
     "proto/worker/worker.proto": {
         "TensorManifest": {
@@ -99,6 +107,13 @@ EXPECTED_FIELDS = {
             "total_bytes": 6,
             "artifact_reference": 7,
             "schema_version": 8,
+            "aggregation_manifest": 9,
+        },
+        "AggregationManifest": {
+            "shared_parameter_names": 1,
+            "personalized_parameter_names": 2,
+            "frozen_parameter_names": 3,
+            "schema_hash": 4,
         },
         "OptimizerConfig": {
             "algorithm": 1,
@@ -146,6 +161,7 @@ EXPECTED_FIELDS = {
             "fedprox_mu": 11,
             "global_control_variate": 12,
             "client_control_variate": 13,
+            "aggregation_manifest": 14,
         },
         "SubmitClientResultRequest": {
             "worker_id": 1,
@@ -154,11 +170,27 @@ EXPECTED_FIELDS = {
             "result": 4,
             "client_control_variate_delta": 5,
             "refreshed_client_control_variate": 6,
+            "personalization_metrics": 7,
         },
         "SubmitClientResultResponse": {
             "accepted": 1,
             "reason": 2,
             "error": 3,
+        },
+        "PersonalizationMetricRecord": {
+            "client_id": 1,
+            "round_id": 2,
+            "algorithm": 3,
+            "global_local_accuracy": 4,
+            "personalized_local_accuracy": 5,
+            "global_local_loss": 6,
+            "personalized_local_loss": 7,
+            "sample_count": 8,
+            "personalized_improvement": 9,
+            "personalized_model_version": 10,
+            "recorded_at": 11,
+            "algorithm_metrics": 12,
+            "has_personalized_model": 13,
         },
     },
     "proto/privacy/privacy.proto": {

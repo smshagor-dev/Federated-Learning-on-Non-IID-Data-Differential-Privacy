@@ -1,0 +1,12 @@
+{
+  "$comment": "Frozen reference mask-stream values for derive_tensor_mask_stream (Work Package T). Same frozen-reference discipline as the other fixtures in this directory -- captured from a single reviewed run of cpp/coordinator/src/secure_aggregation_tensor_mask.cpp (Docker/Ubuntu 24.04, OpenSSL 3.0.13), then frozen here. Both cpp/coordinator/tests/secure_aggregation_tensor_mask_test.cpp and python/tests/test_secure_aggregation_tensor_mask.py assert against this same frozen value.",
+  "schema_version": 1,
+  "input": {
+    "shared_secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "purpose_label": "tensor_mask_stream",
+    "canonical_context": "golden-fixture-context",
+    "element_count": 4
+  },
+  "expected_mask_values": [9086732726997875728, 16617846648716935654, 15486973003086668688, 10999587187094550710],
+  "derivation_note": "derive_purpose_key(shared_secret, purpose_label, canonical_context, 32) via HKDF-SHA-256 (salt=kHkdfDomainSalt), then a ChaCha20 IETF keystream with a fixed all-zero 12-byte nonce and initial_counter=0, 32 bytes (4 elements * 8 bytes) -- each 8-byte chunk interpreted as a little-endian uint64."
+}

@@ -40,16 +40,16 @@ All rejections raise `std::invalid_argument` with a specific message (never
 a generic/opaque failure), and no partial aggregation occurs — validation
 runs to completion (or throws) before any tensor accumulation starts.
 
-## Explicitly not implemented in Milestone 2
+## Explicitly not implemented in the Aggregation Core phase
 
 * **Wrong worker_id / worker health checks** — `worker_id` is carried on
   `ClientUpdate` and round-tripped through the CLI protocol and
   checkpoints, but nothing currently validates it (no worker registry
-  exists yet; that is Milestone 3's `WorkerMetadata`/coordinator scope).
+  exists yet; that is the Coordinator Runtime phase's `WorkerMetadata`/coordinator scope).
 * **Signature/envelope verification** — `python/src/fl_platform/security/envelope.py`
   has a scaffold for signed envelopes and nonce replay guarding, but the
   C++ aggregation core does not call into it; update authenticity is out
-  of scope until Milestone 7 per `plan.md`.
+  of scope until a much later phase per `plan.md`.
 * **Incompatible-algorithm-family checks beyond exact match** — e.g. no
   attempt to reject a FedAvg update against a SCAFFOLD-configured
   aggregation with a friendlier error than "algorithm does not match

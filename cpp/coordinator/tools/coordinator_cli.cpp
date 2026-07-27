@@ -29,6 +29,7 @@ using fl::coordinator::ClientResultSubmission;
 using fl::coordinator::ClientTaskDescriptor;
 using fl::coordinator::CoordinatorConfig;
 using fl::coordinator::DispatchedTask;
+using fl::coordinator::PersonalizationMetricRecord;
 using fl::coordinator::RunConfig;
 using fl::coordinator::RunManager;
 using fl::coordinator::WorkerCapability;
@@ -67,7 +68,9 @@ std::map<std::string, std::string> read_request(std::istream& in) {
     return fields;
 }
 
-std::string field(const std::map<std::string, std::string>& fields, const std::string& key, const std::string& fallback = "") {
+std::string field(const std::map<std::string, std::string>& fields,
+                  const std::string& key,
+                  const std::string& fallback = "") {
     const auto it = fields.find(key);
     return it == fields.end() ? fallback : it->second;
 }
@@ -78,49 +81,122 @@ double now_from_field(const std::map<std::string, std::string>& fields) {
 }
 
 fl::core::TensorDescriptor make_weight_descriptor(std::uint64_t elements) {
-    return fl::core::TensorDescriptor{.name = "weight", .shape = {elements}, .dtype = fl::core::DType::kFloat32};
+    return fl::core::TensorDescriptor{
+        .name = "weight", .shape = {elements}, .dtype = fl::core::DType::kFloat32};
 }
 
-// This bridge assumes a single-tensor "weight" manifest, matching the
-// synthetic integration tests it's built for (see
+// the Algorithm Expansion phase: parses "name1:elements1,name2:elements2" into multiple
+// named tensor descriptors — needed to exercise aggregation-manifest
+// validation (shared vs. personalized-head tensor names) end-to-end,
+// which a single implicit "weight" tensor cannot represent. Falls back
+// to the single-"weight"-tensor shape below when absent, so every
+// existing FedAvg/FedProx/SCAFFOLD test is unaffected.
+std::vector<fl::core::TensorDescriptor> parse_tensor_specs(const std::string& value) {
+    std::vector<fl::core::TensorDescriptor> tensors;
+    for (const auto& spec : split(value, ',')) {
+        const auto colon = spec.find(':');
+        if (colon == std::string::npos) {
+            throw std::invalid_argument("invalid tensor_specs entry (want name:elements): " + spec);
+        }
+        tensors.push_back(fl::core::TensorDescriptor{
+            .name = spec.substr(0, colon),
+            .shape = {std::stoull(spec.substr(colon + 1))},
+            .dtype = fl::core::DType::kFloat32,
+        });
+    }
+    return tensors;
+}
+
+// This bridge assumes a small, explicit tensor manifest (one "weight"
+// tensor by default, or the names/sizes given by --tensor_specs),
+// matching the synthetic integration tests it's built for (see
 // docs/coordinator-runtime.md's stated scope). A production gRPC service
-// carries the full ModelManifest over the wire instead of this
-// hard-coded shape.
+// carries the full ModelManifest over the wire instead.
 RunConfig parse_run_config(const std::map<std::string, std::string>& fields) {
     RunConfig config;
     config.run_id = field(fields, "run_id");
     config.manifest.model_id = field(fields, "model_id", "toy");
     config.manifest.model_version = "v0";
-    config.manifest.tensors = {make_weight_descriptor(std::stoull(field(fields, "tensor_elements", "1")))};
+    const auto tensor_specs_raw = field(fields, "tensor_specs");
+    config.manifest.tensors = !tensor_specs_raw.empty()
+                                  ? parse_tensor_specs(tensor_specs_raw)
+                                  : std::vector<fl::core::TensorDescriptor>{make_weight_descriptor(
+                                        std::stoull(field(fields, "tensor_elements", "1")))};
 
     const auto algorithm = field(fields, "algorithm", "fedavg");
-    if (algorithm == "fedavg") config.algorithm = fl::core::AggregationAlgorithm::kFedAvg;
-    else if (algorithm == "fedprox") config.algorithm = fl::core::AggregationAlgorithm::kFedProx;
-    else if (algorithm == "scaffold") config.algorithm = fl::core::AggregationAlgorithm::kScaffold;
-    else if (algorithm == "fedadagrad") config.algorithm = fl::core::AggregationAlgorithm::kFedAdagrad;
-    else if (algorithm == "fedadam") config.algorithm = fl::core::AggregationAlgorithm::kFedAdam;
-    else if (algorithm == "fedyogi") config.algorithm = fl::core::AggregationAlgorithm::kFedYogi;
-    else throw std::invalid_argument("unknown algorithm: " + algorithm);
+    if (algorithm == "fedavg")
+        config.algorithm = fl::core::AggregationAlgorithm::kFedAvg;
+    else if (algorithm == "fedprox")
+        config.algorithm = fl::core::AggregationAlgorithm::kFedProx;
+    else if (algorithm == "scaffold")
+        config.algorithm = fl::core::AggregationAlgorithm::kScaffold;
+    else if (algorithm == "fedadagrad")
+        config.algorithm = fl::core::AggregationAlgorithm::kFedAdagrad;
+    else if (algorithm == "fedadam")
+        config.algorithm = fl::core::AggregationAlgorithm::kFedAdam;
+    else if (algorithm == "fedyogi")
+        config.algorithm = fl::core::AggregationAlgorithm::kFedYogi;
+    // the Algorithm Expansion phase: FedSAM/Ditto/Per-FedAvg all submit a FedAvg-shaped
+    // global update (see fl_core/aggregation.hpp's enum comment) — the
+    // coordinator only needs to accept and correctly label these, not
+    // aggregate them any differently.
+    else if (algorithm == "fedsam")
+        config.algorithm = fl::core::AggregationAlgorithm::kFedSam;
+    else if (algorithm == "ditto")
+        config.algorithm = fl::core::AggregationAlgorithm::kDitto;
+    else if (algorithm == "per_fedavg")
+        config.algorithm = fl::core::AggregationAlgorithm::kPerFedAvg;
+    else
+        throw std::invalid_argument("unknown algorithm: " + algorithm);
+
+    // the Algorithm Expansion phase: aggregation manifest (see docs/aggregation-manifests.md).
+    // Comma-separated parameter names; empty (the default) means "no
+    // manifest declared," which submit_client_result treats permissively
+    // (accept any tensor names) for backward compatibility with
+    // FedAvg/FedProx/SCAFFOLD's existing single-"weight"-tensor tests.
+    const auto shared_names_raw = field(fields, "shared_parameter_names");
+    if (!shared_names_raw.empty()) {
+        config.aggregation_manifest.shared_parameter_names = split(shared_names_raw, ',');
+    }
+    const auto personalized_names_raw = field(fields, "personalized_parameter_names");
+    if (!personalized_names_raw.empty()) {
+        config.aggregation_manifest.personalized_parameter_names =
+            split(personalized_names_raw, ',');
+    }
+    const auto frozen_names_raw = field(fields, "frozen_parameter_names");
+    if (!frozen_names_raw.empty()) {
+        config.aggregation_manifest.frozen_parameter_names = split(frozen_names_raw, ',');
+    }
 
     const auto weighting = field(fields, "weighting", "uniform");
-    if (weighting == "uniform") config.weighting = fl::core::WeightingStrategyType::kUniform;
-    else if (weighting == "sample_count") config.weighting = fl::core::WeightingStrategyType::kSampleCount;
-    else config.weighting = fl::core::WeightingStrategyType::kUniform;
+    if (weighting == "uniform")
+        config.weighting = fl::core::WeightingStrategyType::kUniform;
+    else if (weighting == "sample_count")
+        config.weighting = fl::core::WeightingStrategyType::kSampleCount;
+    else
+        config.weighting = fl::core::WeightingStrategyType::kUniform;
 
     config.server_lr = std::stod(field(fields, "server_lr", "1.0"));
     config.beta1 = std::stod(field(fields, "beta1", "0.9"));
     config.beta2 = std::stod(field(fields, "beta2", "0.99"));
     config.tau = std::stod(field(fields, "tau", "1e-3"));
     config.contribution_cap = std::stod(field(fields, "contribution_cap", "1.0"));
-    config.target_clients_per_round = static_cast<std::uint32_t>(std::stoul(field(fields, "target_clients_per_round", "1")));
-    config.total_clients = static_cast<std::uint32_t>(std::stoul(field(fields, "total_clients", "1")));
+    config.target_clients_per_round =
+        static_cast<std::uint32_t>(std::stoul(field(fields, "target_clients_per_round", "1")));
+    config.total_clients =
+        static_cast<std::uint32_t>(std::stoul(field(fields, "total_clients", "1")));
     config.max_rounds = static_cast<std::uint32_t>(std::stoul(field(fields, "max_rounds", "1")));
-    config.round_timeout_seconds = static_cast<std::uint32_t>(std::stoul(field(fields, "round_timeout_seconds", "300")));
-    config.minimum_valid_results = static_cast<std::uint32_t>(std::stoul(field(fields, "minimum_valid_results", "1")));
+    config.round_timeout_seconds =
+        static_cast<std::uint32_t>(std::stoul(field(fields, "round_timeout_seconds", "300")));
+    config.minimum_valid_results =
+        static_cast<std::uint32_t>(std::stoul(field(fields, "minimum_valid_results", "1")));
     config.client_selection_seed = std::stoull(field(fields, "seed", "0"));
-    config.task_lease_seconds = static_cast<std::uint32_t>(std::stoul(field(fields, "task_lease_seconds", "60")));
-    config.max_task_retries = static_cast<std::uint32_t>(std::stoul(field(fields, "max_task_retries", "3")));
-    config.local_epochs = static_cast<std::uint32_t>(std::stoul(field(fields, "local_epochs", "1")));
+    config.task_lease_seconds =
+        static_cast<std::uint32_t>(std::stoul(field(fields, "task_lease_seconds", "60")));
+    config.max_task_retries =
+        static_cast<std::uint32_t>(std::stoul(field(fields, "max_task_retries", "3")));
+    config.local_epochs =
+        static_cast<std::uint32_t>(std::stoul(field(fields, "local_epochs", "1")));
     config.batch_size = static_cast<std::uint32_t>(std::stoul(field(fields, "batch_size", "32")));
     config.learning_rate = std::stod(field(fields, "learning_rate", "0.01"));
     config.momentum = std::stod(field(fields, "momentum", "0.0"));
@@ -150,13 +226,15 @@ std::string encode_tensor(const std::string& name, const fl::core::TensorBuffer&
     out << name << "|f32|";
     const auto& shape = tensor.descriptor().shape;
     for (std::size_t index = 0; index < shape.size(); ++index) {
-        if (index > 0) out << "-";
+        if (index > 0)
+            out << "-";
         out << shape[index];
     }
     out << "|";
     const auto& values = tensor.values();
     for (std::size_t index = 0; index < values.size(); ++index) {
-        if (index > 0) out << ",";
+        if (index > 0)
+            out << ",";
         out << std::setprecision(17) << values[index];
     }
     return out.str();
@@ -284,12 +362,15 @@ int main(int argc, char** argv) {
             if (task.has_value()) {
                 print_task(*task);
                 if (config.algorithm == fl::core::AggregationAlgorithm::kScaffold) {
-                    const auto [global_cv, client_cv] = run.scaffold_control_variates_for(task->descriptor.client_id);
+                    const auto [global_cv, client_cv] =
+                        run.scaffold_control_variates_for(task->descriptor.client_id);
                     for (const auto& [name, tensor] : global_cv.tensors()) {
-                        std::cout << "global_control_variate=" << encode_tensor(name, tensor) << "\n";
+                        std::cout << "global_control_variate=" << encode_tensor(name, tensor)
+                                  << "\n";
                     }
                     for (const auto& [name, tensor] : client_cv.tensors()) {
-                        std::cout << "client_control_variate=" << encode_tensor(name, tensor) << "\n";
+                        std::cout << "client_control_variate=" << encode_tensor(name, tensor)
+                                  << "\n";
                     }
                 }
             } else {
@@ -308,23 +389,85 @@ int main(int argc, char** argv) {
             submission.update.base_model_version = field(fields, "base_model_version");
             submission.update.algorithm = config.algorithm;
             submission.update.sample_count = std::stoull(field(fields, "sample_count"));
-            submission.update.delta.insert(decode_tensor(field(fields, "delta")));
+            // the Algorithm Expansion phase: a submission with more than one tensor (e.g. a
+            // shared-backbone submission alongside a personalized-head
+            // tensor being tested for rejection) uses delta_count/delta_0.
+            // .../delta_N... instead of the single legacy "delta" field —
+            // read_request's map can only hold one value per key, so
+            // repeating "delta=" would silently drop all but the last.
+            if (fields.contains("delta_count")) {
+                const auto count = std::stoull(field(fields, "delta_count"));
+                for (std::uint64_t index = 0; index < count; ++index) {
+                    submission.update.delta.insert(
+                        decode_tensor(field(fields, "delta_" + std::to_string(index))));
+                }
+            } else {
+                submission.update.delta.insert(decode_tensor(field(fields, "delta")));
+            }
             if (fields.contains("control_delta")) {
-                submission.update.control_delta.insert(decode_tensor(field(fields, "control_delta")));
+                submission.update.control_delta.insert(
+                    decode_tensor(field(fields, "control_delta")));
             }
             if (fields.contains("refreshed_client_control_variate")) {
-                submission.refreshed_client_control_variate.insert(decode_tensor(field(fields, "refreshed_client_control_variate")));
+                submission.refreshed_client_control_variate.insert(
+                    decode_tensor(field(fields, "refreshed_client_control_variate")));
+            }
+            // the Algorithm Expansion phase: optional personalization metrics (present only
+            // for algorithms producing a personalized model — Ditto,
+            // Per-FedAvg). See docs/personalized-evaluation.md.
+            if (fields.contains("personalization_global_accuracy")) {
+                PersonalizationMetricRecord personalization;
+                personalization.client_id = submission.update.client_id;
+                personalization.round_id = submission.update.round_id;
+                personalization.algorithm = field(fields, "algorithm", "");
+                personalization.global_local_accuracy =
+                    std::stod(field(fields, "personalization_global_accuracy", "0"));
+                personalization.personalized_local_accuracy =
+                    std::stod(field(fields, "personalization_personalized_accuracy", "0"));
+                personalization.global_local_loss =
+                    std::stod(field(fields, "personalization_global_loss", "0"));
+                personalization.personalized_local_loss =
+                    std::stod(field(fields, "personalization_personalized_loss", "0"));
+                personalization.sample_count =
+                    std::stoull(field(fields, "personalization_sample_count", "0"));
+                personalization.personalized_improvement =
+                    personalization.personalized_local_accuracy -
+                    personalization.global_local_accuracy;
+                personalization.personalized_model_version = static_cast<std::uint32_t>(
+                    std::stoul(field(fields, "personalization_model_version", "0")));
+                personalization.recorded_at = std::to_string(now);
+                personalization.has_personalized_model = true;
+                submission.personalization_metrics = personalization;
             }
             std::string reason;
-            const auto accepted = run.submit_client_result(
-                field(fields, "worker_id"), field(fields, "task_id"), field(fields, "lease_id"),
-                std::move(submission), now, reason
-            );
-            run.advance(now);  // opportunistically finalize the round if this was the last result needed
+            const auto accepted = run.submit_client_result(field(fields, "worker_id"),
+                                                           field(fields, "task_id"),
+                                                           field(fields, "lease_id"),
+                                                           std::move(submission),
+                                                           now,
+                                                           reason);
+            run.advance(
+                now);  // opportunistically finalize the round if this was the last result needed
             std::cout << "status=ok\n";
             std::cout << "accepted=" << (accepted ? 1 : 0) << "\n";
             std::cout << "reason=" << reason << "\n";
             print_run_snapshot(run.snapshot());
+            return 0;
+        } else if (command == "get-personalization-summary") {
+            std::cout << "status=ok\n";
+            const auto records = run.personalization_summary();
+            std::cout << "record_count=" << records.size() << "\n";
+            for (const auto& record : records) {
+                std::cout << "client_id=" << record.client_id << "\n";
+                std::cout << "round_id=" << record.round_id << "\n";
+                std::cout << "algorithm=" << record.algorithm << "\n";
+                std::cout << "global_local_accuracy=" << record.global_local_accuracy << "\n";
+                std::cout << "personalized_local_accuracy=" << record.personalized_local_accuracy
+                          << "\n";
+                std::cout << "personalized_improvement=" << record.personalized_improvement << "\n";
+                std::cout << "sample_count=" << record.sample_count << "\n";
+                std::cout << "---\n";
+            }
             return 0;
         } else {
             std::cerr << "unknown command: " << command << "\n";

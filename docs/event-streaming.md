@@ -35,7 +35,7 @@ per-run, in-order — oldest events dropped once a run's history exceeds
 `CoordinatorServiceImpl::StreamRunEvents` is a thin adapter that polls it
 in a loop until the gRPC client cancels.
 
-## The Go client bug this milestone found and fixed
+## The Go client bug this phase found and fixed
 
 `StreamRunEvents` is a genuinely long-lived server stream — it loops
 until the client disconnects, never returning on its own. The Go client
@@ -75,7 +75,7 @@ hostname) did not show this delay — ruling out both "coordinator not
 actually ready" and "generic docker-bridge-network gRPC problem." IPv6/
 DNS happy-eyeballs was checked and ruled out (`getent hosts coordinator`
 returns exactly one A record, no AAAA). Root cause not fully pinned down
-within this milestone's time budget; 8s was chosen with margin over the
+within this phase's time budget; 8s was chosen with margin over the
 observed failure/success boundary and confirmed reliable across repeated
 runs through the actual `api` container (not just the debug harness) —
 see [known-limitations.md](known-limitations.md).

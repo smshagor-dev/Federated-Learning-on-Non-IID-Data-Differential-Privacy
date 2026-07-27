@@ -9,13 +9,14 @@ fl::core::ModelManifest make_manifest() {
     return fl::core::ModelManifest{
         .model_id = "toy-model",
         .model_version = "v1",
-        .tensors = {
-            fl::core::TensorDescriptor{
-                .name = "weight",
-                .shape = {1},
-                .dtype = fl::core::DType::kFloat32,
+        .tensors =
+            {
+                fl::core::TensorDescriptor{
+                    .name = "weight",
+                    .shape = {1},
+                    .dtype = fl::core::DType::kFloat32,
+                },
             },
-        },
     };
 }
 
@@ -24,8 +25,7 @@ fl::core::ClientUpdate make_update(
     std::uint64_t sample_count,
     double delta_value,
     double control_value = 0.0,
-    fl::core::AggregationAlgorithm algorithm = fl::core::AggregationAlgorithm::kFedAvg
-) {
+    fl::core::AggregationAlgorithm algorithm = fl::core::AggregationAlgorithm::kFedAvg) {
     const auto descriptor = fl::core::TensorDescriptor{
         .name = "weight",
         .shape = {1},
@@ -78,9 +78,8 @@ int main() {
         fl::core::AggregationOptions options;
         options.run_id = "run-1";
         options.round_id = 1;
-        const auto result = aggregator->aggregate(
-            manifest, weighted_updates, options, fl::core::OptimizerState{}
-        );
+        const auto result =
+            aggregator->aggregate(manifest, weighted_updates, options, fl::core::OptimizerState{});
         std::cout << "fedavg=" << extract_weight(result.model_delta) << "\n";
     }
     {
@@ -89,9 +88,8 @@ int main() {
         options.run_id = "run-1";
         options.round_id = 1;
         options.weighting = fl::core::WeightingStrategyType::kUniform;
-        const auto result = aggregator->aggregate(
-            manifest, weighted_updates, options, fl::core::OptimizerState{}
-        );
+        const auto result =
+            aggregator->aggregate(manifest, weighted_updates, options, fl::core::OptimizerState{});
         std::cout << "fedavg_uniform=" << extract_weight(result.model_delta) << "\n";
     }
     {
@@ -101,9 +99,8 @@ int main() {
         options.round_id = 1;
         options.weighting = fl::core::WeightingStrategyType::kCappedSampleCount;
         options.contribution_cap = 2.0;
-        const auto result = aggregator->aggregate(
-            manifest, weighted_updates, options, fl::core::OptimizerState{}
-        );
+        const auto result =
+            aggregator->aggregate(manifest, weighted_updates, options, fl::core::OptimizerState{});
         std::cout << "fedavg_capped=" << extract_weight(result.model_delta) << "\n";
     }
     {
@@ -116,9 +113,8 @@ int main() {
         options.algorithm = fl::core::AggregationAlgorithm::kFedProx;
         options.run_id = "run-1";
         options.round_id = 1;
-        const auto result = aggregator->aggregate(
-            manifest, fedprox_updates, options, fl::core::OptimizerState{}
-        );
+        const auto result =
+            aggregator->aggregate(manifest, fedprox_updates, options, fl::core::OptimizerState{});
         std::cout << "fedprox=" << extract_weight(result.model_delta) << "\n";
     }
     {
@@ -133,17 +129,16 @@ int main() {
         options.round_id = 1;
         options.total_clients = 10;
         const auto result = aggregator->aggregate(
-            manifest, scaffold_algorithm_updates, options, fl::core::OptimizerState{}
-        );
+            manifest, scaffold_algorithm_updates, options, fl::core::OptimizerState{});
         std::cout << "scaffold_delta=" << extract_weight(result.model_delta) << "\n";
         std::cout << "scaffold_control=" << extract_weight(result.control_delta) << "\n";
     }
 
     for (const auto algorithm : {
-            fl::core::AggregationAlgorithm::kFedAdagrad,
-            fl::core::AggregationAlgorithm::kFedAdam,
-            fl::core::AggregationAlgorithm::kFedYogi,
-        }) {
+             fl::core::AggregationAlgorithm::kFedAdagrad,
+             fl::core::AggregationAlgorithm::kFedAdam,
+             fl::core::AggregationAlgorithm::kFedYogi,
+         }) {
         auto aggregator = fl::core::make_aggregator(algorithm);
         auto algorithm_updates_one = opt_round_one;
         auto algorithm_updates_two = opt_round_two;
@@ -164,9 +159,12 @@ int main() {
 
         auto state = fl::core::OptimizerState{};
         auto round_one = aggregator->aggregate(manifest, algorithm_updates_one, options, state);
-        auto round_two = aggregator->aggregate(manifest, algorithm_updates_two, options, round_one.optimizer_state);
-        std::cout << fl::core::to_string(algorithm) << "_round1=" << extract_weight(round_one.model_delta) << "\n";
-        std::cout << fl::core::to_string(algorithm) << "_round2=" << extract_weight(round_two.model_delta) << "\n";
+        auto round_two = aggregator->aggregate(
+            manifest, algorithm_updates_two, options, round_one.optimizer_state);
+        std::cout << fl::core::to_string(algorithm)
+                  << "_round1=" << extract_weight(round_one.model_delta) << "\n";
+        std::cout << fl::core::to_string(algorithm)
+                  << "_round2=" << extract_weight(round_two.model_delta) << "\n";
     }
 
     return 0;

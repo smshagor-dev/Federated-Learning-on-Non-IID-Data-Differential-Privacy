@@ -118,13 +118,14 @@ export function RunDashboard({ data }: { data: RunDashboardData | undefined }) {
           </ul>
         </article>
         <article className="card">
-          <h2 className="card-title">Privacy Center</h2>
+          <h2 className="card-title">Privacy mode</h2>
           <ul className="list">
-            <li>Mode: {String(run.config.privacy_mode ?? "pending live telemetry")}</li>
-            <li>Epsilon trend: {metrics.privacy_budget_percent > 60 ? "elevated" : "controlled"}</li>
-            <li>Delta: 1e-5</li>
-            <li>Clipping controller: adaptive shell awaiting worker stream</li>
+            <li>Configured mode: {String(run.config.privacy_mode ?? "not configured")}</li>
           </ul>
+          <div className="muted" style={{ marginTop: 8 }}>
+            Real epsilon/delta accounting per mechanism is in the Privacy Center panel below — never estimated or
+            guessed here.
+          </div>
         </article>
         <article className="card">
           <h2 className="card-title">Security and Audit Center</h2>

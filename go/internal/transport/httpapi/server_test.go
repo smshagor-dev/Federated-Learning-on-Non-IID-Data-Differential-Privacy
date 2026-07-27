@@ -39,6 +39,63 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+// Security Runtime Completion and Release Evidence slice: the web app
+// (http://localhost:3000) and this API (http://localhost:8080) are
+// different origins, so every client-side fetch from web/lib/api.ts and
+// web/lib/security-api.ts is cross-origin. Before withCORS existed,
+// there was no Access-Control-* handling anywhere in this server --
+// caught by this slice's live Playwright browser-suite run, where every
+// page needing real fetched data failed with no server-side error at
+// all (the browser silently blocks reading the response), while the
+// exact same endpoint always worked from curl/Go's own httptest-based
+// tests, neither of which enforce CORS the way a real browser does.
+func TestCORSPreflightRequestReturnsNoContentWithoutInvokingTheHandler(t *testing.T) {
+	server := testServer()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodOptions, "/api/v1/security/overview", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	request.Header.Set("Access-Control-Request-Method", "GET")
+	request.Header.Set("Access-Control-Request-Headers", "authorization")
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for an OPTIONS preflight, got %d", recorder.Code)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:3000" {
+		t.Fatalf("expected Access-Control-Allow-Origin to reflect the request Origin, got %q", got)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Authorization") {
+		t.Fatalf("expected Access-Control-Allow-Headers to include Authorization, got %q", got)
+	}
+}
+
+func TestCORSHeadersPresentOnARealCrossOriginResponse(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	testServer().Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:3000" {
+		t.Fatalf("expected Access-Control-Allow-Origin to reflect the request Origin on a real response too, got %q", got)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Fatalf("expected no Access-Control-Allow-Credentials (Bearer-token auth, never cookies), got %q", got)
+	}
+}
+
+func TestCORSNoOriginHeaderMeansNoAllowOriginHeader(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	testServer().Handler().ServeHTTP(recorder, request)
+
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("expected no Access-Control-Allow-Origin for a same-origin/non-browser request with no Origin header, got %q", got)
+	}
+}
+
 func TestMetricsEndpoint(t *testing.T) {
 	server := testServer()
 	// One request first so the counter is non-zero and the exposition

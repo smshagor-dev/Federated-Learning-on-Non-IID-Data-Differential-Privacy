@@ -31,10 +31,13 @@ std::string hash_to_hex(std::uint64_t hash) {
 }
 
 fl::core::TensorDescriptor descriptor() {
-    return fl::core::TensorDescriptor{.name = "weight", .shape = {2}, .dtype = fl::core::DType::kFloat32};
+    return fl::core::TensorDescriptor{
+        .name = "weight", .shape = {2}, .dtype = fl::core::DType::kFloat32};
 }
 
-fl::coordinator::ClientAlgorithmState make_state(const std::string& run_id, const std::string& client_id, const std::string& model_version) {
+fl::coordinator::ClientAlgorithmState make_state(const std::string& run_id,
+                                                 const std::string& client_id,
+                                                 const std::string& model_version) {
     fl::coordinator::ClientAlgorithmState state;
     state.run_id = run_id;
     state.client_id = client_id;
@@ -67,7 +70,8 @@ void run_scaffold_client_state_tests(const std::string& scratch_dir) {
         store.save("run-1", "client-a", state);
         const auto loaded = store.load("run-1", "client-a", "v0");
         check(loaded.has_value(), "a saved client state is found on load");
-        check(loaded->control_variate.at("weight").values() == state.control_variate.at("weight").values(),
+        check(loaded->control_variate.at("weight").values() ==
+                  state.control_variate.at("weight").values(),
               "loaded control variate values match what was saved");
 
         // Overwrite (round 2) and confirm the new value wins.
@@ -86,8 +90,7 @@ void run_scaffold_client_state_tests(const std::string& scratch_dir) {
         store.save("run-1", "client-b", make_state("run-1", "client-b", "v1"));
         expect_throw(
             [&]() { (void)store.load("run-1", "client-b", "v2"); },
-            "loading with a mismatched model_version throws StaleClientAlgorithmStateError"
-        );
+            "loading with a mismatched model_version throws StaleClientAlgorithmStateError");
         bool correct_type = false;
         try {
             (void)store.load("run-1", "client-b", "v2");
@@ -95,18 +98,19 @@ void run_scaffold_client_state_tests(const std::string& scratch_dir) {
             correct_type = true;
         } catch (...) {
         }
-        check(correct_type, "the stale-version rejection is specifically StaleClientAlgorithmStateError");
+        check(correct_type,
+              "the stale-version rejection is specifically StaleClientAlgorithmStateError");
     }
 
     {
         // Wrong client: manually place a state file saved under one
         // client_id at another client's path.
         const auto wrong_client_state = make_state("run-1", "client-c", "v0");
-        store.save("run-1", "client-d", wrong_client_state);  // path is client-d's, contents say client-c
+        store.save(
+            "run-1", "client-d", wrong_client_state);  // path is client-d's, contents say client-c
         expect_throw(
             [&]() { (void)store.load("run-1", "client-d", "v0"); },
-            "a state file whose identity doesn't match the requested client_id is rejected"
-        );
+            "a state file whose identity doesn't match the requested client_id is rejected");
     }
 
     {
@@ -121,10 +125,8 @@ void run_scaffold_client_state_tests(const std::string& scratch_dir) {
             file.seekp(5);
             file.put(original == 'a' ? 'b' : 'a');
         }
-        expect_throw(
-            [&]() { (void)store.load("run-1", "client-e", "v0"); },
-            "a checksum-corrupted client state file is rejected"
-        );
+        expect_throw([&]() { (void)store.load("run-1", "client-e", "v0"); },
+                     "a checksum-corrupted client state file is rejected");
     }
 
     {
@@ -135,15 +137,15 @@ void run_scaffold_client_state_tests(const std::string& scratch_dir) {
         const auto path = store.path_for("run-1", "client-f");
         std::filesystem::create_directories(std::filesystem::path(path).parent_path());
         const std::string body =
-            "schema_version=1\nrun_id=run-1\nclient_id=client-f\nalgorithm=scaffold\nmodel_version=v0\n"
-            "control_variate_count=1\ncontrol_variate_tensor=weight|f32|2|0.1\n";  // shape=2 but only 1 value
+            "schema_version=1\nrun_id=run-1\nclient_id=client-f\nalgorithm=scaffold\nmodel_version="
+            "v0\n"
+            "control_variate_count=1\ncontrol_variate_tensor=weight|f32|2|0.1\n";  // shape=2 but
+                                                                                   // only 1 value
         std::ofstream file(path, std::ios::binary | std::ios::trunc);
         file << body << "checksum=" << hash_to_hex(fnv1a_hash(body)) << "\n";
         file.close();
-        expect_throw(
-            [&]() { (void)store.load("run-1", "client-f", "v0"); },
-            "a shape-inconsistent (but checksum-valid) client state file is rejected"
-        );
+        expect_throw([&]() { (void)store.load("run-1", "client-f", "v0"); },
+                     "a shape-inconsistent (but checksum-valid) client state file is rejected");
     }
 }
 

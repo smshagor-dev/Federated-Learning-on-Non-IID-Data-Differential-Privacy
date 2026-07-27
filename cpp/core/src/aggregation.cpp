@@ -10,12 +10,10 @@ namespace fl::core {
 
 namespace {
 
-void validate_manifest_against_update(
-    const ModelManifest& manifest,
-    const ClientUpdate& update,
-    const AggregationOptions& options,
-    bool require_control
-) {
+void validate_manifest_against_update(const ModelManifest& manifest,
+                                      const ClientUpdate& update,
+                                      const AggregationOptions& options,
+                                      bool require_control) {
     if (!options.run_id.empty() && update.run_id != options.run_id) {
         throw std::invalid_argument("client update run_id does not match context");
     }
@@ -71,11 +69,9 @@ TensorCollection make_zero_collection(const ModelManifest& manifest) {
     return collection;
 }
 
-TensorCollection weighted_average(
-    const ModelManifest& manifest,
-    const std::vector<ClientUpdate>& updates,
-    const std::vector<double>& weights
-) {
+TensorCollection weighted_average(const ModelManifest& manifest,
+                                  const std::vector<ClientUpdate>& updates,
+                                  const std::vector<double>& weights) {
     if (updates.empty()) {
         throw std::invalid_argument("updates must not be empty");
     }
@@ -114,11 +110,9 @@ std::vector<double> normalize_weights(std::vector<double> raw) {
 }
 
 class SampleCountWeighting final : public WeightingStrategy {
-public:
-    std::vector<double> weights(
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions&
-    ) const override {
+  public:
+    std::vector<double> weights(const std::vector<ClientUpdate>& updates,
+                                const AggregationOptions&) const override {
         std::vector<double> raw;
         raw.reserve(updates.size());
         for (const auto& update : updates) {
@@ -131,11 +125,9 @@ public:
 };
 
 class UniformWeighting final : public WeightingStrategy {
-public:
-    std::vector<double> weights(
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions&
-    ) const override {
+  public:
+    std::vector<double> weights(const std::vector<ClientUpdate>& updates,
+                                const AggregationOptions&) const override {
         if (updates.empty()) {
             throw std::invalid_argument("updates must not be empty");
         }
@@ -146,21 +138,17 @@ public:
 };
 
 class CappedSampleCountWeighting final : public WeightingStrategy {
-public:
-    std::vector<double> weights(
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions& options
-    ) const override {
+  public:
+    std::vector<double> weights(const std::vector<ClientUpdate>& updates,
+                                const AggregationOptions& options) const override {
         if (options.contribution_cap <= 0.0) {
             throw std::invalid_argument("contribution cap must be positive");
         }
         std::vector<double> raw;
         raw.reserve(updates.size());
         for (const auto& update : updates) {
-            raw.push_back(std::min(
-                static_cast<double>(update.sample_count),
-                options.contribution_cap
-            ));
+            raw.push_back(
+                std::min(static_cast<double>(update.sample_count), options.contribution_cap));
         }
         return normalize_weights(std::move(raw));
     }
@@ -169,11 +157,9 @@ public:
 };
 
 class NormalizedBoundedWeighting final : public WeightingStrategy {
-public:
-    std::vector<double> weights(
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions& options
-    ) const override {
+  public:
+    std::vector<double> weights(const std::vector<ClientUpdate>& updates,
+                                const AggregationOptions& options) const override {
         if (options.minimum_weight < 0.0 || options.maximum_weight <= 0.0 ||
             options.minimum_weight > options.maximum_weight) {
             throw std::invalid_argument("invalid normalized bounded weight range");
@@ -204,21 +190,19 @@ std::unique_ptr<WeightingStrategy> make_weighting_strategy(WeightingStrategyType
 }
 
 class WeightedAggregator final : public Aggregator {
-public:
-    AggregationResult aggregate(
-        const ModelManifest& manifest,
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions& options,
-        const OptimizerState& previous_state
-    ) const override {
+  public:
+    AggregationResult aggregate(const ModelManifest& manifest,
+                                const std::vector<ClientUpdate>& updates,
+                                const AggregationOptions& options,
+                                const OptimizerState& previous_state) const override {
         UpdateValidator().validate_cohort(manifest, updates, options, false);
         auto weighting = make_weighting_strategy(options.weighting);
         AggregationResult result;
-        result.model_delta = weighted_average(manifest, updates, weighting->weights(updates, options));
+        result.model_delta =
+            weighted_average(manifest, updates, weighting->weights(updates, options));
         for (const auto& descriptor : manifest.tensors) {
             result.model_delta.assign(
-                scale(result.model_delta.at(descriptor.name), options.server_lr)
-            );
+                scale(result.model_delta.at(descriptor.name), options.server_lr));
         }
         result.optimizer_state = previous_state;
         return result;
@@ -226,21 +210,19 @@ public:
 };
 
 class ScaffoldAggregator final : public Aggregator {
-public:
-    AggregationResult aggregate(
-        const ModelManifest& manifest,
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions& options,
-        const OptimizerState& previous_state
-    ) const override {
+  public:
+    AggregationResult aggregate(const ModelManifest& manifest,
+                                const std::vector<ClientUpdate>& updates,
+                                const AggregationOptions& options,
+                                const OptimizerState& previous_state) const override {
         UpdateValidator().validate_cohort(manifest, updates, options, true);
         auto weighting = make_weighting_strategy(WeightingStrategyType::kUniform);
         AggregationResult result;
-        result.model_delta = weighted_average(manifest, updates, weighting->weights(updates, options));
+        result.model_delta =
+            weighted_average(manifest, updates, weighting->weights(updates, options));
         for (const auto& descriptor : manifest.tensors) {
             result.model_delta.assign(
-                scale(result.model_delta.at(descriptor.name), options.server_lr)
-            );
+                scale(result.model_delta.at(descriptor.name), options.server_lr));
         }
 
         result.control_delta = make_zero_collection(manifest);
@@ -253,14 +235,11 @@ public:
                 }
                 return remapped;
             }(),
-            weighting->weights(updates, options)
-        );
-        const auto control_scale = static_cast<double>(updates.size()) /
-            static_cast<double>(options.total_clients);
+            weighting->weights(updates, options));
+        const auto control_scale =
+            static_cast<double>(updates.size()) / static_cast<double>(options.total_clients);
         for (const auto& descriptor : manifest.tensors) {
-            result.control_delta.assign(
-                scale(control_average.at(descriptor.name), control_scale)
-            );
+            result.control_delta.assign(scale(control_average.at(descriptor.name), control_scale));
         }
         result.optimizer_state = previous_state;
         return result;
@@ -277,49 +256,39 @@ struct FedOptStepInputs {
     std::uint64_t step;
 };
 
-FedOptStepInputs prepare_fedopt_step(
-    const ModelManifest& manifest,
-    const OptimizerState& previous_state
-) {
+FedOptStepInputs prepare_fedopt_step(const ModelManifest& manifest,
+                                     const OptimizerState& previous_state) {
     FedOptStepInputs inputs;
-    inputs.first_moment = previous_state.first_moment.empty()
-        ? make_zero_collection(manifest)
-        : previous_state.first_moment;
-    inputs.second_moment = previous_state.second_moment.empty()
-        ? make_zero_collection(manifest)
-        : previous_state.second_moment;
+    inputs.first_moment = previous_state.first_moment.empty() ? make_zero_collection(manifest)
+                                                              : previous_state.first_moment;
+    inputs.second_moment = previous_state.second_moment.empty() ? make_zero_collection(manifest)
+                                                                : previous_state.second_moment;
     inputs.step = previous_state.step + 1;
     return inputs;
 }
 
 class FedAdagradOptimizer final : public ServerOptimizer {
-public:
-    OptimizerState apply(
-        const ModelManifest& manifest,
-        const TensorCollection& aggregated_delta,
-        const OptimizerState& previous_state,
-        const AggregationOptions& options,
-        TensorCollection& out_model_delta
-    ) const override {
+  public:
+    OptimizerState apply(const ModelManifest& manifest,
+                         const TensorCollection& aggregated_delta,
+                         const OptimizerState& previous_state,
+                         const AggregationOptions& options,
+                         TensorCollection& out_model_delta) const override {
         auto step_inputs = prepare_fedopt_step(manifest, previous_state);
         out_model_delta = make_zero_collection(manifest);
 
         for (const auto& descriptor : manifest.tensors) {
             const auto& delta = aggregated_delta.at(descriptor.name);
-            step_inputs.first_moment.assign(add(
-                scale(step_inputs.first_moment.at(descriptor.name), options.beta1),
-                scale(delta, 1.0 - options.beta1)
-            ));
-            step_inputs.second_moment.assign(add(
-                step_inputs.second_moment.at(descriptor.name), hadamard_square(delta)
-            ));
+            step_inputs.first_moment.assign(
+                add(scale(step_inputs.first_moment.at(descriptor.name), options.beta1),
+                    scale(delta, 1.0 - options.beta1)));
+            step_inputs.second_moment.assign(
+                add(step_inputs.second_moment.at(descriptor.name), hadamard_square(delta)));
 
             const auto& m_hat = step_inputs.first_moment.at(descriptor.name);
             const auto& v_hat = step_inputs.second_moment.at(descriptor.name);
             const auto denom = add_scalar(hadamard_sqrt(v_hat), options.tau);
-            out_model_delta.assign(
-                scale(divide_elementwise(m_hat, denom), options.server_lr)
-            );
+            out_model_delta.assign(scale(divide_elementwise(m_hat, denom), options.server_lr));
         }
 
         OptimizerState result;
@@ -333,40 +302,32 @@ public:
 };
 
 class FedAdamOptimizer final : public ServerOptimizer {
-public:
-    OptimizerState apply(
-        const ModelManifest& manifest,
-        const TensorCollection& aggregated_delta,
-        const OptimizerState& previous_state,
-        const AggregationOptions& options,
-        TensorCollection& out_model_delta
-    ) const override {
+  public:
+    OptimizerState apply(const ModelManifest& manifest,
+                         const TensorCollection& aggregated_delta,
+                         const OptimizerState& previous_state,
+                         const AggregationOptions& options,
+                         TensorCollection& out_model_delta) const override {
         auto step_inputs = prepare_fedopt_step(manifest, previous_state);
         out_model_delta = make_zero_collection(manifest);
 
         for (const auto& descriptor : manifest.tensors) {
             const auto& delta = aggregated_delta.at(descriptor.name);
-            step_inputs.first_moment.assign(add(
-                scale(step_inputs.first_moment.at(descriptor.name), options.beta1),
-                scale(delta, 1.0 - options.beta1)
-            ));
-            step_inputs.second_moment.assign(add(
-                scale(step_inputs.second_moment.at(descriptor.name), options.beta2),
-                scale(hadamard_square(delta), 1.0 - options.beta2)
-            ));
+            step_inputs.first_moment.assign(
+                add(scale(step_inputs.first_moment.at(descriptor.name), options.beta1),
+                    scale(delta, 1.0 - options.beta1)));
+            step_inputs.second_moment.assign(
+                add(scale(step_inputs.second_moment.at(descriptor.name), options.beta2),
+                    scale(hadamard_square(delta), 1.0 - options.beta2)));
 
-            const auto m_hat = divide(
-                step_inputs.first_moment.at(descriptor.name),
-                1.0 - std::pow(options.beta1, static_cast<int>(step_inputs.step))
-            );
-            const auto v_hat = divide(
-                step_inputs.second_moment.at(descriptor.name),
-                1.0 - std::pow(options.beta2, static_cast<int>(step_inputs.step))
-            );
+            const auto m_hat =
+                divide(step_inputs.first_moment.at(descriptor.name),
+                       1.0 - std::pow(options.beta1, static_cast<int>(step_inputs.step)));
+            const auto v_hat =
+                divide(step_inputs.second_moment.at(descriptor.name),
+                       1.0 - std::pow(options.beta2, static_cast<int>(step_inputs.step)));
             const auto denom = add_scalar(hadamard_sqrt(v_hat), options.tau);
-            out_model_delta.assign(
-                scale(divide_elementwise(m_hat, denom), options.server_lr)
-            );
+            out_model_delta.assign(scale(divide_elementwise(m_hat, denom), options.server_lr));
         }
 
         OptimizerState result;
@@ -380,23 +341,20 @@ public:
 };
 
 class FedYogiOptimizer final : public ServerOptimizer {
-public:
-    OptimizerState apply(
-        const ModelManifest& manifest,
-        const TensorCollection& aggregated_delta,
-        const OptimizerState& previous_state,
-        const AggregationOptions& options,
-        TensorCollection& out_model_delta
-    ) const override {
+  public:
+    OptimizerState apply(const ModelManifest& manifest,
+                         const TensorCollection& aggregated_delta,
+                         const OptimizerState& previous_state,
+                         const AggregationOptions& options,
+                         TensorCollection& out_model_delta) const override {
         auto step_inputs = prepare_fedopt_step(manifest, previous_state);
         out_model_delta = make_zero_collection(manifest);
 
         for (const auto& descriptor : manifest.tensors) {
             const auto& delta = aggregated_delta.at(descriptor.name);
-            step_inputs.first_moment.assign(add(
-                scale(step_inputs.first_moment.at(descriptor.name), options.beta1),
-                scale(delta, 1.0 - options.beta1)
-            ));
+            step_inputs.first_moment.assign(
+                add(scale(step_inputs.first_moment.at(descriptor.name), options.beta1),
+                    scale(delta, 1.0 - options.beta1)));
 
             // Yogi's second moment moves toward grad^2 by a signed step
             // rather than Adam's convex combination, which keeps it more
@@ -406,25 +364,23 @@ public:
             std::vector<double> values;
             values.reserve(grad_sq.values().size());
             for (std::size_t index = 0; index < grad_sq.values().size(); ++index) {
-                const auto previous_v = step_inputs.second_moment.at(descriptor.name).values()[index];
+                const auto previous_v =
+                    step_inputs.second_moment.at(descriptor.name).values()[index];
                 const auto current = grad_sq.values()[index];
                 const auto sign = ((previous_v - current) > 0.0) - ((previous_v - current) < 0.0);
                 values.push_back(previous_v - (1.0 - options.beta2) * sign * current);
             }
-            step_inputs.second_moment.assign(TensorBuffer(std::move(descriptor_copy), std::move(values)));
+            step_inputs.second_moment.assign(
+                TensorBuffer(std::move(descriptor_copy), std::move(values)));
 
-            const auto m_hat = divide(
-                step_inputs.first_moment.at(descriptor.name),
-                1.0 - std::pow(options.beta1, static_cast<int>(step_inputs.step))
-            );
-            const auto v_hat = divide(
-                step_inputs.second_moment.at(descriptor.name),
-                1.0 - std::pow(options.beta2, static_cast<int>(step_inputs.step))
-            );
+            const auto m_hat =
+                divide(step_inputs.first_moment.at(descriptor.name),
+                       1.0 - std::pow(options.beta1, static_cast<int>(step_inputs.step)));
+            const auto v_hat =
+                divide(step_inputs.second_moment.at(descriptor.name),
+                       1.0 - std::pow(options.beta2, static_cast<int>(step_inputs.step)));
             const auto denom = add_scalar(hadamard_sqrt(v_hat), options.tau);
-            out_model_delta.assign(
-                scale(divide_elementwise(m_hat, denom), options.server_lr)
-            );
+            out_model_delta.assign(scale(divide_elementwise(m_hat, denom), options.server_lr));
         }
 
         OptimizerState result;
@@ -438,16 +394,14 @@ public:
 };
 
 class FedOptAggregator final : public Aggregator {
-public:
+  public:
     explicit FedOptAggregator(AggregationAlgorithm algorithm)
         : algorithm_(algorithm), optimizer_(make_server_optimizer(algorithm)) {}
 
-    AggregationResult aggregate(
-        const ModelManifest& manifest,
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions& options,
-        const OptimizerState& previous_state
-    ) const override {
+    AggregationResult aggregate(const ModelManifest& manifest,
+                                const std::vector<ClientUpdate>& updates,
+                                const AggregationOptions& options,
+                                const OptimizerState& previous_state) const override {
         UpdateValidator().validate_cohort(manifest, updates, options, false);
         if (options.server_lr <= 0.0) {
             throw std::invalid_argument("server_lr must be positive");
@@ -457,14 +411,12 @@ public:
         }
 
         auto weighting = make_weighting_strategy(options.weighting);
-        const auto aggregate_delta = weighted_average(
-            manifest, updates, weighting->weights(updates, options)
-        );
+        const auto aggregate_delta =
+            weighted_average(manifest, updates, weighting->weights(updates, options));
 
         TensorCollection model_delta;
-        auto optimizer_state = optimizer_->apply(
-            manifest, aggregate_delta, previous_state, options, model_delta
-        );
+        auto optimizer_state =
+            optimizer_->apply(manifest, aggregate_delta, previous_state, options, model_delta);
 
         AggregationResult result;
         result.model_delta = std::move(model_delta);
@@ -472,7 +424,7 @@ public:
         return result;
     }
 
-private:
+  private:
     AggregationAlgorithm algorithm_;
     std::unique_ptr<ServerOptimizer> optimizer_;
 };
@@ -492,12 +444,10 @@ std::unique_ptr<ServerOptimizer> make_server_optimizer(AggregationAlgorithm algo
     }
 }
 
-void UpdateValidator::validate_cohort(
-    const ModelManifest& manifest,
-    const std::vector<ClientUpdate>& updates,
-    const AggregationOptions& options,
-    bool require_control
-) const {
+void UpdateValidator::validate_cohort(const ModelManifest& manifest,
+                                      const std::vector<ClientUpdate>& updates,
+                                      const AggregationOptions& options,
+                                      bool require_control) const {
     if (manifest.model_id.empty() || manifest.model_version.empty()) {
         throw std::invalid_argument("model manifest identity must not be empty");
     }
@@ -521,9 +471,7 @@ void UpdateValidator::validate_cohort(
     }
 }
 
-std::unique_ptr<Aggregator> AggregatorRegistry::create(
-    AggregationAlgorithm algorithm
-) const {
+std::unique_ptr<Aggregator> AggregatorRegistry::create(AggregationAlgorithm algorithm) const {
     return make_aggregator(algorithm);
 }
 
@@ -531,6 +479,12 @@ std::unique_ptr<Aggregator> make_aggregator(AggregationAlgorithm algorithm) {
     switch (algorithm) {
         case AggregationAlgorithm::kFedAvg:
         case AggregationAlgorithm::kFedProx:
+        // the Algorithm Expansion phase: FedSAM/Ditto/Per-FedAvg all aggregate their global
+        // update the same way FedAvg does — see aggregation.hpp's comment
+        // on these enum values and docs/aggregation-manifests.md.
+        case AggregationAlgorithm::kFedSam:
+        case AggregationAlgorithm::kDitto:
+        case AggregationAlgorithm::kPerFedAvg:
             return std::make_unique<WeightedAggregator>();
         case AggregationAlgorithm::kScaffold:
             return std::make_unique<ScaffoldAggregator>();
@@ -557,6 +511,12 @@ std::string to_string(AggregationAlgorithm algorithm) {
             return "fedadam";
         case AggregationAlgorithm::kFedYogi:
             return "fedyogi";
+        case AggregationAlgorithm::kFedSam:
+            return "fedsam";
+        case AggregationAlgorithm::kDitto:
+            return "ditto";
+        case AggregationAlgorithm::kPerFedAvg:
+            return "per_fedavg";
         default:
             return "unknown";
     }

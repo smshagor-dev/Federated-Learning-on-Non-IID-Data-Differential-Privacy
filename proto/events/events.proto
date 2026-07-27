@@ -13,7 +13,7 @@ message CoordinatorEvent {
   string trace_id = 6;
   string payload_json = 7;
 
-  // Milestone 3 additions: existing fields (1-7) are unchanged. These are
+  // the Coordinator Runtime phase additions: existing fields (1-7) are unchanged. These are
   // additive so old consumers that only read event_type/payload_json keep
   // working; new consumers get structured fields instead of parsing JSON.
   string client_id = 8;

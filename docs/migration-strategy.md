@@ -12,9 +12,9 @@ Evolve the current Python simulator into a production-oriented federated learnin
 - Validate parity before changing control ownership.
 - Keep algorithm behavior regression-tested with deterministic fixtures.
 
-## Milestone Sequence
+## Phase Sequence
 
-### Milestone 1
+### Foundation
 
 - Audit and preserve the legacy system.
 - Create monorepo structure.
@@ -23,24 +23,24 @@ Evolve the current Python simulator into a production-oriented federated learnin
 - Add build foundations for C++, Python, Go, and web.
 - Add local infrastructure scaffolding.
 
-### Milestone 2
+### Aggregation Core
 
 - Implement C++ tensor and aggregation core.
 - Add golden compatibility tests against legacy Python aggregation behavior.
 
-### Milestone 3
+### Coordinator Runtime
 
 - Add C++ coordinator and Python worker RPC path.
 - Keep legacy CLI available while new coordinator is validated.
 
-### Milestone 4+
+### Algorithm Expansion and beyond
 
 - Add advanced algorithms, privacy upgrades, service APIs, dashboard, and observability incrementally behind new interfaces.
 
 ## Preservation Plan
 
 - The current prototype is copied into `legacy/python-research-studio/`.
-- The root-level prototype remains available during Milestone 1 for compatibility.
+- The root-level prototype remains available during the Foundation phase for compatibility.
 - New services are scaffolded under `cpp/`, `python/`, `go/`, `web/`, and `proto/`.
 
 ## Compatibility Targets
@@ -63,7 +63,7 @@ Evolve the current Python simulator into a production-oriented federated learnin
 
 ## Deferred Work
 
-The following are intentionally not implemented in Milestone 1:
+The following are intentionally not implemented in the Foundation phase:
 
 - FedSAM
 - Ditto
@@ -75,7 +75,7 @@ The following are intentionally not implemented in Milestone 1:
 - Prometheus/Grafana dashboards
 - Kubernetes deployment logic
 
-## Success Criteria for Milestone 1
+## Success Criteria for the Foundation phase
 
 - Legacy app preserved
 - Audit docs written

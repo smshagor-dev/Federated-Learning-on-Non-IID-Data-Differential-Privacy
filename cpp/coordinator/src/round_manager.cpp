@@ -5,12 +5,10 @@
 
 namespace fl::coordinator {
 
-std::vector<std::string> select_cohort(
-    const std::vector<std::string>& all_client_ids,
-    std::uint64_t round_id,
-    std::uint64_t seed,
-    std::uint32_t target_clients_per_round
-) {
+std::vector<std::string> select_cohort(const std::vector<std::string>& all_client_ids,
+                                       std::uint64_t round_id,
+                                       std::uint64_t seed,
+                                       std::uint32_t target_clients_per_round) {
     std::vector<std::string> pool = all_client_ids;
     std::sort(pool.begin(), pool.end());  // canonicalize input order first
 
@@ -21,7 +19,8 @@ std::vector<std::string> select_cohort(
     std::shuffle(pool.begin(), pool.end(), rng);
 
     const auto count = std::min<std::size_t>(target_clients_per_round, pool.size());
-    return std::vector<std::string>(pool.begin(), pool.begin() + static_cast<std::ptrdiff_t>(count));
+    return std::vector<std::string>(pool.begin(),
+                                    pool.begin() + static_cast<std::ptrdiff_t>(count));
 }
 
 }  // namespace fl::coordinator

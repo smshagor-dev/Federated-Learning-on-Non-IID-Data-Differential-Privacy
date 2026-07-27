@@ -1,9 +1,9 @@
 """Deterministic synthetic dataset access for the worker.
 
-Milestone 3 scope is integration correctness, not real-dataset training:
-this module provides a synthetic image dataset keyed by a
-(dataset_id, client_id, seed) partition manifest, so tests never require
-a download (per the task's explicit "do not require downloads in
+Coordinator Runtime phase scope is integration correctness, not
+real-dataset training: this module provides a synthetic image dataset
+keyed by a (dataset_id, client_id, seed) partition manifest, so tests
+never require a download (per the task's explicit "do not require downloads in
 automated tests" instruction). Real MNIST/CIFAR-10 loading is a natural
 follow-up using the same interface — see docs/known-limitations.md.
 """
@@ -51,7 +51,7 @@ class PartitionManifest:
     image_size: int = 32
 
 
-class SyntheticImageDataset(Dataset):
+class SyntheticImageDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
     """Deterministic, seeded synthetic image/label pairs.
 
     Given the same PartitionManifest, always produces the same tensors —
@@ -81,7 +81,9 @@ class SyntheticImageDataset(Dataset):
         return self._data[index], self._targets[index]
 
 
-def load_partition(manifest: PartitionManifest) -> tuple[Dataset, list[int]]:
+def load_partition(
+    manifest: PartitionManifest,
+) -> tuple[Dataset[tuple[torch.Tensor, torch.Tensor]], list[int]]:
     """Returns (dataset, indices) matching federated.client.Client's constructor."""
     dataset = SyntheticImageDataset(manifest)
     return dataset, list(range(manifest.sample_count))

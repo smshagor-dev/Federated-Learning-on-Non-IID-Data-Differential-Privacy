@@ -11,13 +11,14 @@ fl::core::ModelManifest make_manifest() {
     return fl::core::ModelManifest{
         .model_id = "toy-model",
         .model_version = "v3",
-        .tensors = {
-            fl::core::TensorDescriptor{
-                .name = "weight",
-                .shape = {2},
-                .dtype = fl::core::DType::kFloat32,
+        .tensors =
+            {
+                fl::core::TensorDescriptor{
+                    .name = "weight",
+                    .shape = {2},
+                    .dtype = fl::core::DType::kFloat32,
+                },
             },
-        },
     };
 }
 
@@ -29,14 +30,10 @@ fl::core::AggregatorCheckpoint make_checkpoint(const fl::core::ModelManifest& ma
     checkpoint.manifest_checksum = fl::core::compute_manifest_checksum(manifest);
     checkpoint.optimizer_state.step = 7;
     checkpoint.optimizer_state.first_moment.insert(
-        fl::core::TensorBuffer(manifest.tensors[0], {0.5, -0.25})
-    );
+        fl::core::TensorBuffer(manifest.tensors[0], {0.5, -0.25}));
     checkpoint.optimizer_state.second_moment.insert(
-        fl::core::TensorBuffer(manifest.tensors[0], {0.1, 0.2})
-    );
-    checkpoint.scaffold_control.insert(
-        fl::core::TensorBuffer(manifest.tensors[0], {0.0, 0.0})
-    );
+        fl::core::TensorBuffer(manifest.tensors[0], {0.1, 0.2}));
+    checkpoint.scaffold_control.insert(fl::core::TensorBuffer(manifest.tensors[0], {0.0, 0.0}));
     return checkpoint;
 }
 
@@ -61,32 +58,32 @@ int main(int argc, char** argv) {
         const auto restored = fl::core::AggregatorCheckpointStore::deserialize(payload);
         require(restored.algorithm == checkpoint.algorithm, "algorithm round trip", failures);
         require(restored.weighting == checkpoint.weighting, "weighting round trip", failures);
-        require(restored.model_version == checkpoint.model_version, "model_version round trip", failures);
-        require(restored.manifest_checksum == checkpoint.manifest_checksum, "manifest_checksum round trip", failures);
-        require(restored.optimizer_state.step == checkpoint.optimizer_state.step, "step round trip", failures);
-        require(
-            restored.optimizer_state.first_moment.at("weight").values() ==
-                checkpoint.optimizer_state.first_moment.at("weight").values(),
-            "first_moment round trip",
-            failures
-        );
-        require(
-            restored.optimizer_state.second_moment.at("weight").values() ==
-                checkpoint.optimizer_state.second_moment.at("weight").values(),
-            "second_moment round trip",
-            failures
-        );
+        require(restored.model_version == checkpoint.model_version,
+                "model_version round trip",
+                failures);
+        require(restored.manifest_checksum == checkpoint.manifest_checksum,
+                "manifest_checksum round trip",
+                failures);
+        require(restored.optimizer_state.step == checkpoint.optimizer_state.step,
+                "step round trip",
+                failures);
+        require(restored.optimizer_state.first_moment.at("weight").values() ==
+                    checkpoint.optimizer_state.first_moment.at("weight").values(),
+                "first_moment round trip",
+                failures);
+        require(restored.optimizer_state.second_moment.at("weight").values() ==
+                    checkpoint.optimizer_state.second_moment.at("weight").values(),
+                "second_moment round trip",
+                failures);
     }
 
     // Manifest checksum must change if the manifest changes.
     {
         auto other_manifest = manifest;
         other_manifest.model_version = "v4";
-        require(
-            fl::core::compute_manifest_checksum(other_manifest) != checkpoint.manifest_checksum,
-            "manifest checksum differs for different manifests",
-            failures
-        );
+        require(fl::core::compute_manifest_checksum(other_manifest) != checkpoint.manifest_checksum,
+                "manifest checksum differs for different manifests",
+                failures);
     }
 
     // Checksum tampering must be rejected.
@@ -129,7 +126,7 @@ int main(int argc, char** argv) {
         } catch (const fl::core::CheckpointCorruptionError& error) {
             const std::string message = error.what();
             rejected_for_schema = message.find("schema") != std::string::npos ||
-                message.find("checksum") != std::string::npos;
+                                  message.find("checksum") != std::string::npos;
         }
         require(rejected_for_schema, "unsupported schema version rejected", failures);
     }
@@ -141,22 +138,24 @@ int main(int argc, char** argv) {
         const auto checkpoint_path = (scratch_dir / "checkpoint.bin").string();
 
         fl::core::AggregatorCheckpointStore::save_to_file(checkpoint_path, checkpoint);
-        require(
-            !std::filesystem::exists(checkpoint_path + ".tmp"),
-            "temp file removed after atomic rename",
-            failures
-        );
+        require(!std::filesystem::exists(checkpoint_path + ".tmp"),
+                "temp file removed after atomic rename",
+                failures);
         require(std::filesystem::exists(checkpoint_path), "checkpoint file created", failures);
 
         const auto restored = fl::core::AggregatorCheckpointStore::load_from_file(checkpoint_path);
-        require(restored.optimizer_state.step == checkpoint.optimizer_state.step, "file round trip step", failures);
+        require(restored.optimizer_state.step == checkpoint.optimizer_state.step,
+                "file round trip step",
+                failures);
 
         // Overwrite with a second checkpoint to exercise atomic replace of an existing file.
         auto second_checkpoint = checkpoint;
         second_checkpoint.optimizer_state.step = 8;
         fl::core::AggregatorCheckpointStore::save_to_file(checkpoint_path, second_checkpoint);
-        const auto restored_second = fl::core::AggregatorCheckpointStore::load_from_file(checkpoint_path);
-        require(restored_second.optimizer_state.step == 8, "file round trip after overwrite", failures);
+        const auto restored_second =
+            fl::core::AggregatorCheckpointStore::load_from_file(checkpoint_path);
+        require(
+            restored_second.optimizer_state.step == 8, "file round trip after overwrite", failures);
 
         // Corrupt the file on disk and confirm load rejects it instead of
         // silently returning partial state.

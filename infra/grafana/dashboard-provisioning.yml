@@ -1,0 +1,19 @@
+apiVersion: 1
+
+# Security Runtime Completion and Release Evidence slice, Work Package
+# R: Grafana already exists in the active Compose stack (confirmed by
+# direct inspection -- infra/grafana/datasources.yml), but had zero
+# dashboards and no dashboard-provisioning wiring before this slice --
+# this is the first dashboard this repository ships. See
+# docs/security-dashboard.md.
+providers:
+  - name: security-operations
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/security
+      foldersFromFilesStructure: false

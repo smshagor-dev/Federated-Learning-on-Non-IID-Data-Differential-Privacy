@@ -53,7 +53,7 @@ services:
     ports:
       - "5000:5000"
 
-  # Milestone 3: the real gRPC coordinator server (cpp/coordinator/main.cpp),
+  # the Coordinator Runtime phase: the real gRPC coordinator server (cpp/coordinator/main.cpp),
   # built here with apt-installed gRPC/Protobuf since that combination is
   # unavailable on the Windows/MSVC host this repo is otherwise developed
   # on — see infra/docker/cpp-coordinator.Dockerfile and
@@ -129,6 +129,12 @@ services:
     image: grafana/grafana:11.1.4
     volumes:
       - ../grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      # Security Runtime Completion and Release Evidence slice, Work
+      # Package R: the first dashboard-provisioning wiring this repo
+      # ships -- see infra/grafana/dashboard-provisioning.yml and
+      # docs/security-dashboard.md.
+      - ../grafana/dashboard-provisioning.yml:/etc/grafana/provisioning/dashboards/dashboard-provisioning.yml:ro
+      - ../grafana/dashboards:/etc/grafana/provisioning/dashboards/security:ro
     ports:
       - "3001:3000"
 

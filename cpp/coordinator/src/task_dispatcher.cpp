@@ -20,7 +20,8 @@ void TaskDispatcher::enqueue(const std::vector<ClientTaskDescriptor>& descriptor
     }
 }
 
-std::optional<DispatchedTask> TaskDispatcher::acquire(const std::string& worker_id, double now_unix_s) {
+std::optional<DispatchedTask> TaskDispatcher::acquire(const std::string& worker_id,
+                                                      double now_unix_s) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (worker_active_task_.contains(worker_id)) {
         return std::nullopt;  // one active task per worker
@@ -41,24 +42,24 @@ std::optional<DispatchedTask> TaskDispatcher::acquire(const std::string& worker_
     return task;
 }
 
-void TaskDispatcher::report_progress(
-    const std::string& worker_id, const std::string& task_id, const std::string& lease_id
-) const {
+void TaskDispatcher::report_progress(const std::string& worker_id,
+                                     const std::string& task_id,
+                                     const std::string& lease_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = tasks_.find(task_id);
-    if (it == tasks_.end() || it->second.worker_id != worker_id || it->second.lease_id != lease_id) {
-        throw TaskDispatcherError("progress report for unknown or mismatched task/lease: " + task_id);
+    if (it == tasks_.end() || it->second.worker_id != worker_id ||
+        it->second.lease_id != lease_id) {
+        throw TaskDispatcherError("progress report for unknown or mismatched task/lease: " +
+                                  task_id);
     }
 }
 
-bool TaskDispatcher::submit_result(
-    const std::string& worker_id,
-    const std::string& task_id,
-    const std::string& lease_id,
-    ClientResultSubmission result,
-    double now_unix_s,
-    std::string& reason
-) {
+bool TaskDispatcher::submit_result(const std::string& worker_id,
+                                   const std::string& task_id,
+                                   const std::string& lease_id,
+                                   ClientResultSubmission result,
+                                   double now_unix_s,
+                                   std::string& reason) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = tasks_.find(task_id);
     if (it == tasks_.end()) {
@@ -112,6 +113,37 @@ std::vector<std::string> TaskDispatcher::sweep_expired_leases(double now_unix_s)
         }
     }
     return permanently_failed_client_ids;
+}
+
+std::optional<std::string> TaskDispatcher::cancel_lease_for_worker(const std::string& worker_id,
+                                                                    double now_unix_s) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto active_it = worker_active_task_.find(worker_id);
+    if (active_it == worker_active_task_.end()) {
+        return std::nullopt;
+    }
+    const auto task_id = active_it->second;
+    auto& task = tasks_.at(task_id);
+    // Should always be kLeased (worker_active_task_ only ever holds
+    // entries for currently-leased tasks -- acquire() sets both
+    // together, submit_result()/this function both erase both
+    // together), but guard defensively rather than assume.
+    if (task.state != TaskState::kLeased) {
+        worker_active_task_.erase(active_it);
+        return std::nullopt;
+    }
+    worker_active_task_.erase(active_it);
+    const auto client_id = task.descriptor.client_id;
+    if (task.attempt >= max_retries_) {
+        task.state = TaskState::kFailed;
+    } else {
+        task.state = TaskState::kPending;
+        task.worker_id.clear();
+        task.lease_id.clear();
+        pending_queue_.push_back(task_id);
+    }
+    (void)now_unix_s;  // reserved: not needed for a forced (not time-based) cancellation
+    return client_id;
 }
 
 std::vector<ClientResultSubmission> TaskDispatcher::completed_results() const {

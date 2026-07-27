@@ -1,0 +1,32 @@
+# Secure Hybrid Differential Privacy Runtime slice: a thin override on
+# top of docker-compose.secure-cohort-handshake.yml that only changes
+# FL_WORKER_RUN_ID, so this slice's live validation
+# (scripts/validate_secure_hybrid_dp.py) targets its own run and its
+# worker log output is never confused with the prior slices'
+# validations (in particular docker-compose.secure-user-level-dp.yml's
+# secure-user-level-dp-validation run). Every other setting (mTLS,
+# signing, trust-bundle volume, secure aggregation windows) is
+# unchanged -- see that file's own header comment for the full
+# rationale.
+#
+# Usage:
+#   docker compose -f infra/compose/docker-compose.dev.yml \
+#                   -f infra/compose/docker-compose.security.yml \
+#                   -f infra/compose/docker-compose.secure-cohort-handshake.yml \
+#                   -f infra/compose/docker-compose.secure-hybrid-dp.yml \
+#                   up -d --build postgres redis coordinator api worker-1 worker-2 worker-3
+#
+# See scripts/validate_secure_hybrid_dp.py for the automated, scripted
+# form of exactly this flow.
+services:
+  python-worker:
+    environment:
+      FL_WORKER_RUN_ID: secure-hybrid-dp-validation
+
+  worker-2:
+    environment:
+      FL_WORKER_RUN_ID: secure-hybrid-dp-validation
+
+  worker-3:
+    environment:
+      FL_WORKER_RUN_ID: secure-hybrid-dp-validation

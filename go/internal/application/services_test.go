@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -46,6 +47,68 @@ func TestProjectExperimentRunLifecycle(t *testing.T) {
 	}
 	if run.Status != runs.StatusQueued {
 		t.Fatalf("expected queued, got %s", run.Status)
+	}
+}
+
+func TestExperimentCreateRejectsInvalidFedSamConfig(t *testing.T) {
+	ctx := context.Background()
+	services := newServices()
+	project, err := services.Projects.Create(ctx, "proj", "desc")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	_, err = services.Experiments.Create(ctx, project.ID, "exp", "desc", map[string]any{
+		"algorithm": map[string]any{"name": "fedsam", "rho": 0.0},
+	})
+	if !errors.Is(err, ErrInvalidAlgorithmConfig) {
+		t.Fatalf("expected ErrInvalidAlgorithmConfig, got %v", err)
+	}
+}
+
+func TestExperimentCreateAcceptsValidFedSamConfig(t *testing.T) {
+	ctx := context.Background()
+	services := newServices()
+	project, err := services.Projects.Create(ctx, "proj", "desc")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	_, err = services.Experiments.Create(ctx, project.ID, "exp", "desc", map[string]any{
+		"algorithm": map[string]any{"name": "fedsam", "rho": 0.05},
+	})
+	if err != nil {
+		t.Fatalf("expected valid FedSAM config to be accepted, got %v", err)
+	}
+}
+
+func TestExperimentCreateIgnoresUnrelatedAlgorithmKey(t *testing.T) {
+	ctx := context.Background()
+	services := newServices()
+	project, err := services.Projects.Create(ctx, "proj", "desc")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	// Pre-Algorithm-Expansion-style config: "algorithm" isn't one of this
+	// registry's known names, so validation must not kick in.
+	_, err = services.Experiments.Create(ctx, project.ID, "exp", "desc", map[string]any{
+		"algorithm": "some-legacy-value",
+	})
+	if err != nil {
+		t.Fatalf("expected unrecognized algorithm value to be left untouched, got %v", err)
+	}
+}
+
+func TestExperimentCreateIgnoresUnknownAlgorithmName(t *testing.T) {
+	ctx := context.Background()
+	services := newServices()
+	project, err := services.Projects.Create(ctx, "proj", "desc")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	_, err = services.Experiments.Create(ctx, project.ID, "exp", "desc", map[string]any{
+		"algorithm": map[string]any{"name": "not-a-real-algorithm"},
+	})
+	if err != nil {
+		t.Fatalf("expected unrecognized algorithm.name to be left untouched, got %v", err)
 	}
 }
 

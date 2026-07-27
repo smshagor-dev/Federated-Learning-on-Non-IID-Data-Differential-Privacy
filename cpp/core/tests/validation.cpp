@@ -68,9 +68,7 @@ int require_rejection(const std::string& name, const std::function<void()>& acti
 
 int main() {
     const auto model_manifest = manifest();
-    const auto aggregator = fl::core::make_aggregator(
-        fl::core::AggregationAlgorithm::kFedAvg
-    );
+    const auto aggregator = fl::core::make_aggregator(fl::core::AggregationAlgorithm::kFedAvg);
     int failures = 0;
 
     failures += require_rejection("duplicate client id", [&]() {
@@ -116,10 +114,8 @@ int main() {
     failures += require_rejection("non-finite tensor", [&]() {
         auto item = update("c1");
         item.delta = fl::core::TensorCollection{};
-        item.delta.insert(fl::core::TensorBuffer(
-            descriptor(),
-            {1.0, std::numeric_limits<double>::infinity()}
-        ));
+        item.delta.insert(
+            fl::core::TensorBuffer(descriptor(), {1.0, std::numeric_limits<double>::infinity()}));
         aggregator->aggregate(model_manifest, {item}, options(), {});
     });
 

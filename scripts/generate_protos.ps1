@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Milestone 3 change from Milestone 2: Go and Python now *consume* these
+# Coordinator Runtime phase change from the Aggregation Core phase: Go and Python now *consume* these
 # generated bindings for real gRPC (not just a freshness/descriptor check),
 # so each language's stubs go to a fixed, predictable location inside that
 # language's own module/package rather than an arbitrary scratch dir:

@@ -48,6 +48,18 @@ std::string to_string(CoordinatorEventType type) {
             return "CHECKPOINT_COMPLETED";
         case CoordinatorEventType::kRunCompleted:
             return "RUN_COMPLETED";
+        case CoordinatorEventType::kPrivacyBudgetWarning:
+            return "PRIVACY_BUDGET_WARNING";
+        case CoordinatorEventType::kPrivacyBudgetExceeded:
+            return "PRIVACY_BUDGET_EXCEEDED";
+        case CoordinatorEventType::kWorkerSuspended:
+            return "WORKER_SUSPENDED";
+        case CoordinatorEventType::kWorkerActivated:
+            return "WORKER_ACTIVATED";
+        case CoordinatorEventType::kWorkerRevoked:
+            return "WORKER_REVOKED";
+        case CoordinatorEventType::kTaskCanceledByRevocation:
+            return "TASK_CANCELED_BY_REVOCATION";
         default:
             return "UNKNOWN";
     }
@@ -72,9 +84,8 @@ CoordinatorEvent EventBus::publish(CoordinatorEvent event, const std::string& no
     return event;
 }
 
-std::vector<CoordinatorEvent> EventBus::poll(
-    const std::string& run_id, const std::string& after_event_id
-) const {
+std::vector<CoordinatorEvent> EventBus::poll(const std::string& run_id,
+                                             const std::string& after_event_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<CoordinatorEvent> result;
     auto it = history_by_run_.find(run_id);

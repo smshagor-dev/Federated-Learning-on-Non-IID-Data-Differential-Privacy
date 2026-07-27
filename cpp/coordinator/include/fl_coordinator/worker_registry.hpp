@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fl_core/privacy.hpp"
+
 #include <cstdint>
 #include <map>
 #include <mutex>
@@ -29,6 +31,12 @@ struct WorkerCapability {
     std::uint64_t available_memory_bytes{0};
     std::vector<std::string> supported_model_formats;
     std::vector<std::string> supported_algorithms;
+    // Privacy Engineering phase: default-constructed (supports_sample_level_dp
+    // = false) means "this worker never advertised privacy support" —
+    // treated identically to an explicit false by
+    // RunInstance::acquire_task's compatibility gate. See
+    // docs/worker-privacy-capabilities.md.
+    fl::core::WorkerPrivacyCapabilities privacy;
 };
 
 struct WorkerInfo {
@@ -42,7 +50,7 @@ struct WorkerInfo {
 };
 
 class WorkerRegistryError : public std::runtime_error {
-public:
+  public:
     explicit WorkerRegistryError(const std::string& what);
 };
 
@@ -51,7 +59,7 @@ public:
 // read from the wall clock internally, so heartbeat-expiry behavior is
 // deterministically testable without sleeping in tests.
 class WorkerRegistry {
-public:
+  public:
     WorkerRegistry(std::uint32_t missed_heartbeat_threshold, double heartbeat_interval_seconds);
 
     // Registering an already-registered, non-disconnected worker_id is
@@ -59,11 +67,14 @@ public:
     // after a network blip should not be punished with an error) rather
     // than rejected outright. A worker_id that was previously marked
     // DISCONNECTED can always re-register cleanly.
-    WorkerInfo register_worker(const std::string& worker_id, WorkerCapability capability, double now_unix_s);
+    WorkerInfo register_worker(const std::string& worker_id,
+                               WorkerCapability capability,
+                               double now_unix_s);
 
-    WorkerInfo heartbeat(
-        const std::string& worker_id, WorkerStatus status, const std::string& current_task_id, double now_unix_s
-    );
+    WorkerInfo heartbeat(const std::string& worker_id,
+                         WorkerStatus status,
+                         const std::string& current_task_id,
+                         double now_unix_s);
 
     void mark_disconnected(const std::string& worker_id);
 
@@ -84,7 +95,7 @@ public:
     void record_failure(const std::string& worker_id);
     void record_success(const std::string& worker_id);
 
-private:
+  private:
     mutable std::mutex mutex_;
     std::map<std::string, WorkerInfo> workers_;
     std::uint32_t missed_heartbeat_threshold_;

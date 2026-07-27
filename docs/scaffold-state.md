@@ -50,7 +50,7 @@ variate `c` as a `TensorCollection`, round-tripped through
 `OptimizerState` (which SCAFFOLD does not otherwise use — SCAFFOLD is not
 a FedOpt variant and has no first/second moment).
 
-## What is explicitly deferred (not implemented in Milestone 2)
+## What is explicitly deferred (not implemented in the Aggregation Core phase)
 
 * **Per-client control-variate storage (`c_i`)** — the C++ core receives
   each client's `control_delta` (i.e. `c_i^+ - c_i`, already computed
@@ -58,8 +58,8 @@ a FedOpt variant and has no first/second moment).
   store or manage individual clients' `c_i` values. The design requirement
   ("must not require all client-local control variates to stay in
   coordinator memory") is satisfied by construction: nothing server-side
-  holds per-client state at all in this milestone. A future coordinator
-  (Milestone 3) would need a `ClientMetadata`-adjacent store (or an
+  holds per-client state at all in this phase. A future coordinator
+  (the Coordinator Runtime phase) would need a `ClientMetadata`-adjacent store (or an
   artifact/object-storage reference, per `plan.md`'s Phase 15 tensor
   formats) to persist `c_i` between a client's non-consecutive
   participations — that store does not exist yet.

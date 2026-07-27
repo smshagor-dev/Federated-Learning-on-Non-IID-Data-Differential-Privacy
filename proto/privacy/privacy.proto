@@ -4,11 +4,316 @@ package fl.privacy.v1;
 
 option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/privacy/v1;privacyv1";
 
+// ---------------------------------------------------------------------
+// Privacy Engineering phase.
+//
+// CRITICAL PRIVACY RULE: sample-level DP, user-level DP, and adaptive
+// clipping protect *different neighboring relations* (one training
+// example; one client's complete round contribution; the clip-bound
+// statistic itself). Their epsilon/delta values are never combined into
+// a single number anywhere in this schema — every message below keeps
+// them as separate, independently-labeled fields. See
+// docs/privacy-mathematics.md.
+// ---------------------------------------------------------------------
+
+// DEPRECATED: pre-Privacy-Engineering scaffold. Combined a single
+// epsilon/delta regardless of mechanism, which is exactly the anti-
+// pattern the Critical Privacy Rule above forbids. Field numbers
+// preserved (never reused) but this message must not be written to by
+// new code — see SampleLevelLedgerEntry / UserLevelLedgerEntry /
+// AdaptiveClippingLedgerEntry instead.
 message PrivacyLedger {
+  option deprecated = true;
   string run_id = 1;
   string mode = 2;
   double epsilon = 3;
   double delta = 4;
   double noise_multiplier = 5;
   double clipping_bound = 6;
+}
+
+enum PrivacyMode {
+  PRIVACY_MODE_UNSPECIFIED = 0;
+  PRIVACY_MODE_NONE = 1;
+  PRIVACY_MODE_SAMPLE_LEVEL_DP = 2;
+  PRIVACY_MODE_USER_LEVEL_DP = 3;
+  PRIVACY_MODE_HYBRID_DP = 4;
+}
+
+// Only accountants Opacus (or the coordinator's own implementation, for
+// user-level/clipping) actually supports are valid here — see
+// docs/privacy-mathematics.md's "Do not invent unsupported accountant
+// behavior" note.
+enum AccountantType {
+  ACCOUNTANT_TYPE_UNSPECIFIED = 0;
+  ACCOUNTANT_TYPE_RDP = 1;
+  ACCOUNTANT_TYPE_PRV = 2;
+  ACCOUNTANT_TYPE_GDP = 3;
+}
+
+enum PrivacyBudgetPolicy {
+  PRIVACY_BUDGET_POLICY_UNSPECIFIED = 0;
+  PRIVACY_BUDGET_POLICY_WARN_ONLY = 1;
+  PRIVACY_BUDGET_POLICY_STOP_BEFORE_EXCEEDING = 2;
+  PRIVACY_BUDGET_POLICY_STOP_AFTER_CURRENT_ROUND = 3;
+  PRIVACY_BUDGET_POLICY_FAIL_RUN = 4;
+}
+
+// Worker-side, per-task sample-level budget policy — distinct from
+// PrivacyBudgetPolicy above, which is coordinator-side and per-round.
+// See python/src/fl_platform/privacy/budget_enforcement.py. Field added
+// this pass (Secure Aggregation and Cryptographic Protocols category's
+// closure-gate work); not yet consumed by coordinator_client.py's wire
+// decode, since doing so needs regenerated Python bindings this
+// environment cannot produce without Docker/CI (protoc is not
+// installed locally — see docs/known-limitations.md). Documented as a
+// deferred wire-integration item, not silently unused.
+enum SampleBudgetPolicy {
+  SAMPLE_BUDGET_POLICY_UNSPECIFIED = 0;
+  SAMPLE_BUDGET_POLICY_WARN_ONLY = 1;
+  SAMPLE_BUDGET_POLICY_STOP_BEFORE_EXCEEDING = 2;
+  SAMPLE_BUDGET_POLICY_STOP_AFTER_CURRENT_TASK = 3;
+  SAMPLE_BUDGET_POLICY_FAIL_TASK = 4;
+}
+
+// Protects one training example within one client's local dataset.
+// Applied entirely within the Python worker via Opacus; the coordinator
+// never sees per-sample gradients. See docs/privacy-mathematics.md.
+message SampleLevelDPConfig {
+  double noise_multiplier = 1;
+  double max_grad_norm = 2;
+  double target_delta = 3;
+  AccountantType accountant = 4;
+  bool poisson_sampling = 5;
+  // Epsilon this mechanism must not exceed over the run. 0 (unset) means
+  // no budget enforced beyond target_delta itself.
+  double epsilon_budget = 6;
+  // Worker-side enforcement policy once epsilon_budget is reached — see
+  // SampleBudgetPolicy above. Unset (0/UNSPECIFIED) is treated by the
+  // worker as WARN_ONLY, matching every other budget policy's safe
+  // default.
+  SampleBudgetPolicy sample_budget_policy = 7;
+}
+
+// Protects one client's complete round contribution (the entire local
+// dataset's effect on that round's aggregate), applied centrally by the
+// C++ coordinator. Requires a trusted coordinator — see
+// docs/user-level-dp.md's trust-boundary section; this is not secure
+// aggregation.
+message UserLevelDPConfig {
+  double noise_multiplier = 1;
+  double target_delta = 2;
+  AccountantType accountant = 3;
+  // Fixed clipping bound, used only when adaptive_clipping is not
+  // enabled (AdaptiveClippingConfig.enabled = false).
+  double initial_clipping_bound = 4;
+  // Must be one of "uniform" | "capped_sample_count" |
+  // "normalized_bounded" — mirrors fl.coordinator.v1.OptimizerConfig's
+  // weighting field (fl_core::WeightingStrategyType). Unrestricted
+  // sample-count weighting is rejected for user-level DP: see
+  // docs/user-level-dp.md's "privacy-safe weighting" section.
+  string weighting_strategy = 5;
+  bool secure_random = 6;
+  double epsilon_budget = 7;
+}
+
+// Adaptive clipping is itself a DP mechanism (Andrew et al., 2021): the
+// clip bound is derived from a *privatized* count of how many client
+// updates exceeded the current bound, so it carries its own separate
+// epsilon/delta — never folded into UserLevelDPConfig's.
+message AdaptiveClippingConfig {
+  bool enabled = 1;
+  double target_quantile = 2;
+  double clip_learning_rate = 3;
+  double initial_clip = 4;
+  double min_clip = 5;
+  double max_clip = 6;
+  // Noise added to the (0/1-per-client) over-threshold count before it
+  // is used to update the clip bound — this is what makes adaptive
+  // clipping itself DP, not just a heuristic.
+  double count_noise_multiplier = 7;
+  double target_delta = 8;
+  double epsilon_budget = 9;
+}
+
+message PrivacyConfig {
+  PrivacyMode mode = 1;
+  SampleLevelDPConfig sample_level = 2;
+  UserLevelDPConfig user_level = 3;
+  AdaptiveClippingConfig adaptive_clipping = 4;
+  PrivacyBudgetPolicy budget_policy = 5;
+  // Fraction of epsilon_budget (per mechanism) at which a warning event
+  // is emitted, e.g. 0.8 = warn at 80% of budget. 0 disables warnings.
+  double warning_threshold_fraction = 6;
+  uint32 schema_version = 7;
+}
+
+// One accounting step for one mechanism, for one round. Never contains
+// more than one mechanism's epsilon/delta — see the three concrete
+// entry messages below, which is what PrivacyLedgerAppendRequest and
+// storage actually use.
+enum PrivacyMechanism {
+  PRIVACY_MECHANISM_UNSPECIFIED = 0;
+  PRIVACY_MECHANISM_SAMPLE_LEVEL_TRAINING = 1;
+  PRIVACY_MECHANISM_USER_LEVEL_AGGREGATION = 2;
+  PRIVACY_MECHANISM_ADAPTIVE_CLIPPING = 3;
+}
+
+// Authority: Python workers own and submit these (see
+// docs/privacy-ledger.md's authority-split note) — Go persists/exposes
+// them but must not recompute the epsilon itself.
+message SampleLevelLedgerEntry {
+  string run_id = 1;
+  uint64 round_id = 2;
+  string client_id = 3;
+  double epsilon = 4;
+  double delta = 5;
+  double noise_multiplier = 6;
+  double sample_rate = 7;
+  uint64 steps = 8;
+  AccountantType accountant = 9;
+  string recorded_at = 10;
+  string entry_id = 11;
+}
+
+// Authority: the C++ coordinator owns and submits these.
+message UserLevelLedgerEntry {
+  string run_id = 1;
+  uint64 round_id = 2;
+  double epsilon = 3;
+  double delta = 4;
+  double noise_multiplier = 5;
+  double clipping_bound = 6;
+  uint32 num_clients = 7;
+  AccountantType accountant = 8;
+  string recorded_at = 9;
+  string entry_id = 10;
+}
+
+// Authority: the C++ coordinator owns and submits these (adaptive
+// clipping is a coordinator-side mechanism, same trust boundary as
+// user-level aggregation).
+message AdaptiveClippingLedgerEntry {
+  string run_id = 1;
+  uint64 round_id = 2;
+  double epsilon = 3;
+  double delta = 4;
+  double clip_value = 5;
+  double observed_over_threshold_fraction = 6;
+  double count_noise_multiplier = 7;
+  string recorded_at = 8;
+  string entry_id = 9;
+}
+
+// Per-round snapshot exposed via the Go API and the web Privacy Center.
+// Each mechanism's epsilon/delta is independently optional (has_*) since
+// a run may use only one, two, or none of these mechanisms — never a
+// combined total.
+message PrivacyMetricsSnapshot {
+  string run_id = 1;
+  uint64 round_id = 2;
+  bool has_sample_level = 3;
+  double sample_epsilon = 4;
+  double sample_delta = 5;
+  bool has_user_level = 6;
+  double user_epsilon = 7;
+  double user_delta = 8;
+  bool has_clipping = 9;
+  double clipping_epsilon = 10;
+  double clipping_delta = 11;
+  double current_clip_value = 12;
+}
+
+enum PrivacyExhaustionReason {
+  PRIVACY_EXHAUSTION_REASON_UNSPECIFIED = 0;
+  PRIVACY_EXHAUSTION_REASON_SAMPLE_BUDGET_EXCEEDED = 1;
+  PRIVACY_EXHAUSTION_REASON_USER_BUDGET_EXCEEDED = 2;
+  PRIVACY_EXHAUSTION_REASON_CLIPPING_BUDGET_EXCEEDED = 3;
+}
+
+// Advertised by a worker at registration time (see
+// fl.worker.v1.RegisterWorkerRequest.capability) so the coordinator only
+// assigns private tasks to compatible workers — never falls back to
+// non-private execution silently.
+message WorkerPrivacyCapabilities {
+  bool supports_sample_level_dp = 1;
+  string opacus_version = 2;
+  repeated AccountantType supported_accountants = 3;
+  bool supports_secure_random = 4;
+}
+
+// Privacy Record Authenticity, Signing-Key Lifecycle, and
+// Coordinator-Signed Tasks slice (docs/signed-privacy-records.md):
+// the domain-payload fields of an independently signed sample-level
+// privacy record. The cryptographic envelope (nonce, sequence_number,
+// signing_key_id, payload_hash, signature, issued/expires timestamps)
+// is deliberately NOT duplicated onto this message -- it is carried by
+// wrapping this payload's canonical-JSON SHA-256 hash in a
+// fl.worker.v1.SignedWorkerEnvelope with
+// message_type = MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD and
+// message_stream = MESSAGE_STREAM_PRIVACY_RECORD (see
+// SubmitClientResultRequest.privacy_record_envelope), exactly the same
+// reuse decision already made for SubmitClientResultRequest.envelope --
+// see docs/signed-privacy-records.md's "Deviations from the parent
+// specification" section for why a second, independent signature
+// mechanism was not built from scratch.
+//
+// A subset of the specification's requested field list is carried here
+// -- record_version (redundant with schema_version), clipping_mode
+// (this codebase has no clipping mode distinct from max_grad_norm),
+// effective_batch_size and skipped_optimizer_steps (neither is tracked
+// anywhere in the current Opacus integration) are deliberately omitted
+// and documented rather than fabricated. optimizer_steps is not
+// duplicated separately from accountant_step: in this codebase's
+// Opacus integration the two are the same value.
+message SignedSamplePrivacyRecord {
+  uint32 schema_version = 1;
+  string worker_id = 2;
+  string run_id = 3;
+  uint64 round_id = 4;
+  string task_id = 5;
+  string client_id = 6;
+  string model_version = 7;
+  string algorithm = 8;
+  PrivacyMode privacy_mode = 9;
+  AccountantType accountant_type = 10;
+  uint64 accountant_step = 11;
+  double epsilon = 12;
+  double delta = 13;
+  double noise_multiplier = 14;
+  double max_grad_norm = 15;
+  double sample_rate = 16;
+  uint32 expected_batch_size = 17;
+  uint32 local_epochs = 18;
+  // SHA-256 hex digest over the canonical JSON of this task's
+  // SampleLevelDPConfig fields (noise_multiplier, max_grad_norm,
+  // target_delta, epsilon_budget, sample_budget_policy,
+  // poisson_sampling) -- detects a worker signing a record under a
+  // privacy configuration different from the one the coordinator
+  // actually assigned for this task.
+  string configuration_hash = 19;
+  // SHA-256 hex digest of the real Opacus accountant's state_dict() --
+  // see fl_platform.privacy.budget_enforcement.accountant_state_hash.
+  // A safe fingerprint, never the history itself (the history is
+  // already reported via epsilon/delta/noise_multiplier/steps).
+  string accountant_state_hash = 20;
+  double budget_target_epsilon = 21;
+  double budget_target_delta = 22;
+  SampleBudgetPolicy budget_policy = 23;
+  // One of SampleBudgetOutcome's string values (see
+  // fl_platform.privacy.budget_enforcement.SampleBudgetOutcome):
+  // "allowed" | "warned" | "stopped_before_step" |
+  // "stopped_after_task" | "failed_task" | "refused_before_training".
+  // Validated for internal consistency against whether this submission
+  // represents a normal completed update -- see
+  // docs/signed-privacy-records.md's "Budget decision consistency"
+  // section.
+  string budget_decision = 24;
+  // This codebase's SampleLevelDPConfig carries no explicit
+  // "secure random required" field (unlike UserLevelDPConfig.secure_random)
+  // -- always false for sample-level records; documented, not
+  // fabricated.
+  bool secure_random_required = 25;
+  bool secure_random_available = 26;
+  string secure_random_provider = 27;
 }

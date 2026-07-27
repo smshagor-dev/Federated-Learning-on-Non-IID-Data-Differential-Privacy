@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +20,18 @@ import (
 
 type Server struct {
 	services *application.Services
+	// securityIdempotency backs every /api/v1/security/... mutation
+	// route's Idempotency-Key support — see security_handlers.go.
+	securityIdempotency *idempotencyCache
+	// Security Events, Metrics, and Durable Audit Journal slice
+	// (docs/security-events.md): Go-local event journal and the
+	// security-specific durable audit journal -- see
+	// handleSecurityEvents/handleSecurityAudit. Always non-nil (default-
+	// constructed at a temp-file-backed path by NewServer unless
+	// NewServerWithSecurityJournalPaths is used for real, configured
+	// persistence -- see cmd/api/main.go).
+	securityEventJournal *observability.SecurityEventJournal
+	securityAuditJournal *observability.SecurityAuditJournal
 }
 
 type contextKey string
@@ -24,7 +39,46 @@ type contextKey string
 const sessionContextKey contextKey = "auth-session"
 
 func NewServer(services *application.Services) *Server {
-	return &Server{services: services}
+	return NewServerWithSecurityJournalPaths(services, "", "")
+}
+
+// NewServerWithSecurityJournalPaths is NewServer plus explicit journal
+// paths for production, restart-surviving persistence (see
+// cmd/api/main.go's FL_GO_SECURITY_EVENT_JOURNAL_PATH/
+// FL_GO_SECURITY_AUDIT_JOURNAL_PATH env vars). Empty paths fall back to
+// a unique temp-file location per Server instance -- test-friendly
+// (every test gets its own isolated journal, nothing pollutes the repo
+// working directory) and still exercises the real, file-backed
+// persistence code path rather than a separate in-memory stand-in.
+func NewServerWithSecurityJournalPaths(services *application.Services, eventJournalPath, auditJournalPath string) *Server {
+	if eventJournalPath == "" {
+		eventJournalPath = tempSecurityJournalPath("security-events")
+	}
+	if auditJournalPath == "" {
+		auditJournalPath = tempSecurityJournalPath("security-audit")
+	}
+	eventJournal, err := observability.NewSecurityEventJournal(eventJournalPath)
+	if err != nil {
+		eventJournal = nil // degrade to no-op rather than fail server construction
+	}
+	auditJournal, err := observability.NewSecurityAuditJournal(auditJournalPath)
+	if err != nil {
+		auditJournal = nil
+	}
+	server := &Server{
+		services:             services,
+		securityIdempotency:  newIdempotencyCache(),
+		securityEventJournal: eventJournal,
+		securityAuditJournal: auditJournal,
+	}
+	if services != nil && services.Coordinator != nil {
+		services.Coordinator.SetSecurityJournals(eventJournal, auditJournal)
+	}
+	return server
+}
+
+func tempSecurityJournalPath(name string) string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("fl-%s-%d-%d.jsonl", name, os.Getpid(), time.Now().UnixNano()))
 }
 
 func (s *Server) Handler() http.Handler {
@@ -44,8 +98,82 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/api/v1/system/coordinator-health", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleCoordinatorHealth)))
 	mux.Handle("/api/v1/coordinator/runs", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleCoordinatorRuns)))
 	mux.Handle("/api/v1/coordinator/runs/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleCoordinatorRunRoutes)))
+	mux.Handle("/api/v1/coordinator/workers", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleCoordinatorWorkers)))
+	mux.Handle("/api/v1/privacy/compatibility", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handlePrivacyCompatibility)))
+	mux.Handle("/api/v1/algorithms", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleAlgorithms)))
+	mux.Handle("/api/v1/algorithms/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleAlgorithmByName)))
+	mux.Handle("/api/v1/models", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleModels)))
+	mux.Handle("/api/v1/models/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleModelRoutes)))
+	mux.Handle("/api/v1/datasets", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleDatasets)))
+	mux.Handle("/api/v1/datasets/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleDatasetRoutes)))
+
+	// Security Operations and Administration slice (docs/security-api.md):
+	// every route below authenticates via the same broad role set —
+	// the real per-endpoint authorization decision happens inside each
+	// handler via security.Allows(role, permission), not here. See
+	// security_handlers.go.
+	securityRoles := []auth.Role{auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService}
+	mux.Handle("/api/v1/security/transport", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityTransport)))
+	mux.Handle("/api/v1/security/trust-model", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityTrustModel)))
+	mux.Handle("/api/v1/security/workers", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityWorkers)))
+	mux.Handle("/api/v1/security/workers/", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityWorkerRoutes)))
+	mux.Handle("/api/v1/security/coordinator/signing-keys", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityCoordinatorSigningKeys)))
+	mux.Handle("/api/v1/security/coordinator/signing-keys/", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityCoordinatorSigningKeyRoutes)))
+	mux.Handle("/api/v1/security/events", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityEvents)))
+	mux.Handle("/api/v1/security/events/sources", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityEventSources)))
+	mux.Handle("/api/v1/security/audit", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityAudit)))
+	mux.Handle("/api/v1/security/overview", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecurityOverview)))
+
+	// Secure User-Level DP Operations, Observability, and Release
+	// Evidence slice (docs/secure-user-level-operations-audit.md, Work
+	// Area I): same broad-role-then-fine-grained-permission-inside-the-
+	// handler pattern as the security routes above.
+	mux.Handle("/api/v1/secure-aggregation/privacy/status", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecureUserDPStatus)))
+	mux.Handle("/api/v1/secure-aggregation/privacy/health", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecureUserDPHealth)))
+	mux.Handle("/api/v1/secure-aggregation/privacy/budget", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecureUserDPBudget)))
+	mux.Handle("/api/v1/secure-aggregation/privacy/rounds", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecureUserDPRounds)))
+	mux.Handle("/api/v1/secure-aggregation/privacy/rounds/", s.withAuth(securityRoles...)(http.HandlerFunc(s.handleSecureUserDPRoundsRoutes)))
+
 	mux.HandleFunc("/metrics", s.handleMetrics)
-	return s.withMetrics(mux)
+	return s.withCORS(s.withMetrics(mux))
+}
+
+// withCORS: the web app (browser origin http://localhost:3000 in the
+// Compose dev stack) and this API (http://localhost:8080) are different
+// origins, so every client-side fetch()/XHR from web/lib/api.ts and
+// web/lib/security-api.ts is a cross-origin request the browser's own
+// same-origin policy blocks unless this server sends the right
+// Access-Control-* headers -- there was no CORS handling anywhere in
+// this server before this fix. Caught by this slice's live Playwright
+// browser-suite run: every page that depends on real fetched data
+// (worker detail, security overview, events, audit) failed in a real
+// browser with no server-side error at all (the browser silently
+// blocks reading the response), while the exact same endpoints always
+// worked from curl/the Python security-validation harness/Go's own
+// tests, none of which enforce CORS.
+//
+// Reflects the request's own Origin header rather than a fixed
+// allowlist (this is a single-tenant research/dev platform, not a
+// public multi-tenant service) and never sets
+// Access-Control-Allow-Credentials -- this API is Bearer-token
+// authenticated, never cookie-authenticated (see docs/security-api.md's
+// CSRF discussion), so there is no ambient credential for a malicious
+// origin to ride; reflecting Origin without credentials cannot leak an
+// Authorization header the requesting page did not already possess.
+func (s *Server) withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origin := r.Header.Get("Origin"); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Trace-Id")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // handleMetrics is deliberately unauthenticated (like /healthz): Prometheus
@@ -315,16 +443,28 @@ func (s *Server) handleExperiments(w http.ResponseWriter, r *http.Request) {
 		}
 		item, err := s.services.Experiments.Create(r.Context(), req.ProjectID, req.Name, req.Description, req.Config)
 		if err != nil {
-			status := http.StatusInternalServerError
-			if errors.Is(err, application.ErrNotFound) {
-				status = http.StatusNotFound
-			}
-			writeError(w, status, err.Error())
+			writeError(w, experimentErrorStatus(err), err.Error())
 			return
 		}
 		writeJSON(w, http.StatusCreated, item)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// experimentErrorStatus maps ExperimentService errors to HTTP statuses:
+// a not-found project/experiment is 404, an algorithm-config validation
+// failure (see application.validateExperimentAlgorithmConfig) is 400 —
+// the client sent a config Python's own algorithm would reject — and
+// anything else is a genuine server error.
+func experimentErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, application.ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, application.ErrInvalidAlgorithmConfig):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
 	}
 }
 
@@ -345,11 +485,7 @@ func (s *Server) handleExperimentByID(w http.ResponseWriter, r *http.Request) {
 		}
 		item, err := s.services.Experiments.Update(r.Context(), id, req.Name, req.Description, req.Config)
 		if err != nil {
-			status := http.StatusInternalServerError
-			if errors.Is(err, application.ErrNotFound) {
-				status = http.StatusNotFound
-			}
-			writeError(w, status, err.Error())
+			writeError(w, experimentErrorStatus(err), err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, item)

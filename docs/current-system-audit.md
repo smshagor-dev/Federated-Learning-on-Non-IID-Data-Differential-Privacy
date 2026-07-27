@@ -115,4 +115,4 @@ This audit covers the pre-monorepo Python research prototype currently stored at
 
 ## Observed Runtime Result
 
-The 1-round MNIST/FedAvg smoke experiment successfully completed training, generated CSV and plots, and then failed during final summary printing due to a Windows cp1252 Unicode encoding issue. That defect has been fixed in the current working tree as part of Milestone 1 preservation work.
+The 1-round MNIST/FedAvg smoke experiment successfully completed training, generated CSV and plots, and then failed during final summary printing due to a Windows cp1252 Unicode encoding issue. That defect has been fixed in the current working tree as part of the Foundation phase preservation work.

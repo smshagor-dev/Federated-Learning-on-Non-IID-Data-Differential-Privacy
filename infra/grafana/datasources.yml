@@ -2,6 +2,11 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    # Fixed uid so the provisioned Security Operations dashboard
+    # (dashboards/security.json) can reference this datasource by a
+    # stable id rather than a name lookup -- see
+    # dashboard-provisioning.yml and docs/security-dashboard.md.
+    uid: prometheus_ds
     type: prometheus
     access: proxy
     url: http://prometheus:9090

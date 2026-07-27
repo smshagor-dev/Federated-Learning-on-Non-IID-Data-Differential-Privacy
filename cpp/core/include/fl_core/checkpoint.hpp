@@ -12,7 +12,7 @@ namespace fl::core {
 // validation. Callers should treat this as "do not resume from this
 // checkpoint" rather than attempt partial recovery.
 class CheckpointCorruptionError : public std::runtime_error {
-public:
+  public:
     explicit CheckpointCorruptionError(const std::string& what);
 };
 
@@ -34,7 +34,7 @@ struct AggregatorCheckpoint {
 std::string compute_manifest_checksum(const ModelManifest& manifest);
 
 class AggregatorCheckpointStore {
-public:
+  public:
     // Pure in-memory (de)serialization. The returned payload embeds a
     // checksum covering everything except the checksum line itself.
     [[nodiscard]] static std::string serialize(const AggregatorCheckpoint& checkpoint);

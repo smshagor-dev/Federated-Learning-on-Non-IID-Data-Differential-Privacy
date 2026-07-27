@@ -1,8 +1,8 @@
 # SCAFFOLD Client State (Coordinator-Level Persistence)
 
-Not to be confused with [scaffold-state.md](scaffold-state.md) (Milestone
+Not to be confused with [scaffold-state.md](scaffold-state.md) (Phase
 2's aggregation-core-level SCAFFOLD math: how `c`/`c_i` deltas combine
-during aggregation). This document covers Milestone 3's addition: where
+during aggregation). This document covers the Coordinator Runtime phase's addition: where
 each client's own control variate is *persisted* between rounds, at the
 coordinator layer.
 
@@ -26,7 +26,7 @@ public:
 `FilesystemClientAlgorithmStateStore` is the real implementation — one
 file per client under a configured root directory, with the same
 atomic-write + FNV-1a-checksum + schema-version pattern as
-`AggregatorCheckpointStore` (Milestone 2). `ClientAlgorithmStateCorruptionError`
+`AggregatorCheckpointStore` (the Aggregation Core phase). `ClientAlgorithmStateCorruptionError`
 and `StaleClientAlgorithmStateError` are distinct exception types so
 callers can distinguish "the file is corrupt" from "the file is for an
 older schema."

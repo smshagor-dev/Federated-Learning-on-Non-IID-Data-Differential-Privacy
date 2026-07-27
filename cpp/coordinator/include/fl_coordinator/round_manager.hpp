@@ -18,11 +18,9 @@ struct RoundManagerConfig {
 // the same order — required so a coordinator restart (Work Package G)
 // that replays round `round_id` selects the identical cohort rather than
 // a different random sample.
-std::vector<std::string> select_cohort(
-    const std::vector<std::string>& all_client_ids,
-    std::uint64_t round_id,
-    std::uint64_t seed,
-    std::uint32_t target_clients_per_round
-);
+std::vector<std::string> select_cohort(const std::vector<std::string>& all_client_ids,
+                                       std::uint64_t round_id,
+                                       std::uint64_t seed,
+                                       std::uint32_t target_clients_per_round);
 
 }  // namespace fl::coordinator

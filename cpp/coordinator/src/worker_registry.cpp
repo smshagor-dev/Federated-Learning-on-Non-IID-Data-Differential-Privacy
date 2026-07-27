@@ -23,13 +23,14 @@ std::string to_string(WorkerStatus status) {
 
 WorkerRegistryError::WorkerRegistryError(const std::string& what) : std::runtime_error(what) {}
 
-WorkerRegistry::WorkerRegistry(std::uint32_t missed_heartbeat_threshold, double heartbeat_interval_seconds)
+WorkerRegistry::WorkerRegistry(std::uint32_t missed_heartbeat_threshold,
+                               double heartbeat_interval_seconds)
     : missed_heartbeat_threshold_(missed_heartbeat_threshold),
       heartbeat_interval_seconds_(heartbeat_interval_seconds) {}
 
-WorkerInfo WorkerRegistry::register_worker(
-    const std::string& worker_id, WorkerCapability capability, double now_unix_s
-) {
+WorkerInfo WorkerRegistry::register_worker(const std::string& worker_id,
+                                           WorkerCapability capability,
+                                           double now_unix_s) {
     if (worker_id.empty()) {
         throw WorkerRegistryError("worker_id must not be empty");
     }
@@ -52,9 +53,10 @@ WorkerInfo WorkerRegistry::register_worker(
     return info;
 }
 
-WorkerInfo WorkerRegistry::heartbeat(
-    const std::string& worker_id, WorkerStatus status, const std::string& current_task_id, double now_unix_s
-) {
+WorkerInfo WorkerRegistry::heartbeat(const std::string& worker_id,
+                                     WorkerStatus status,
+                                     const std::string& current_task_id,
+                                     double now_unix_s) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = workers_.find(worker_id);
     if (it == workers_.end()) {

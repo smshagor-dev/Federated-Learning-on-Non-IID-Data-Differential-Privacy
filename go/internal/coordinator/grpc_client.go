@@ -10,7 +10,38 @@ import (
 
 	coordinatorv1 "github.com/smshagor-dev/federated-learning-super-system/go/generated/coordinator/v1"
 	experimentv1 "github.com/smshagor-dev/federated-learning-super-system/go/generated/experiment/v1"
+	workerv1 "github.com/smshagor-dev/federated-learning-super-system/go/generated/worker/v1"
 )
+
+// modelManifestToWire converts a ModelManifest into its wire
+// representation. Declared standalone (not inlined into CreateRun) so the
+// CreateRun mapping test (grpc_client_test.go) can assert on its output
+// directly.
+func modelManifestToWire(manifest ModelManifest) *coordinatorv1.ModelManifest {
+	tensors := make([]*workerv1.TensorManifest, 0, len(manifest.Tensors))
+	for _, tensor := range manifest.Tensors {
+		tensors = append(tensors, &workerv1.TensorManifest{
+			Name:  tensor.Name,
+			Shape: tensor.Shape,
+			// Only float32 is a supported domain dtype today (see
+			// fl_core/tensor.hpp's DType enum) — the coordinator does not
+			// currently branch on this field, but it is set explicitly
+			// rather than left as an empty/ambiguous default.
+			Dtype: "float32",
+		})
+	}
+	return &coordinatorv1.ModelManifest{
+		ModelId:      manifest.ModelID,
+		ModelVersion: manifest.ModelVersion,
+		Tensors:      tensors,
+		AggregationManifest: &coordinatorv1.AggregationManifest{
+			SharedParameterNames:       manifest.AggregationManifest.SharedParameterNames,
+			PersonalizedParameterNames: manifest.AggregationManifest.PersonalizedParameterNames,
+			FrozenParameterNames:       manifest.AggregationManifest.FrozenParameterNames,
+			SchemaHash:                 manifest.AggregationManifest.SchemaHash,
+		},
+	}
+}
 
 // pollEventsWindow bounds a single PollEvents call. The coordinator's
 // StreamRunEvents RPC is a genuinely long-lived stream (it loops on the
@@ -25,26 +56,53 @@ import (
 const pollEventsWindow = 8 * time.Second
 
 // GrpcClient is a real gRPC client against the coordinator's
-// CoordinatorService. It has not been exercised against a live C++
-// coordinator server in this environment — no local gRPC C++ toolchain
-// is available here (see docs/coordinator-runtime.md) — but the Go
-// gRPC/protobuf stack itself is pure Go (no cgo), so this code compiles
-// and its request/response mapping is real, not a stub. Application code
-// depends on the Client interface, not this type, specifically so
-// MockClient can stand in wherever a live coordinator isn't available
-// (as it does in this repository's own Go tests).
+// CoordinatorService. The insecure path has not been exercised against
+// a live C++ coordinator server in this environment — no local gRPC C++
+// toolchain is available here (see docs/coordinator-runtime.md) — but
+// the Go gRPC/protobuf stack itself is pure Go (no cgo), so this code
+// compiles and its request/response mapping is real, not a stub. The
+// TLS/mTLS path (this file's transport.go) has been exercised against a
+// real local TLS listener using this project's own development PKI —
+// see go/internal/coordinator/transport_test.go and
+// docs/transport-identity-validation.md. Application code depends on
+// the Client interface, not this type, specifically so MockClient can
+// stand in wherever a live coordinator isn't available (as it does in
+// this repository's own Go tests).
 type GrpcClient struct {
-	config Config
-	conn   *grpc.ClientConn
-	stub   coordinatorv1.CoordinatorServiceClient
+	config        Config
+	transportMode TransportMode
+	conn          *grpc.ClientConn
+	stub          coordinatorv1.CoordinatorServiceClient
+}
+
+// TransportMode reports how this client is actually connected — safe to
+// expose through the Go security API (Work Package O) and audit
+// metadata (Work Package F).
+func (c *GrpcClient) TransportMode() TransportMode {
+	return c.transportMode
 }
 
 func NewGrpcClient(config Config) (*GrpcClient, error) {
 	var dialOptions []grpc.DialOption
+	var transportMode TransportMode
 	if config.Insecure {
+		// Never the silent default — Config.Insecure must be explicitly
+		// true, which DefaultConfig sets visibly (see its doc comment),
+		// matching the closure-gate requirement that insecure transport
+		// requires an explicit opt-in, never an implicit fallback from a
+		// missing/empty TLS config.
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		transportMode = TransportModeInsecureDevelopment
 	} else {
-		return nil, fmt.Errorf("%w: TLS credentials are a configuration hook for now; see docs/coordinator-runtime.md", ErrUnavailable)
+		if config.TLS == nil {
+			return nil, fmt.Errorf("%w: Config.Insecure is false but Config.TLS is nil; TLS/mTLS requires a populated TLSConfig, and insecure transport requires Insecure: true explicitly — see docs/mtls.md", ErrUnavailable)
+		}
+		creds, mode, err := buildTransportCredentials(*config.TLS)
+		if err != nil {
+			return nil, err
+		}
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(creds))
+		transportMode = mode
 	}
 
 	conn, err := grpc.NewClient(config.Address, dialOptions...)
@@ -52,9 +110,10 @@ func NewGrpcClient(config Config) (*GrpcClient, error) {
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	return &GrpcClient{
-		config: config,
-		conn:   conn,
-		stub:   coordinatorv1.NewCoordinatorServiceClient(conn),
+		config:        config,
+		transportMode: transportMode,
+		conn:          conn,
+		stub:          coordinatorv1.NewCoordinatorServiceClient(conn),
 	}, nil
 }
 
@@ -88,6 +147,18 @@ func (c *GrpcClient) CreateRun(ctx context.Context, request CreateRunRequest) (R
 		RoundTimeoutSeconds:   request.RoundTimeoutSeconds,
 		MinimumValidResults:   request.MinimumValidResults,
 		ClientSelectionSeed:   request.ClientSelectionSeed,
+		ClientIds:             request.ClientIDs,
+		LocalEpochs:           request.LocalEpochs,
+		BatchSize:             request.BatchSize,
+		LearningRate:          request.LearningRate,
+		Momentum:              request.Momentum,
+		WeightDecay:           request.WeightDecay,
+		FedproxMu:             request.FedProxMu,
+		TaskLeaseSeconds:      request.TaskLeaseSeconds,
+		MaxTaskRetries:        request.MaxTaskRetries,
+		ModelManifest:         modelManifestToWire(request.ModelManifest),
+		RequestId:             request.RequestID,
+		PrivacyConfig:         privacyConfigToWire(request.Privacy),
 	})
 	if err != nil {
 		return RunSnapshot{}, mapGrpcError(err)
@@ -136,6 +207,73 @@ func (c *GrpcClient) GetRun(ctx context.Context, runID string) (RunSnapshot, err
 		response.GetState(), response.GetRunId(), response.GetCurrentRound(), response.GetMaxRounds(),
 		response.GetModelVersion(), response.GetAlgorithm(), response.GetRegisteredWorkers(), response.GetHealthyWorkers(),
 	), nil
+}
+
+func (c *GrpcClient) GetPersonalizationSummary(ctx context.Context, runID string) ([]PersonalizationMetricRecord, error) {
+	response, err := c.stub.GetPersonalizationSummary(ctx, &coordinatorv1.GetPersonalizationSummaryRequest{RunId: runID})
+	if err != nil {
+		return nil, mapGrpcError(err)
+	}
+	records := make([]PersonalizationMetricRecord, 0, len(response.GetRecords()))
+	for _, wireRecord := range response.GetRecords() {
+		records = append(records, wirePersonalizationRecordToRecord(wireRecord))
+	}
+	return records, nil
+}
+
+func (c *GrpcClient) GetPrivacyMetrics(ctx context.Context, runID string) (PrivacyMetricsSnapshot, error) {
+	response, err := c.stub.GetPrivacyMetrics(ctx, &coordinatorv1.GetPrivacyMetricsRequest{RunId: runID})
+	if err != nil {
+		return PrivacyMetricsSnapshot{}, mapGrpcError(err)
+	}
+	return wirePrivacyMetricsToSnapshot(response), nil
+}
+
+func (c *GrpcClient) GetPrivacyLedger(ctx context.Context, runID, pageToken string, pageSize uint32) (PrivacyLedger, error) {
+	response, err := c.stub.GetPrivacyLedger(ctx, &coordinatorv1.GetPrivacyLedgerRequest{
+		RunId:     runID,
+		PageToken: pageToken,
+		PageSize:  pageSize,
+	})
+	if err != nil {
+		return PrivacyLedger{}, mapGrpcError(err)
+	}
+	ledger := PrivacyLedger{
+		SampleLevelEntries: make([]SampleLevelLedgerEntry, 0, len(response.GetSampleLevelEntries())),
+		UserLevelEntries:   make([]UserLevelLedgerEntry, 0, len(response.GetUserLevelEntries())),
+		ClippingEntries:    make([]AdaptiveClippingLedgerEntry, 0, len(response.GetClippingEntries())),
+		NextPageToken:      response.GetNextPageToken(),
+	}
+	for _, wireEntry := range response.GetSampleLevelEntries() {
+		ledger.SampleLevelEntries = append(ledger.SampleLevelEntries, wireSampleLevelEntryToEntry(wireEntry))
+	}
+	for _, wireEntry := range response.GetUserLevelEntries() {
+		ledger.UserLevelEntries = append(ledger.UserLevelEntries, wireUserLevelEntryToEntry(wireEntry))
+	}
+	for _, wireEntry := range response.GetClippingEntries() {
+		ledger.ClippingEntries = append(ledger.ClippingEntries, wireClippingEntryToEntry(wireEntry))
+	}
+	return ledger, nil
+}
+
+func (c *GrpcClient) GetPrivacyProjection(ctx context.Context, runID string) (PrivacyProjection, error) {
+	response, err := c.stub.GetPrivacyProjection(ctx, &coordinatorv1.GetPrivacyProjectionRequest{RunId: runID})
+	if err != nil {
+		return PrivacyProjection{}, mapGrpcError(err)
+	}
+	return wirePrivacyProjectionToProjection(response), nil
+}
+
+func (c *GrpcClient) ListWorkers(ctx context.Context) ([]WorkerSummary, error) {
+	response, err := c.stub.ListWorkers(ctx, &coordinatorv1.ListWorkersRequest{})
+	if err != nil {
+		return nil, mapGrpcError(err)
+	}
+	summaries := make([]WorkerSummary, 0, len(response.GetWorkers()))
+	for _, wireSummary := range response.GetWorkers() {
+		summaries = append(summaries, wireWorkerSummaryToSummary(wireSummary))
+	}
+	return summaries, nil
 }
 
 func (c *GrpcClient) PollEvents(ctx context.Context, runID, afterEventID string) ([]Event, error) {

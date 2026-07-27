@@ -69,11 +69,9 @@ ModelManifest make_manifest(const ModelShape& shape) {
     return manifest;
 }
 
-ClientUpdate make_synthetic_update(
-    const ModelManifest& manifest,
-    std::size_t client_index,
-    AggregationAlgorithm algorithm
-) {
+ClientUpdate make_synthetic_update(const ModelManifest& manifest,
+                                   std::size_t client_index,
+                                   AggregationAlgorithm algorithm) {
     ClientUpdate update;
     update.run_id = "bench-run";
     update.round_id = 1;
@@ -132,13 +130,11 @@ struct BenchmarkResult {
     double checkpoint_checksum_validate_ms;
 };
 
-BenchmarkResult run_one(
-    const ModelShape& shape,
-    std::size_t client_count,
-    AggregationAlgorithm algorithm,
-    WeightingStrategyType weighting,
-    int repetitions
-) {
+BenchmarkResult run_one(const ModelShape& shape,
+                        std::size_t client_count,
+                        AggregationAlgorithm algorithm,
+                        WeightingStrategyType weighting,
+                        int repetitions) {
     const auto manifest = make_manifest(shape);
     std::vector<ClientUpdate> updates;
     updates.reserve(client_count);
@@ -197,12 +193,13 @@ BenchmarkResult run_one(
         .weighting = fl::core::to_string(weighting),
         .median_ms = median_ms,
         .mean_ms = mean(timings_ms),
-        .updates_per_second = median_ms > 0.0
-            ? (static_cast<double>(client_count) / (median_ms / 1000.0))
-            : 0.0,
+        .updates_per_second =
+            median_ms > 0.0 ? (static_cast<double>(client_count) / (median_ms / 1000.0)) : 0.0,
         .bytes_processed = bytes,
-        .checkpoint_serialize_ms = std::chrono::duration<double, std::milli>(serialize_end - serialize_start).count(),
-        .checkpoint_checksum_validate_ms = std::chrono::duration<double, std::milli>(validate_end - validate_start).count(),
+        .checkpoint_serialize_ms =
+            std::chrono::duration<double, std::milli>(serialize_end - serialize_start).count(),
+        .checkpoint_checksum_validate_ms =
+            std::chrono::duration<double, std::milli>(validate_end - validate_start).count(),
     };
 }
 
@@ -224,17 +221,10 @@ void print_environment() {
 }
 
 void print_result_row(const BenchmarkResult& row) {
-    std::cout
-        << row.model_size << ","
-        << row.client_count << ","
-        << row.algorithm << ","
-        << row.weighting << ","
-        << row.median_ms << ","
-        << row.mean_ms << ","
-        << row.updates_per_second << ","
-        << row.bytes_processed << ","
-        << row.checkpoint_serialize_ms << ","
-        << row.checkpoint_checksum_validate_ms << "\n";
+    std::cout << row.model_size << "," << row.client_count << "," << row.algorithm << ","
+              << row.weighting << "," << row.median_ms << "," << row.mean_ms << ","
+              << row.updates_per_second << "," << row.bytes_processed << ","
+              << row.checkpoint_serialize_ms << "," << row.checkpoint_checksum_validate_ms << "\n";
 }
 
 }  // namespace
@@ -284,7 +274,8 @@ int main(int argc, char** argv) {
             }
             for (const auto algorithm : algorithms) {
                 for (const auto weighting : weightings) {
-                    const auto result = run_one(shape, client_count, algorithm, weighting, /*repetitions=*/5);
+                    const auto result =
+                        run_one(shape, client_count, algorithm, weighting, /*repetitions=*/5);
                     print_result_row(result);
                 }
             }

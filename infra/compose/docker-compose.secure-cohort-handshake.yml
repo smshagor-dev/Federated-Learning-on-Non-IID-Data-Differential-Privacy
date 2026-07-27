@@ -1,0 +1,122 @@
+# Secure Cohort Handshake and Signed Roster Runtime slice
+# (docs/secure-cohort-handshake-foundation.md), Work item 18: a
+# three-worker override enabling live secure aggregation and adding
+# worker-2/worker-3 alongside the existing single python-worker service.
+# Not a replacement for docker-compose.dev.yml/docker-compose.security.yml
+# -- always used together, matching docker-compose.security.yml's own
+# convention (see that file's header comment).
+#
+# Trust-bundle distribution: the coordinator writes its signed public-key
+# bundle to disk on startup (FL_COORDINATOR_SIGNING_KEY_BUNDLE_PATH) and
+# every worker loads it directly from disk, never via RPC (see
+# docs/message-authenticity-report.md section 11) -- but no prior compose
+# file actually shared that file between containers (a real, previously
+# undisclosed gap, found while building this slice's own live validation:
+# docker-compose.security.yml's coordinator override writes the bundle
+# into its own container's private writable layer, unreachable from any
+# worker). `coordinator-trust-bundle` is a named volume mounted
+# read-write on `coordinator` and read-only on every worker, closing that
+# gap for the first time.
+#
+# Usage:
+#   docker compose -f infra/compose/docker-compose.dev.yml \
+#                   -f infra/compose/docker-compose.security.yml \
+#                   -f infra/compose/docker-compose.secure-cohort-handshake.yml \
+#                   up -d --build postgres redis coordinator api worker-1 worker-2 worker-3
+#
+# See scripts/validate_secure_cohort_handshake.py for the automated,
+# scripted form of exactly this flow.
+volumes:
+  coordinator-trust-bundle: {}
+
+services:
+  # Unpublish postgres/redis's host ports for this override -- found
+  # live: this machine already runs an unrelated postgres/redis pair
+  # for a different project on the default 5432/6379 host ports,
+  # so docker-compose.dev.yml's host port mappings collide with those
+  # (a real, environment-specific conflict, not a bug in either
+  # project). Only the container-to-container network path (which is
+  # all `api` actually needs) is required for this validation -- `!override`
+  # (Compose Specification merge tag) replaces docker-compose.dev.yml's
+  # `ports` list wholesale rather than appending to it.
+  postgres:
+    ports: !override []
+  redis:
+    ports: !override []
+
+  coordinator:
+    volumes:
+      - coordinator-trust-bundle:/app/trust-bundle
+    environment:
+      FL_COORDINATOR_SIGNING_KEY_BUNDLE_PATH: /app/trust-bundle/coordinator_signing_key_bundle.json
+      FL_SECURE_AGGREGATION_ENABLED: "true"
+      # Short windows -- this validation runs one round against a
+      # cohort of 3 already-running workers, not a long-lived
+      # deployment; no reason to make the automated check wait minutes
+      # for a deadline sweep it does not intend to exercise.
+      FL_SECURE_AGGREGATION_KEY_ADVERTISEMENT_WINDOW_SECONDS: "60"
+      FL_SECURE_AGGREGATION_MASKED_UPDATE_WINDOW_SECONDS: "60"
+
+  # docker-compose.security.yml already defines python-worker's (worker-1's)
+  # mTLS/signing environment -- this section only adds the two variables
+  # that override file could not have known about (the shared trust-bundle
+  # volume did not exist before this file).
+  python-worker:
+    volumes:
+      - coordinator-trust-bundle:/app/trust-bundle:ro
+    environment:
+      FL_WORKER_TRUSTED_COORDINATOR_KEYS_PATH: /app/trust-bundle/coordinator_signing_key_bundle.json
+      FL_WORKER_RUN_ID: secure-cohort-handshake-validation
+
+  # worker-2 and worker-3: identical shape to docker-compose.security.yml's
+  # python-worker block plus this file's coordinator/python-worker
+  # additions above, parameterized per worker identity. Certificates
+  # issued via scripts/pki/issue-worker-cert.sh worker-2 / worker-3 (see
+  # certs/dev/workers/worker-2, certs/dev/workers/worker-3).
+  worker-2:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-worker.Dockerfile
+    depends_on:
+      coordinator:
+        condition: service_healthy
+    volumes:
+      - ../../certs/dev:/app/certs/dev:ro
+      - coordinator-trust-bundle:/app/trust-bundle:ro
+    environment:
+      FL_WORKER_COORDINATOR_ADDRESS: coordinator:50051
+      FL_WORKER_WORKER_ID: worker-2
+      FL_WORKER_RUN_ID: secure-cohort-handshake-validation
+      FL_WORKER_TLS_ENABLED: "true"
+      FL_WORKER_TLS_CA_CERT_PATH: /app/certs/dev/ca/ca.cert.pem
+      FL_WORKER_TLS_CLIENT_CERT_PATH: /app/certs/dev/workers/worker-2/tls.cert.pem
+      FL_WORKER_TLS_CLIENT_KEY_PATH: /app/certs/dev/workers/worker-2/tls.key.pem
+      FL_WORKER_TLS_SERVER_NAME: coordinator
+      FL_WORKER_SIGNING_KEY_DIR: /app/.fl_worker_signing_keys
+      FL_WORKER_TRUSTED_COORDINATOR_KEYS_PATH: /app/trust-bundle/coordinator_signing_key_bundle.json
+      FL_WORKER_SECURITY_EVENT_JOURNAL_PATH: /app/.fl_worker_security_events/events.jsonl
+      FL_WORKER_SECURITY_EVENT_FLUSH_INTERVAL_SECONDS: "5"
+
+  worker-3:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-worker.Dockerfile
+    depends_on:
+      coordinator:
+        condition: service_healthy
+    volumes:
+      - ../../certs/dev:/app/certs/dev:ro
+      - coordinator-trust-bundle:/app/trust-bundle:ro
+    environment:
+      FL_WORKER_COORDINATOR_ADDRESS: coordinator:50051
+      FL_WORKER_WORKER_ID: worker-3
+      FL_WORKER_RUN_ID: secure-cohort-handshake-validation
+      FL_WORKER_TLS_ENABLED: "true"
+      FL_WORKER_TLS_CA_CERT_PATH: /app/certs/dev/ca/ca.cert.pem
+      FL_WORKER_TLS_CLIENT_CERT_PATH: /app/certs/dev/workers/worker-3/tls.cert.pem
+      FL_WORKER_TLS_CLIENT_KEY_PATH: /app/certs/dev/workers/worker-3/tls.key.pem
+      FL_WORKER_TLS_SERVER_NAME: coordinator
+      FL_WORKER_SIGNING_KEY_DIR: /app/.fl_worker_signing_keys
+      FL_WORKER_TRUSTED_COORDINATOR_KEYS_PATH: /app/trust-bundle/coordinator_signing_key_bundle.json
+      FL_WORKER_SECURITY_EVENT_JOURNAL_PATH: /app/.fl_worker_security_events/events.jsonl
+      FL_WORKER_SECURITY_EVENT_FLUSH_INTERVAL_SECONDS: "5"

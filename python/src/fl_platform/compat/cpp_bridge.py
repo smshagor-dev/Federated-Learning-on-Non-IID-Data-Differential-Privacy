@@ -4,7 +4,7 @@ This module builds deterministic PyTorch state dicts and client updates,
 serializes them into the line-based protocol understood by the
 ``fl_aggregate_cli`` binary (see ``cpp/core/tools/aggregate_cli.cpp`` and
 ``docs/tensor-format.md``), invokes it as a subprocess, and reconstructs
-PyTorch tensors from the response. It exists so Milestone 2 golden-parity
+PyTorch tensors from the response. It exists so the Aggregation Core phase golden-parity
 tests can compare the C++ aggregation core against the legacy Python
 server implementation without requiring gRPC or pybind11 bindings.
 """

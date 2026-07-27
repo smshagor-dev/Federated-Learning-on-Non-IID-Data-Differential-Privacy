@@ -32,6 +32,24 @@ enum class CoordinatorEventType {
     kModelVersionUpdated,
     kCheckpointCompleted,
     kRunCompleted,
+    // Privacy Engineering phase: emitted by finalize_round's budget-policy
+    // enforcement (docs/privacy-budget-policies.md) — see
+    // CoordinatorEvent's metadata field for which mechanism
+    // ("sample_level"|"user_level"|"clipping") and policy triggered it.
+    // Never carries a raw epsilon value that could be misread as a
+    // combined cross-mechanism number; metadata keys are always prefixed
+    // by mechanism name.
+    kPrivacyBudgetWarning,
+    kPrivacyBudgetExceeded,
+    // Signed Client Results and Worker Lifecycle Enforcement slice,
+    // Work Package O (docs/message-authenticity-report.md). No raw
+    // signature, nonce, private key, or tensor value ever goes in the
+    // metadata for these -- only worker_id, a structured reason string,
+    // and counts.
+    kWorkerSuspended,
+    kWorkerActivated,
+    kWorkerRevoked,
+    kTaskCanceledByRevocation,
 };
 
 std::string to_string(CoordinatorEventType type);
@@ -64,7 +82,7 @@ struct CoordinatorEvent {
 // falls behind by more than `capacity` events observes a gap rather than
 // unbounded memory growth or blocking the publisher.
 class EventBus {
-public:
+  public:
     explicit EventBus(std::size_t capacity_per_run = 1000);
 
     // Fills in event_id (monotonic per-run sequence) and timestamp if not
@@ -76,13 +94,12 @@ public:
     // still retained), in publish order. This is what a StreamRunEvents
     // gRPC handler would call in a loop, using the last-seen event_id as
     // the next call's `after_event_id`.
-    [[nodiscard]] std::vector<CoordinatorEvent> poll(
-        const std::string& run_id, const std::string& after_event_id
-    ) const;
+    [[nodiscard]] std::vector<CoordinatorEvent> poll(const std::string& run_id,
+                                                     const std::string& after_event_id) const;
 
     [[nodiscard]] std::size_t history_size(const std::string& run_id) const;
 
-private:
+  private:
     mutable std::mutex mutex_;
     std::size_t capacity_per_run_;
     std::map<std::string, std::deque<CoordinatorEvent>> history_by_run_;

@@ -4,12 +4,24 @@ package fl.worker.v1;
 
 option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/worker/v1;workerv1";
 
+import "privacy/privacy.proto";
+
 message TensorManifest {
   string name = 1;
   repeated uint64 shape = 2;
   string dtype = 3;
   uint64 byte_length = 4;
   string checksum = 5;
+  // Privacy Engineering phase: inline tensor payload — see
+  // docs/create-run-wire-mapping.md's "tensor transport" section. Chosen
+  // over an artifact-store (MinIO/ArtifactReference) upload/download path
+  // as the pragmatic way to let real tensor values (client deltas, SCAFFOLD
+  // control variates) actually cross the live gRPC wire; the coordinator
+  // does not currently implement any artifact-store client. Row-major,
+  // matching `shape`. Empty means "no payload carried in this message"
+  // (e.g. a manifest-only TensorManifest describing a tensor whose values
+  // are not part of this particular message).
+  repeated double values = 6;
 }
 
 message ClientTask {
@@ -49,8 +61,8 @@ message ClientResult {
 }
 
 // ---------------------------------------------------------------------
-// Milestone 3 additions. Everything above this line is unchanged from
-// Milestone 1/2 (field numbers preserved); everything below is new
+// the Coordinator Runtime phase additions. Everything above this line is unchanged from
+// the Foundation/Aggregation Core phases (field numbers preserved); everything below is new
 // messages, not new fields spliced into the messages above, so the
 // backward-compatibility guarantee stays trivial to audit.
 // ---------------------------------------------------------------------
@@ -73,12 +85,185 @@ message WorkerCapability {
   uint64 available_memory_bytes = 5;
   repeated string supported_model_formats = 6;
   repeated string supported_algorithms = 7;
+  // Privacy Engineering phase: advertised so the coordinator only ever
+  // assigns a private task to a worker that actually declares support —
+  // see docs/worker-privacy-capabilities.md. Never fall back to
+  // non-private execution when no compatible worker is available.
+  fl.privacy.v1.WorkerPrivacyCapabilities privacy = 8;
+}
+
+// Coordinator Transport Verification and Message Authenticity slice,
+// Work Package F/J. Mirrors
+// fl_platform.security.capability_statement.CapabilityStatementPayload
+// field-for-field (see docs/signed-capabilities.md and
+// docs/canonical-security-serialization.md) plus the wire-only
+// signing_public_key needed for the coordinator to verify the
+// signature at all (trust-on-first-use of this key is bound to the
+// already mTLS-authenticated worker_id -- see
+// docs/certificate-identity-binding.md -- not established by this
+// message alone). payload_hash/signature are computed over the exact
+// canonical-JSON encoding of every field above this comment (schema_version
+// through signing_key_id), never including signing_public_key,
+// payload_hash, or signature itself.
+message SignedCapabilityStatement {
+  uint32 schema_version = 1;
+  string worker_id = 2;
+  string software_version = 3;
+  string build_id = 4;
+  repeated string supported_algorithms = 5;
+  repeated string supported_privacy_modes = 6;
+  string opacus_version = 7;
+  bool secure_random_available = 8;
+  repeated string supported_accountants = 9;
+  repeated string supported_clipping_modes = 10;
+  repeated string supported_models = 11;
+  repeated string supported_model_schema_hashes = 12;
+  uint64 maximum_task_bytes = 13;
+  uint64 maximum_private_batch_size = 14;
+  uint32 cpu_count = 15;
+  bool gpu_available = 16;
+  uint32 gpu_count = 17;
+  double issued_at = 18;
+  double expires_at = 19;
+  string nonce = 20;
+  string signing_key_id = 21;
+  // Not part of the signed payload -- see the message comment above.
+  string signing_public_key = 22;
+  string payload_hash = 23;
+  string signature = 24;
+}
+
+// Message Authenticity Enforcement and Identity Lifecycle slice, Work
+// Package B. See docs/signed-worker-envelopes.md. One authoritative
+// envelope contract, reused (as a new optional field, never a
+// replacement of any existing field) by every worker-originated
+// security-sensitive RPC as each is migrated to it -- this pass wires
+// it into WorkerHeartbeatRequest only (see message_type ==
+// MESSAGE_TYPE_WORKER_HEARTBEAT below); every other value in
+// MessageType is a reserved slot for a follow-on pass, not yet
+// produced or verified by any code in this repository.
+//
+// Deliberately does NOT carry a copy of the domain message's own
+// payload (per the closure-gate's "do not duplicate tensor payloads
+// merely to sign them" instruction) -- payload_hash binds to a
+// canonical hash computed from the domain request message's own
+// existing fields (see docs/payload-hashing.md for the per-message-
+// type hash definition), and the envelope travels as a sibling field
+// on that same request message, e.g. WorkerHeartbeatRequest.envelope.
+//
+// Optional-identifier canonical-empty-value rule (required by the
+// closure gate): any of run_id/round_id/task_id/client_id/
+// model_version that do not apply to a given message_type are encoded
+// as their protobuf zero value (empty string / 0) and are NOT part of
+// that message type's payload hash unless docs/payload-hashing.md's
+// per-type field list explicitly names them -- a message type that
+// does not use a field must not accidentally bind its signature to an
+// always-empty value in a way that would make the hash function's
+// output ambiguous between "field intentionally empty" and "field not
+// applicable."
+message SignedWorkerEnvelope {
+  enum MessageType {
+    MESSAGE_TYPE_UNSPECIFIED = 0;
+    MESSAGE_TYPE_WORKER_HEARTBEAT = 1;
+    MESSAGE_TYPE_TASK_ACQUISITION = 2;
+    MESSAGE_TYPE_TASK_ACCEPTANCE = 3;
+    MESSAGE_TYPE_TASK_PROGRESS = 4;
+    MESSAGE_TYPE_CLIENT_RESULT = 5;
+    MESSAGE_TYPE_TASK_FAILURE = 6;
+    MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD = 7;
+    MESSAGE_TYPE_PERSONALIZATION_METRICS = 8;
+    MESSAGE_TYPE_WORKER_DRAIN = 9;
+    MESSAGE_TYPE_WORKER_SHUTDOWN = 10;
+    MESSAGE_TYPE_KEY_ROTATION_REQUEST = 11;
+    // Web Security Center, Event Centralization, and Security CI slice,
+    // Work Package L: a batch of worker-local security events being
+    // relayed to the coordinator's durable journal. See
+    // SignedWorkerSecurityEventBatch below.
+    MESSAGE_TYPE_SECURITY_EVENT_BATCH = 12;
+    // Secure Aggregation Wire Protocol and Live No-Dropout Execution
+    // slice, Work Package C. Envelope-level dispatch values for the two
+    // secure-aggregation domain payloads (SecureAggregationKeyAdvertisement/
+    // MaskedClientUpdate below). Additive only -- no RPC handler
+    // constructs an envelope with either value yet this pass (see
+    // docs/secure-aggregation-wire-protocol-foundation.md's Tier 2 scope
+    // for the still-deferred live RPC handlers).
+    MESSAGE_TYPE_SECURE_AGGREGATION_KEY_ADVERTISEMENT = 13;
+    MESSAGE_TYPE_SECURE_AGGREGATION_MASKED_UPDATE = 14;
+  }
+
+  enum MessageStream {
+    MESSAGE_STREAM_UNSPECIFIED = 0;
+    MESSAGE_STREAM_CONTROL = 1;
+    MESSAGE_STREAM_HEARTBEAT = 2;
+    MESSAGE_STREAM_TASK_LIFECYCLE = 3;
+    MESSAGE_STREAM_CLIENT_RESULT = 4;
+    MESSAGE_STREAM_PRIVACY_RECORD = 5;
+    MESSAGE_STREAM_PERSONALIZATION = 6;
+    MESSAGE_STREAM_KEY_MANAGEMENT = 7;
+    // Its own sequence track, independent of MESSAGE_STREAM_HEARTBEAT/
+    // MESSAGE_STREAM_CLIENT_RESULT/etc -- a burst of queued security
+    // events must never be rejected as a "sequence gap" against an
+    // unrelated stream's sequence counter.
+    MESSAGE_STREAM_SECURITY_EVENTS = 8;
+    // Secure Aggregation Wire Protocol and Live No-Dropout Execution
+    // slice, Work Package C. One session-bound stream per
+    // (worker_id, signing_key_id) track, shared by both
+    // MESSAGE_TYPE_SECURE_AGGREGATION_KEY_ADVERTISEMENT and
+    // MESSAGE_TYPE_SECURE_AGGREGATION_MASKED_UPDATE -- key-advertisement-
+    // precedes-masked-update ordering is enforced by the cohort state
+    // machine's own transition allow-list, not by this sequence number
+    // (which only orders messages within the stream, never encodes
+    // message type). Cross-session replay is rejected by a handler-level
+    // session_id field check against the verified payload, not by a
+    // separate replay-store key component -- see
+    // docs/secure-aggregation-wire-protocol-foundation.md Section 4.4 for
+    // the full replay-key-composition decision. This is the wire mirror
+    // of the C++-only fl::coordinator::MessageStream::kSecureAggregation
+    // placeholder added in the prior slice
+    // (replay_protection_store.hpp) -- still schema-only: no RPC
+    // handler constructs a ReplayCandidate on this stream yet.
+    MESSAGE_STREAM_SECURE_AGGREGATION = 9;
+  }
+
+  uint32 schema_version = 1;
+  MessageType message_type = 2;
+  string worker_id = 3;
+  // Canonical empty value for a message_type that has no run: "".
+  string run_id = 4;
+  // Canonical empty value for a message_type that has no round: 0.
+  uint64 round_id = 5;
+  // Canonical empty value for a message_type that has no task: "".
+  string task_id = 6;
+  // Canonical empty value for a message_type that has no client: "".
+  string client_id = 7;
+  // Canonical empty value for a message_type that has no model version: "".
+  string model_version = 8;
+  MessageStream message_stream = 9;
+  // Per (worker_id, signing_key_id, message_stream) track -- see
+  // docs/message-sequences.md. The documented starting value for a
+  // brand-new track is 1, not 0.
+  uint64 sequence_number = 10;
+  double issued_at = 11;
+  double expires_at = 12;
+  string nonce = 13;
+  // SHA-256 hex of this message_type's canonical payload hash input --
+  // see docs/payload-hashing.md. Computed over the sibling domain
+  // request message's own fields, never over this envelope's own
+  // fields.
+  string payload_hash = 14;
+  string signing_key_id = 15;
+  string signature = 16;
 }
 
 message RegisterWorkerRequest {
   string worker_id = 1;
   WorkerCapability capability = 2;
   string trace_id = 3;
+  // Optional. Absent means "legacy, unsigned registration" -- fully
+  // backward compatible with every RegisterWorkerRequest sent before
+  // this field existed. See coordinator_service.cpp's RegisterWorker
+  // for the verification/enforcement this triggers when present.
+  SignedCapabilityStatement signed_capability = 4;
 }
 
 message RegisterWorkerResponse {
@@ -93,9 +278,304 @@ message WorkerHeartbeatRequest {
   WorkerStatus status = 2;
   string current_task_id = 3;
   string trace_id = 4;
+  // Optional. Absent means "legacy, unsigned heartbeat" -- see
+  // coordinator_service.cpp's Heartbeat handler for what absence means
+  // under the current, non-default-deny rollout of this check (see
+  // docs/signed-worker-envelopes.md's "Backward compatibility" section
+  // for the exact policy this pass actually enforces).
+  // envelope.message_type must be MESSAGE_TYPE_WORKER_HEARTBEAT.
+  SignedWorkerEnvelope envelope = 5;
 }
 
 message WorkerHeartbeatResponse {
   bool acknowledged = 1;
   bool should_disconnect = 2;
+  // Stable machine-readable reason for a rejection (Work Package B's
+  // "stable error codes" requirement) -- empty on success. See
+  // docs/signed-worker-envelopes.md for the fixed set of values this
+  // takes today (e.g. "envelope_missing", "invalid_signature",
+  // "payload_hash_mismatch", "expired", "replayed_nonce",
+  // "duplicate_sequence", "lower_sequence", "sequence_gap_exceeded",
+  // "worker_revoked").
+  string rejection_code = 3;
+}
+
+// Signing-Key Lifecycle slice (docs/signing-key-management.md,
+// docs/key-rotation.md): the domain-payload fields of a signed
+// worker key-rotation request. Deliberately does NOT carry
+// nonce/sequence_number/signing_key_id/payload_hash/signature of its
+// own -- those cryptographic-envelope fields are carried by wrapping
+// this payload's canonical-JSON SHA-256 hash in a SignedWorkerEnvelope
+// with message_type = MESSAGE_TYPE_KEY_ROTATION_REQUEST and
+// message_stream = MESSAGE_STREAM_KEY_MANAGEMENT (both enum values
+// were already reserved, unused, since the prior slice) -- the same
+// reuse decision already made for SignedSamplePrivacyRecord. Must be
+// signed by the CURRENT key (envelope.signing_key_id must equal
+// current_signing_key_id) -- an unknown or non-ACTIVE key cannot
+// authorize a rotation.
+message WorkerKeyRotationPayload {
+  uint32 schema_version = 1;
+  string worker_id = 2;
+  string current_signing_key_id = 3;
+  string new_signing_key_id = 4;
+  // Hex-encoded raw Ed25519 public key (32 bytes -> 64 hex chars),
+  // matching WorkerSigningIdentity.public_key_hex()'s existing
+  // encoding convention.
+  string new_public_key_hex = 5;
+  double new_key_expires_at_unix_s = 6;
+  double requested_grace_period_seconds = 7;
+}
+
+// Web Security Center, Event Centralization, and Security CI slice,
+// Work Package L: one worker-local security event queued for relay to
+// the coordinator's durable journal. Deliberately a distinct message
+// from coordinator.SecurityEventRecord, not a reuse of it -- a worker
+// must never be able to set event_id, source_service, or
+// payload_checksum, all of which the coordinator assigns itself on
+// acceptance (event_id is namespaced/sequenced centrally so IDs stay
+// globally unique and ordered across every worker; source_service is
+// always "python-worker" for anything arriving via this RPC, never
+// worker-supplied). See docs/security-event-centralization.md.
+message WorkerSecurityEventPayload {
+  uint32 schema_version = 1;
+  string event_type = 2;
+  string severity = 3;
+  // ISO-8601 UTC, the worker's own local clock at event time -- the
+  // coordinator does not attempt to re-derive this from its own clock,
+  // consistent with docs/known-limitations.md's existing disclosure
+  // that cross-process event ordering is best-effort, not a
+  // linearizable clock.
+  string timestamp = 4;
+  string source_component = 5;
+  string actor_type = 6;
+  string safe_actor_id = 7;
+  string subject_type = 8;
+  string safe_subject_id = 9;
+  string run_id = 10;
+  uint64 round_id = 11;
+  string task_id = 12;
+  string safe_signing_key_id = 13;
+  string request_id = 14;
+  string trace_id = 15;
+  string outcome = 16;
+  string reason_code = 17;
+  map<string, string> safe_details = 18;
+}
+
+// The domain payload signed by SignedWorkerEnvelope
+// (message_type = MESSAGE_TYPE_SECURITY_EVENT_BATCH, message_stream =
+// MESSAGE_STREAM_SECURITY_EVENTS). Bounded server-side (see
+// coordinator_service.cpp's SubmitWorkerSecurityEvents: a batch
+// exceeding the configured maximum event count, or any single event
+// exceeding the configured maximum serialized size, is rejected
+// wholesale, never silently truncated) -- Work Package L's "bounded
+// batch/event size" requirement.
+message SignedWorkerSecurityEventBatch {
+  uint32 schema_version = 1;
+  string worker_id = 2;
+  repeated WorkerSecurityEventPayload events = 3;
+  // Worker's own self-reported count of events still queued locally
+  // after this batch is sent. Explicitly an untrusted hint, never
+  // treated as ground truth by GetSecurityEventSourceHealth (see that
+  // RPC's comment in coordinator.proto) -- a compromised or buggy
+  // worker could report anything here.
+  uint64 queue_depth_hint = 4;
+}
+
+// ---------------------------------------------------------------------
+// Secure Aggregation Wire Protocol and Live No-Dropout Execution slice,
+// Work Package B. Domain payloads carried inside a SignedWorkerEnvelope
+// -- mirrors ClientResult/SignedSamplePrivacyRecord's existing split
+// (RPC wrapper/dispatch messages live in coordinator.proto; the signed
+// domain payload itself lives here, next to the other
+// envelope-carried payloads). Provider is
+// fl.coordinator.v1.SecureAggregationProvider
+// (SECAGG_NO_DROPOUT_EXPERIMENTAL) throughout -- see
+// docs/secure-aggregation-no-dropout-core-report.md for the Mandatory
+// Security Boundary this provider is held to. Additive only this
+// pass: these messages compile and generate real bindings, but no RPC
+// handler constructs, verifies, or signs one yet -- see
+// docs/secure-aggregation-wire-protocol-foundation.md's Tier 2 scope.
+// ---------------------------------------------------------------------
+
+// Top-level (not nested) because both worker.proto's own messages
+// below and coordinator.proto's secure-aggregation session/roster
+// messages need it, and coordinator.proto imports worker.proto (never
+// the reverse) -- defining it here, not in coordinator.proto, is what
+// keeps that import graph acyclic. Provider naming communicates the
+// limitation directly (Mandatory Security Boundary): never
+// SECURE_AGGREGATION_PROVIDER_COMPLETE.
+enum SecureAggregationProvider {
+  SECURE_AGGREGATION_PROVIDER_UNSPECIFIED = 0;
+  SECURE_AGGREGATION_PROVIDER_NONE = 1;
+  SECURE_AGGREGATION_PROVIDER_SECAGG_NO_DROPOUT_EXPERIMENTAL = 2;
+}
+
+// A convenience/observability categorization of which secure-
+// aggregation domain payload a message carries -- distinct from
+// SignedWorkerEnvelope.MessageType (the wire-dispatch authority for
+// envelope decoding itself); this enum exists for contexts (logging,
+// future event/metric labeling) that want to talk about "which secure-
+// aggregation message kind" without needing the full envelope.
+enum SecureAggregationMessageType {
+  SECURE_AGGREGATION_MESSAGE_TYPE_UNSPECIFIED = 0;
+  SECURE_AGGREGATION_MESSAGE_TYPE_KEY_ADVERTISEMENT = 1;
+  SECURE_AGGREGATION_MESSAGE_TYPE_MASKED_UPDATE = 2;
+}
+
+// Work Package L: a worker's signed ephemeral X25519 public-key
+// advertisement for one secure aggregation session. Message type
+// MESSAGE_TYPE_SECURE_AGGREGATION_KEY_ADVERTISEMENT, stream
+// MESSAGE_STREAM_SECURE_AGGREGATION.
+message SecureAggregationKeyAdvertisement {
+  uint32 schema_version = 1;
+  string session_id = 2;
+  string run_id = 3;
+  uint64 round_id = 4;
+  string model_version = 5;
+  string worker_id = 6;
+  string client_id = 7;
+  // 32 raw X25519 public-key bytes, hex-encoded (64 hex chars) --
+  // matches fl::coordinator::hex_encode's convention
+  // (secure_aggregation_crypto.hpp). Never all-zero; a coordinator
+  // handler must reject that the same way
+  // derive_x25519_shared_secret already rejects an all-zero *derived
+  // shared secret* -- an all-zero *public key* is a distinct, earlier
+  // check the not-yet-written RPC handler is responsible for (Work
+  // Package G, step 23).
+  string ephemeral_public_key_x25519 = 8;
+  // First 8 raw bytes of the public key, hex-encoded -- same
+  // convention as coordinator_key_id_for (coordinator_signing_identity.cpp),
+  // reused here as a human-diagnosable short identifier, never as a
+  // trust decision on its own (the full public key is always what is
+  // actually bound into the frozen roster's signature).
+  string public_key_fingerprint = 9;
+  double issued_at = 10;
+  double expires_at = 11;
+}
+
+// Work Package N: one masked tensor within a MaskedClientUpdate.
+// masked_values are ring elements (mod 2^64, see
+// secure_aggregation_encoding.hpp's domain-choice rationale) -- never
+// raw IEEE-754 floats, never an unmasked signed value.
+message SecureAggregationMaskedTensor {
+  string tensor_name = 1;
+  repeated uint64 masked_values = 2;
+  // SHA-256 (hex) over the canonical little-endian byte encoding of
+  // masked_values, computed by the same sha256_hex primitive
+  // secure_aggregation_crypto.cpp already provides -- corruption/
+  // tamper-in-transit detection for this specific tensor, independent
+  // of the envelope's own outer signature covering the whole message.
+  string checksum = 3;
+}
+
+// Work Package N: per-contribution encoding-quality reporting --
+// distinct from SecureAggregationQuantizationSummary
+// (coordinator.proto), which aggregates this same information at
+// session-status granularity, not per-contribution.
+message SecureAggregationEncodingStatistics {
+  uint64 total_elements = 1;
+  double max_quantization_error = 2;
+  double mean_quantization_error = 3;
+}
+
+// Work Package N: the signed masked-update payload. Message type
+// MESSAGE_TYPE_SECURE_AGGREGATION_MASKED_UPDATE, stream
+// MESSAGE_STREAM_SECURE_AGGREGATION. Deliberately carries no clear
+// tensor values anywhere -- masked_tensors/masked_weight are the only
+// update-shaped fields, both already-masked ring values (Work Package
+// P's cleartext-prohibition requirement, enforced structurally by this
+// message's own shape, not merely by handler logic).
+message MaskedClientUpdate {
+  uint32 schema_version = 1;
+  SecureAggregationProvider provider = 2;
+  uint32 protocol_version = 3;
+  string session_id = 4;
+  string run_id = 5;
+  uint64 round_id = 6;
+  string task_id = 7;
+  string lease_id = 8;
+  uint32 attempt = 9;
+  string worker_id = 10;
+  string client_id = 11;
+  string model_version = 12;
+  string cohort_commitment = 13;
+  string tensor_manifest_hash = 14;
+  string fixed_point_profile_hash = 15;
+  // Masked Update Runtime and No-Dropout Secure FedAvg Finalization
+  // slice, Work Area K: exact-conformance additions binding this
+  // contribution to the specific signed, verified frozen roster it was
+  // computed against (cohort_commitment alone identifies the roster's
+  // participant set; these two additionally bind the roster's own
+  // cryptographic-profile hash and its own payload_hash, so a tampered
+  // or substituted roster the worker somehow accepted would still be
+  // independently detectable coordinator-side).
+  string frozen_roster_payload_hash = 23;
+  string cryptographic_profile_hash = 24;
+  repeated SecureAggregationMaskedTensor masked_tensors = 16;
+  uint64 masked_weight = 17;
+  string masked_weight_checksum = 18;
+  SecureAggregationEncodingStatistics encoding_statistics = 19;
+  // Present only alongside sample-level (or hybrid) DP, per Work
+  // Package V's SAMPLE_LEVEL compatibility requirement -- binds the
+  // independently-signed SignedSamplePrivacyRecord (privacy.proto)
+  // into this masked submission without duplicating its fields.
+  string sample_privacy_record_hash = 20;
+  double issued_at = 21;
+  double expires_at = 22;
+  // Secure User-Level Differential Privacy Runtime slice, Work Area J:
+  // present only when this contribution is bound to a secure
+  // user-level-DP round (task.secure_aggregation.secure_user_level_dp_active).
+  // Absent for NONE/SAMPLE_LEVEL secure rounds, exactly like
+  // sample_privacy_record_hash above is absent when sample-level DP is
+  // not active.
+  SignedUserLevelPrivacyAttestation user_level_attestation = 25;
+}
+
+// Secure User-Level Differential Privacy Runtime slice, Work Area I: an
+// independently signed attestation that a worker received, verified,
+// and applied the exact signed clipping configuration for one secure
+// user-level-DP task. This is evidence of configured worker behavior,
+// not cryptographic proof of correct clipping -- see the Mandatory
+// Privacy Trust Statement in docs/secure-user-level-dp-semantics.md.
+// Deliberately excludes the unclipped norm, the clipped norm, the
+// clipping factor, whether clipping actually occurred, any clear
+// tensor statistic, dataset sample count, and raw privacy noise --
+// none of that is required by this slice's fixed clipping mechanism,
+// and each would risk revealing client-specific information.
+// Self-contained (signing_key_id/payload_hash/signature are fields on
+// this message itself, not a SignedWorkerEnvelope wrapper) -- the
+// coordinator verifies it using the SAME resolved signing key already
+// verified for the outer MaskedClientUpdate's envelope (Work Area J:
+// "wrong worker" is rejected by requiring worker_id/signing_key_id to
+// match the outer envelope, not by a second independent key lookup).
+message SignedUserLevelPrivacyAttestation {
+  uint32 schema_version = 1;
+  string worker_id = 2;
+  string client_id = 3;
+  string run_id = 4;
+  uint64 round_id = 5;
+  string task_id = 6;
+  string session_id = 7;
+  string model_version = 8;
+  fl.privacy.v1.PrivacyMode privacy_mode = 9;
+  string privacy_configuration_hash = 10;
+  double clip_norm = 11;
+  double effective_sensitivity = 12;
+  // Fixed to "global_l2" this slice -- see
+  // docs/secure-user-level-dp-semantics.md section 4. A distinct
+  // string value (not a bool) so a future slice can introduce another
+  // strategy without a wire-incompatible change.
+  string clipping_strategy = 13;
+  // Always 1 this slice -- see the Initial Weighting Restriction.
+  uint64 fixed_weight = 14;
+  string fixed_point_profile_hash = 15;
+  string tensor_manifest_hash = 16;
+  SecureAggregationProvider provider = 17;
+  bool operation_completed = 18;
+  double issued_at = 19;
+  double expires_at = 20;
+  string signing_key_id = 21;
+  string payload_hash = 22;
+  string signature = 23;
 }

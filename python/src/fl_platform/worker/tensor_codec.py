@@ -4,7 +4,7 @@ Matches the "name|dtype|shape|values" text encoding used throughout the
 C++ core (cpp/core/tools/aggregate_cli.cpp, cpp/coordinator/tools/
 coordinator_cli.cpp, and the checkpoint formats) — see
 docs/tensor-format.md. Kept separate from
-fl_platform.compat.cpp_bridge's (Milestone 2) tensor helpers because this
+fl_platform.compat.cpp_bridge's (the Aggregation Core phase) tensor helpers because this
 module targets plain dict[str, torch.Tensor] state (what a worker
 naturally works with), not the CppAggregationRequest/Result shapes.
 """

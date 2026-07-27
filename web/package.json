@@ -8,7 +8,8 @@
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "node ./node_modules/eslint/bin/eslint.js .",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit --incremental false",
-    "test": "node ./node_modules/vitest/vitest.mjs run"
+    "test": "node ./node_modules/vitest/vitest.mjs run",
+    "e2e": "node ./node_modules/playwright/cli.js test"
   },
   "dependencies": {
     "next": "15.0.0",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@eslint/js": "9.18.0",
+    "@playwright/test": "^1.62.0",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.1.0",
     "@types/node": "22.10.2",

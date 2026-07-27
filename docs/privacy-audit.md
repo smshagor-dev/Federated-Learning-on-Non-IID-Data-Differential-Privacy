@@ -67,6 +67,6 @@ The current implementation supports a client-level privacy mechanism only.
 - SCAFFOLD control variate updates are based on already-noised deltas, but there is no formal proof bundled with the codebase.
 - There is no privacy budget enforcement gate that stops training when a target budget is exceeded.
 
-## Milestone 1 Outcome
+## Foundation Phase Outcome
 
-Milestone 1 preserves this behavior exactly, documents it, and avoids overstating guarantees. No new privacy claim is introduced.
+the Foundation phase preserves this behavior exactly, documents it, and avoids overstating guarantees. No new privacy claim is introduced.

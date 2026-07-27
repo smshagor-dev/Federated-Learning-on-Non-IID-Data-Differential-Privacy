@@ -5,14 +5,25 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fl-platform"
 version = "0.1.0"
-description = "Milestone 1 Python foundation for the federated learning super system"
-requires-python = ">=3.10"
+description = "Foundation-phase Python package for the federated learning super system"
+requires-python = ">=3.11"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2,<9",
     "ruff>=0.6,<1",
     "mypy>=1.11,<2",
+]
+# Secure Transport and Worker Identity Hardening slice
+# (docs/cryptographic-primitives.md): PyNaCl for Ed25519 signing/X25519
+# key agreement (the libsodium binding, matching the C++-side
+# selection), `cryptography` for X.509 certificate inspection used by
+# mTLS channel construction and the development PKI tooling. Pinned to
+# the versions verified installable and working in this environment
+# (see docs/cryptographic-primitives.md's dependency-verification note).
+security = [
+    "pynacl>=1.5,<2",
+    "cryptography>=42,<50",
 ]
 
 [tool.setuptools]
@@ -25,7 +36,14 @@ where = ["src"]
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.10"
+# Not 3.10 (the old value): this package uses stdlib `tomllib`, added in
+# 3.11 (see worker/configuration.py), and requires-python was 3.10 by
+# mistake — bumped to >=3.11 above. python_version is set one step
+# higher still, to 3.12, purely to satisfy numpy's installed type stubs
+# (which use PEP 695 `type X = ...` syntax mypy only parses at
+# python_version >= 3.12); this is a type-checking target only and makes
+# no claim that the code requires 3.12 at runtime.
+python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 warn_return_any = true
@@ -40,7 +58,7 @@ exclude = [
 # fl_platform.worker.task_runner intentionally reuses the legacy prototype's
 # proven training implementation (federated.client) rather than
 # reimplementing it (see docs/python-worker.md). That package predates this
-# strict mypy config and is out of this milestone's scope to retrofit;
+# strict mypy config and is out of this phase's scope to retrofit;
 # `follow_imports = "skip"` stops mypy from strict-checking it as a side
 # effect of one import, without silencing real issues in python/src itself.
 [[tool.mypy.overrides]]
@@ -48,10 +66,30 @@ module = ["federated", "federated.*", "models", "models.*", "data", "data.*", "u
 follow_imports = "skip"
 
 # grpcio's generated _grpc.py modules import `grpc` directly; type stubs for
-# grpc/protobuf are not part of this milestone's dev dependencies (only the
+# grpc/protobuf are not part of this phase's dev dependencies (only the
 # runtime packages are — see docs/grpc-contracts.md), so these two specific
 # untyped-import categories are ignored rather than adding a stub dependency
 # whose only purpose would be silencing this.
 [[tool.mypy.overrides]]
 module = ["grpc.*", "google.protobuf.*"]
+ignore_missing_imports = true
+
+# Opacus (Privacy Engineering phase's sample-level DP dependency) ships no
+# py.typed marker / stubs — same rationale as the grpc override above.
+[[tool.mypy.overrides]]
+module = ["opacus.*"]
+ignore_missing_imports = true
+
+# torchvision (datasets/loaders.py's real MNIST/CIFAR-10 loading — see
+# docs/dataset-registry.md) ships no py.typed marker; same rationale as
+# the grpc override above.
+[[tool.mypy.overrides]]
+module = ["torchvision", "torchvision.*"]
+ignore_missing_imports = true
+
+# PyNaCl (import name `nacl`, Secure Transport and Worker Identity
+# Hardening slice's Ed25519/X25519 dependency) ships no py.typed marker;
+# same rationale as the grpc override above.
+[[tool.mypy.overrides]]
+module = ["nacl.*"]
 ignore_missing_imports = true

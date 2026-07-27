@@ -18,6 +18,18 @@ enum class AggregationAlgorithm {
     kFedAdagrad,
     kFedAdam,
     kFedYogi,
+    // the Algorithm Expansion phase: FedSAM/Ditto/Per-FedAvg all submit a single "global
+    // update" delta shaped identically to FedAvg's (see docs/fedsam.md,
+    // docs/ditto.md, docs/per-fedavg.md for why — sharpness-aware
+    // perturbation, personalization, and meta-adaptation are all local
+    // (Python-side) training-loop concerns; none of them change what the
+    // *server* does with the resulting delta). Distinct enum values from
+    // kFedAvg (not reused) so events/labels/metrics report the true
+    // algorithm, exactly mirroring how kFedProx already reuses
+    // WeightedAggregator's math under its own distinct label.
+    kFedSam,
+    kDitto,
+    kPerFedAvg,
 };
 
 enum class WeightingStrategyType {
@@ -75,42 +87,34 @@ struct AggregationResult {
 };
 
 class Aggregator {
-public:
+  public:
     virtual ~Aggregator() = default;
 
-    virtual AggregationResult aggregate(
-        const ModelManifest& manifest,
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions& options,
-        const OptimizerState& previous_state
-    ) const = 0;
+    virtual AggregationResult aggregate(const ModelManifest& manifest,
+                                        const std::vector<ClientUpdate>& updates,
+                                        const AggregationOptions& options,
+                                        const OptimizerState& previous_state) const = 0;
 };
 
 class WeightingStrategy {
-public:
+  public:
     virtual ~WeightingStrategy() = default;
-    [[nodiscard]] virtual std::vector<double> weights(
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions& options
-    ) const = 0;
+    [[nodiscard]] virtual std::vector<double> weights(const std::vector<ClientUpdate>& updates,
+                                                      const AggregationOptions& options) const = 0;
     [[nodiscard]] virtual std::string name() const = 0;
 };
 
 class UpdateValidator {
-public:
-    void validate_cohort(
-        const ModelManifest& manifest,
-        const std::vector<ClientUpdate>& updates,
-        const AggregationOptions& options,
-        bool require_control
-    ) const;
+  public:
+    void validate_cohort(const ModelManifest& manifest,
+                         const std::vector<ClientUpdate>& updates,
+                         const AggregationOptions& options,
+                         bool require_control) const;
 };
 
 class AggregatorRegistry {
-public:
-    [[nodiscard]] std::unique_ptr<Aggregator> create(
-        AggregationAlgorithm algorithm
-    ) const;
+  public:
+    [[nodiscard]] std::unique_ptr<Aggregator> create(AggregationAlgorithm algorithm) const;
 };
 
 // A ServerOptimizer owns the per-tensor moment update and resulting model
@@ -118,16 +122,14 @@ public:
 // variant is its own class rather than a branch in a shared function so
 // that the moment-update formulas stay independently readable and testable.
 class ServerOptimizer {
-public:
+  public:
     virtual ~ServerOptimizer() = default;
 
-    virtual OptimizerState apply(
-        const ModelManifest& manifest,
-        const TensorCollection& aggregated_delta,
-        const OptimizerState& previous_state,
-        const AggregationOptions& options,
-        TensorCollection& out_model_delta
-    ) const = 0;
+    virtual OptimizerState apply(const ModelManifest& manifest,
+                                 const TensorCollection& aggregated_delta,
+                                 const OptimizerState& previous_state,
+                                 const AggregationOptions& options,
+                                 TensorCollection& out_model_delta) const = 0;
 
     [[nodiscard]] virtual std::string name() const = 0;
 };

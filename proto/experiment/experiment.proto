@@ -4,6 +4,8 @@ package fl.experiment.v1;
 
 option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/experiment/v1;experimentv1";
 
+import "privacy/privacy.proto";
+
 message DatasetConfig {
   string name = 1;
   string partitioning = 2;
@@ -15,23 +17,90 @@ message ModelConfig {
   string update_format = 2;
 }
 
-message PrivacyConfig {
-  string mode = 1;
-  double noise_multiplier = 2;
-  double max_grad_norm = 3;
-  double delta = 4;
-}
-
 message AlgorithmConfig {
   string name = 1;
   double mu = 2;
+
+  // -----------------------------------------------------------------
+  // the Algorithm Expansion phase additions: additive optional sub-configs, one per new
+  // algorithm identifier (FEDSAM/DITTO/PER_FEDAVG) plus a shared
+  // personalization-architecture config used by any of them. Unset
+  // unless `name` selects that algorithm — see docs/fedsam.md,
+  // docs/ditto.md, docs/per-fedavg.md, docs/personalization-models.md.
+  // -----------------------------------------------------------------
+  FedSamConfig fedsam = 3;
+  DittoConfig ditto = 4;
+  PerFedAvgConfig per_fedavg = 5;
+  PersonalizationConfig personalization = 6;
+}
+
+// See docs/fedsam.md. grad_clip_norm is for numerical stability only
+// (not a privacy control — the Algorithm Expansion phase implements no differential
+// privacy; see docs/known-limitations.md).
+message FedSamConfig {
+  bool enabled = 1;
+  double rho = 2;
+  bool adaptive = 3;
+  string base_optimizer = 4;
+  double learning_rate = 5;
+  double momentum = 6;
+  double weight_decay = 7;
+  uint32 local_epochs = 8;
+  double grad_clip_norm = 9;
+  bool mixed_precision = 10;
+  double max_perturbation_norm = 11;
+  bool fail_on_non_finite = 12;
+}
+
+// See docs/ditto.md.
+message DittoConfig {
+  double personalized_learning_rate = 1;
+  double global_learning_rate = 2;
+  double regularization_coefficient = 3;
+  uint32 personalized_local_epochs = 4;
+  uint32 global_local_epochs = 5;
+  string personalized_optimizer = 6;
+  string global_optimizer = 7;
+  string personalized_checkpoint_policy = 8;
+  uint32 evaluation_frequency = 9;
+  string warm_start_policy = 10;
+}
+
+// See docs/per-fedavg.md. first_order_mode is always true this
+// phase (full second-order MAML is out of scope) but kept explicit
+// rather than assumed, per the task's instruction.
+message PerFedAvgConfig {
+  double inner_learning_rate = 1;
+  double outer_learning_rate = 2;
+  uint32 inner_steps = 3;
+  uint32 meta_steps = 4;
+  bool first_order_mode = 5;
+  uint32 adaptation_steps_eval = 6;
+  double support_query_split_ratio = 7;
+  uint32 minimum_samples_required = 8;
+  string fallback_behavior = 9;
+}
+
+// See docs/shared-backbone-local-head.md.
+message PersonalizationConfig {
+  // "none" | "shared_backbone_local_head" | "full_personalized_model"
+  string mode = 1;
+  repeated string backbone_parameter_prefixes = 2;
+  repeated string personalization_head_parameter_prefixes = 3;
+  repeated string frozen_parameter_prefixes = 4;
+  string checkpoint_retention_policy = 5;
+  string local_model_initialization_policy = 6;
+  string global_to_local_sync_policy = 7;
 }
 
 message RunConfiguration {
   string run_id = 1;
   DatasetConfig dataset = 2;
   ModelConfig model = 3;
-  PrivacyConfig privacy = 4;
+  // Privacy Engineering phase: replaced the old inline scaffold (single
+  // mode/noise_multiplier/max_grad_norm/delta, no mechanism separation)
+  // with fl.privacy.v1.PrivacyConfig — see docs/privacy-mathematics.md.
+  fl.privacy.v1.PrivacyConfig privacy = 4;
   AlgorithmConfig algorithm = 5;
   uint32 rounds = 6;
 }

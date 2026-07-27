@@ -10,12 +10,31 @@ benchmarks/results/*.csv
 .tools/
 coordinator_test_scratch/
 .test_scratch/
+*_scratch/
 node_modules/
 .next/
-package-lock.json
 *.tsbuildinfo
 web/.coverage/
 web/coverage/
 
+# Secure Transport and Worker Identity Hardening slice: development PKI
+# output (scripts/pki/*.sh, *.ps1) -- private keys, CSRs, and the CA's
+# own private key all land under here. Never commit any of it, even
+# though it is development-only material; see docs/development-pki.md.
+certs/dev/
+certs/dev*/
+
 .DS_Store
 Thumbs.db
+
+# Security Runtime Completion and Release Evidence slice: generated
+# output from scripts/security-validation/run.py and
+# scripts/generate_release_evidence.py (sanitized, but regenerable --
+# never intended to be committed), plus the CLI worker's own local
+# per-worker sequence-state files it writes to the current working
+# directory when run outside Docker (see
+# python/src/fl_platform/worker/configuration.py's
+# sequence_state_path default).
+artifacts/
+.fl_worker_sequence_state.*.json
+web/e2e-results/

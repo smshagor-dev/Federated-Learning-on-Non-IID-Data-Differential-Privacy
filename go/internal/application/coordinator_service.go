@@ -26,10 +26,98 @@ type CoordinatorService struct {
 	clock   Clock
 	audit   *AuditService
 	metrics *observability.MetricsRecorder
+
+	// Security Events, Metrics, and Durable Audit Journal slice
+	// (docs/security-events.md): both nil by default (see SetSecurityJournals) --
+	// every existing constructor/test call site keeps compiling and
+	// behaving exactly as before (a mutation simply skips the new
+	// journal writes when these are unset).
+	securityEvents *observability.SecurityEventJournal
+	securityAudit  *observability.SecurityAuditJournal
 }
 
 func (s *CoordinatorService) Configured() bool {
 	return s != nil && s.client != nil
+}
+
+// SetSecurityJournals wires the Go-local security event journal and the
+// durable security-specific audit journal into this service after
+// construction -- called once by httpapi.NewServer (test-friendly,
+// temp-file-backed defaults) or explicitly by cmd/api/main.go
+// (production, env-var-configured paths). Either argument may be nil to
+// leave that journal unset.
+func (s *CoordinatorService) SetSecurityJournals(events *observability.SecurityEventJournal, audit *observability.SecurityAuditJournal) {
+	if s == nil {
+		return
+	}
+	s.securityEvents = events
+	s.securityAudit = audit
+}
+
+// emitSecurityEvent is a small helper so every security mutation below
+// can emit consistently without repeating the nil-check. Never returns
+// an error -- an event-emission failure must not affect the caller's
+// actual security decision (see SecurityEventJournal.Emit's contract).
+func (s *CoordinatorService) emitSecurityEvent(event observability.SecurityEvent) {
+	if s == nil || s.securityEvents == nil {
+		return
+	}
+	if event.SchemaVersion == 0 {
+		event.SchemaVersion = observability.SecurityEventSchemaVersion
+	}
+	if event.SourceService == "" {
+		event.SourceService = "go-api"
+	}
+	if event.Severity == "" {
+		event.Severity = observability.DefaultSeverity(event.EventType)
+	}
+	s.securityEvents.Emit(event)
+	if s.metrics != nil {
+		s.metrics.RecordSecurityEvent(event.SourceService, event.EventType, event.Severity, event.Outcome)
+	}
+}
+
+// appendSecurityAudit mirrors emitSecurityEvent for the durable audit
+// journal -- additive alongside the existing, unchanged
+// AuditService.Record call at every mutation site (Design Decision 7:
+// the general-purpose repository keeps being written to for backward
+// compatibility; this is the new, richer, security-specific record).
+func (s *CoordinatorService) appendSecurityAudit(record observability.SecurityAuditRecord) {
+	if s == nil || s.securityAudit == nil {
+		return
+	}
+	s.securityAudit.Append(record)
+}
+
+// EmitPermissionDenied is exported so the HTTP layer's requirePermission
+// (which has no other access to CoordinatorService's unexported
+// journals) can emit SECURITY_PERMISSION_DENIED for any
+// /api/v1/security/... route -- one call site covers every permission
+// check in security_handlers.go.
+func (s *CoordinatorService) EmitPermissionDenied(actor Actor, permission string) {
+	s.emitSecurityEvent(observability.SecurityEvent{
+		EventType:     observability.EventSecurityPermissionDenied,
+		ActorType:     observability.ActorTypeUser,
+		SafeActorID:   actor.ID,
+		SubjectType:   observability.SubjectTypeSecurityMutation,
+		SafeSubjectID: permission,
+		Outcome:       observability.OutcomeBlocked,
+		ReasonCode:    permission,
+	})
+}
+
+// EmitAuditAccessed is exported so handleSecurityAudit can record
+// requirement 12 ("audit access to detailed security records") --
+// emitted only when a detailed (ADMIN) read actually occurs, into the
+// events journal, not recursively into the audit journal itself.
+func (s *CoordinatorService) EmitAuditAccessed(actor Actor) {
+	s.emitSecurityEvent(observability.SecurityEvent{
+		EventType:   observability.EventSecurityAuditAccessed,
+		ActorType:   observability.ActorTypeUser,
+		SafeActorID: actor.ID,
+		SubjectType: observability.SubjectTypeAuditQuery,
+		Outcome:     observability.OutcomeCompleted,
+	})
 }
 
 // recordRPC feeds fl_coordinator_rpc_total{method,outcome} (see
@@ -66,6 +154,20 @@ type CreateCoordinatorRunRequest struct {
 	ClientSelectionSeed   uint64
 	RoundTimeoutSeconds   uint32
 	ServerLR              float64
+	// Fields below close the CreateRun wire-mapping gap — see
+	// docs/create-run-wire-mapping.md.
+	ClientIDs        []string
+	LocalEpochs      uint32
+	BatchSize        uint32
+	LearningRate     float64
+	Momentum         float64
+	WeightDecay      float64
+	FedProxMu        float64
+	TaskLeaseSeconds uint32
+	MaxTaskRetries   uint32
+	ModelManifest    coordinator.ModelManifest
+	RequestID        string
+	Privacy          coordinator.PrivacyConfig
 }
 
 func (s *CoordinatorService) CreateRun(ctx context.Context, req CreateCoordinatorRunRequest) (coordinator.RunSnapshot, error) {
@@ -83,10 +185,22 @@ func (s *CoordinatorService) CreateRun(ctx context.Context, req CreateCoordinato
 		ClientSelectionSeed:   req.ClientSelectionSeed,
 		RoundTimeoutSeconds:   req.RoundTimeoutSeconds,
 		ServerLR:              req.ServerLR,
+		ClientIDs:             req.ClientIDs,
+		LocalEpochs:           req.LocalEpochs,
+		BatchSize:             req.BatchSize,
+		LearningRate:          req.LearningRate,
+		Momentum:              req.Momentum,
+		WeightDecay:           req.WeightDecay,
+		FedProxMu:             req.FedProxMu,
+		TaskLeaseSeconds:      req.TaskLeaseSeconds,
+		MaxTaskRetries:        req.MaxTaskRetries,
+		ModelManifest:         req.ModelManifest,
+		RequestID:             req.RequestID,
+		Privacy:               req.Privacy,
 	})
 	s.recordRPC("CreateRun", err)
 	if err == nil {
-		_ = s.audit.Record(ctx, actorFromContext(ctx), "coordinator.run.create", "coordinator_run", snapshot.RunID, "success", map[string]any{"algorithm": req.Algorithm, "max_rounds": req.MaxRounds})
+		_ = s.audit.Record(ctx, actorFromContext(ctx), "coordinator.run.create", "coordinator_run", snapshot.RunID, "success", map[string]any{"algorithm": req.Algorithm, "max_rounds": req.MaxRounds, "privacy_mode": string(req.Privacy.Mode)})
 	}
 	return snapshot, err
 }
@@ -168,7 +282,7 @@ func (s *CoordinatorService) CurrentRound(ctx context.Context, runID string) (Cu
 // GET /api/v1/coordinator/runs/{runId}/metrics endpoint. It reports only
 // what the coordinator's RunDetails actually carries (round/worker
 // counts) — it does not fabricate accuracy or loss figures, unlike the
-// pre-existing Milestone 1 dashboard demo endpoints.
+// pre-existing the Foundation phase dashboard demo endpoints.
 type RunMetrics struct {
 	RunID             string `json:"run_id"`
 	State             string `json:"state"`
@@ -209,6 +323,142 @@ func (s *CoordinatorService) PollEvents(ctx context.Context, runID, afterEventID
 	events, err := s.client.PollEvents(ctx, runID, afterEventID)
 	s.recordRPC("PollEvents", err)
 	return events, err
+}
+
+// PersonalizationRecords returns the raw per-client personalization
+// metric records the coordinator has received for runID (empty, not an
+// error, for runs where no client submitted one — e.g. FedAvg/FedProx/
+// SCAFFOLD/FedSAM runs never do).
+func (s *CoordinatorService) PersonalizationRecords(ctx context.Context, runID string) ([]coordinator.PersonalizationMetricRecord, error) {
+	if !s.Configured() {
+		return nil, ErrCoordinatorNotConfigured
+	}
+	records, err := s.client.GetPersonalizationSummary(ctx, runID)
+	s.recordRPC("GetPersonalizationSummary", err)
+	return records, err
+}
+
+// GetPrivacyMetrics/GetPrivacyLedger/GetPrivacyProjection expose the
+// coordinator's privacy ledgers/accountants read-only — see
+// docs/privacy-ledger.md. Safe to call for any run, private or not.
+func (s *CoordinatorService) GetPrivacyMetrics(ctx context.Context, runID string) (coordinator.PrivacyMetricsSnapshot, error) {
+	if !s.Configured() {
+		return coordinator.PrivacyMetricsSnapshot{}, ErrCoordinatorNotConfigured
+	}
+	snapshot, err := s.client.GetPrivacyMetrics(ctx, runID)
+	s.recordRPC("GetPrivacyMetrics", err)
+	return snapshot, err
+}
+
+func (s *CoordinatorService) GetPrivacyLedger(ctx context.Context, runID, pageToken string, pageSize uint32) (coordinator.PrivacyLedger, error) {
+	if !s.Configured() {
+		return coordinator.PrivacyLedger{}, ErrCoordinatorNotConfigured
+	}
+	ledger, err := s.client.GetPrivacyLedger(ctx, runID, pageToken, pageSize)
+	s.recordRPC("GetPrivacyLedger", err)
+	return ledger, err
+}
+
+func (s *CoordinatorService) GetPrivacyProjection(ctx context.Context, runID string) (coordinator.PrivacyProjection, error) {
+	if !s.Configured() {
+		return coordinator.PrivacyProjection{}, ErrCoordinatorNotConfigured
+	}
+	projection, err := s.client.GetPrivacyProjection(ctx, runID)
+	s.recordRPC("GetPrivacyProjection", err)
+	return projection, err
+}
+
+// ListWorkers returns every registered worker with its privacy
+// capabilities — see docs/worker-privacy-capabilities.md.
+func (s *CoordinatorService) ListWorkers(ctx context.Context) ([]coordinator.WorkerSummary, error) {
+	if !s.Configured() {
+		return nil, ErrCoordinatorNotConfigured
+	}
+	workers, err := s.client.ListWorkers(ctx)
+	s.recordRPC("ListWorkers", err)
+	return workers, err
+}
+
+// ErrClientNotFound is returned by ClientPersonalization when runID has
+// no personalization record for clientID (either the client never
+// submitted one, or it does not exist).
+var ErrClientNotFound = fmt.Errorf("client has no personalization record for this run")
+
+func (s *CoordinatorService) ClientPersonalization(ctx context.Context, runID, clientID string) (coordinator.PersonalizationMetricRecord, error) {
+	records, err := s.PersonalizationRecords(ctx, runID)
+	if err != nil {
+		return coordinator.PersonalizationMetricRecord{}, err
+	}
+	for _, record := range records {
+		if record.ClientID == clientID {
+			return record, nil
+		}
+	}
+	return coordinator.PersonalizationMetricRecord{}, ErrClientNotFound
+}
+
+func personalizationRecordsToEvaluationRecords(records []coordinator.PersonalizationMetricRecord) []PerClientEvaluationRecord {
+	converted := make([]PerClientEvaluationRecord, 0, len(records))
+	for _, record := range records {
+		evalRecord := PerClientEvaluationRecord{
+			ClientID:            record.ClientID,
+			GlobalLocalAccuracy: record.GlobalLocalAccuracy,
+			SampleCount:         int64(record.SampleCount),
+		}
+		if record.HasPersonalizedModel {
+			accuracy := record.PersonalizedLocalAccuracy
+			evalRecord.PersonalizedLocalAccuracy = &accuracy
+		}
+		converted = append(converted, evalRecord)
+	}
+	return converted
+}
+
+// Fairness computes personalization fairness statistics for runID from
+// the coordinator's raw personalization records (see fairness.go /
+// docs/fairness-metrics.md). Returns a zero-value, all-excluded
+// PersonalizationMetrics (not an error) when the run has no clients that
+// have reported anything yet — see EmptyPersonalizationMetrics.
+func (s *CoordinatorService) Fairness(ctx context.Context, runID string) (PersonalizationMetrics, error) {
+	records, err := s.PersonalizationRecords(ctx, runID)
+	if err != nil {
+		return PersonalizationMetrics{}, err
+	}
+	if len(records) == 0 {
+		return PersonalizationMetrics{ExcludedReasons: []string{}}, nil
+	}
+	return ComputeAggregatedPersonalizationMetrics(personalizationRecordsToEvaluationRecords(records))
+}
+
+// AlgorithmSummary is a per-run projection combining the run's algorithm
+// with its fairness statistics, for the algorithm-comparison dashboard
+// view (docs/algorithm-expansion-architecture.md).
+type AlgorithmSummary struct {
+	RunID       string                 `json:"run_id"`
+	Algorithm   string                 `json:"algorithm"`
+	ClientCount int                    `json:"reporting_client_count"`
+	Fairness    PersonalizationMetrics `json:"fairness"`
+}
+
+func (s *CoordinatorService) AlgorithmSummary(ctx context.Context, runID string) (AlgorithmSummary, error) {
+	snapshot, err := s.GetRun(ctx, runID)
+	if err != nil {
+		return AlgorithmSummary{}, err
+	}
+	fairness, err := s.Fairness(ctx, runID)
+	if err != nil {
+		return AlgorithmSummary{}, err
+	}
+	records, err := s.PersonalizationRecords(ctx, runID)
+	if err != nil {
+		return AlgorithmSummary{}, err
+	}
+	return AlgorithmSummary{
+		RunID:       runID,
+		Algorithm:   snapshot.Algorithm,
+		ClientCount: len(records),
+		Fairness:    fairness,
+	}, nil
 }
 
 func (s *CoordinatorService) recordLifecycle(ctx context.Context, action, runID string, err error) {

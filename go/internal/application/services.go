@@ -9,20 +9,52 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/algorithms"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/auth"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/datasets"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/experiments"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/models"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/observability"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/projects"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/runs"
 )
 
 var (
-	ErrNotFound          = errors.New("not found")
-	ErrInvalidTransition = errors.New("invalid run transition")
-	ErrUnauthorized      = errors.New("unauthorized")
-	ErrForbidden         = errors.New("forbidden")
+	ErrNotFound               = errors.New("not found")
+	ErrInvalidTransition      = errors.New("invalid run transition")
+	ErrUnauthorized           = errors.New("unauthorized")
+	ErrForbidden              = errors.New("forbidden")
+	ErrInvalidAlgorithmConfig = errors.New("invalid algorithm config")
 )
+
+// validateExperimentAlgorithmConfig mirrors each Python algorithm's
+// validate_task checks (see internal/algorithms) whenever an experiment
+// config names one of this platform's known algorithms via
+// config["algorithm"] = {"name": "<algorithm>", ...algorithm-specific
+// fields} — the shape the web experiment builder already sends (see
+// web/features/builder/experiment-builder.tsx's previewConfig). Configs
+// that don't use this convention (e.g. pre-Algorithm-Expansion experiments, or an
+// "algorithm.name" this registry doesn't recognize) are left untouched —
+// this is additive validation, not a new required shape for every
+// experiment config.
+func validateExperimentAlgorithmConfig(config map[string]any) error {
+	algorithmSection, ok := config["algorithm"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	name, ok := algorithmSection["name"].(string)
+	if !ok || name == "" {
+		return nil
+	}
+	if _, known := algorithms.Get(name); !known {
+		return nil
+	}
+	if err := algorithms.ValidateConfig(name, algorithmSection); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidAlgorithmConfig, err)
+	}
+	return nil
+}
 
 type Clock func() time.Time
 
@@ -33,6 +65,8 @@ type Services struct {
 	Auth        *AuthService
 	Audit       *AuditService
 	Coordinator *CoordinatorService
+	Models      *ModelService
+	Datasets    *DatasetService
 	Metrics     *observability.MetricsRecorder
 }
 
@@ -76,7 +110,8 @@ func NewServicesWithAudit(
 // coordinator.Client. coordinatorClient may be nil — e.g. in tests, or in
 // deployments not yet running the C++ coordinator — in which case
 // Services.Coordinator methods return ErrCoordinatorNotConfigured rather
-// than panicking or silently no-oping.
+// than panicking or silently no-oping. Uses in-memory model/dataset
+// registries; see NewServicesWithRegistries for file-backed ones.
 func NewServicesWithCoordinator(
 	projectRepo projects.Repository,
 	experimentRepo experiments.Repository,
@@ -84,6 +119,28 @@ func NewServicesWithCoordinator(
 	userRepo auth.UserRepository,
 	sessionRepo auth.SessionRepository,
 	auditRepo observability.AuditRepository,
+	coordinatorClient coordinator.Client,
+	clock Clock,
+) *Services {
+	return NewServicesWithRegistries(
+		projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo,
+		models.NewInMemoryRepository(), datasets.NewInMemoryRepository(),
+		coordinatorClient, clock,
+	)
+}
+
+// NewServicesWithRegistries is NewServicesWithCoordinator plus explicit
+// model/dataset registry repositories (see bootstrap.PathsForDataDir for
+// the file-backed variants a real deployment uses).
+func NewServicesWithRegistries(
+	projectRepo projects.Repository,
+	experimentRepo experiments.Repository,
+	runRepo runs.Repository,
+	userRepo auth.UserRepository,
+	sessionRepo auth.SessionRepository,
+	auditRepo observability.AuditRepository,
+	modelRepo models.Repository,
+	datasetRepo datasets.Repository,
 	coordinatorClient coordinator.Client,
 	clock Clock,
 ) *Services {
@@ -104,6 +161,8 @@ func NewServicesWithCoordinator(
 	}
 	metrics := &observability.MetricsRecorder{}
 	coordinatorService := &CoordinatorService{client: coordinatorClient, clock: clock, audit: auditService, metrics: metrics}
+	modelService := &ModelService{repo: modelRepo, clock: clock, audit: auditService}
+	datasetService := &DatasetService{repo: datasetRepo, clock: clock, audit: auditService}
 	return &Services{
 		Projects:    projectService,
 		Experiments: experimentService,
@@ -111,6 +170,8 @@ func NewServicesWithCoordinator(
 		Auth:        authService,
 		Audit:       auditService,
 		Coordinator: coordinatorService,
+		Models:      modelService,
+		Datasets:    datasetService,
 		Metrics:     metrics,
 	}
 }
@@ -306,6 +367,9 @@ func (s *ExperimentService) Create(ctx context.Context, projectID, name, descrip
 	} else if !ok {
 		return experiments.Experiment{}, ErrNotFound
 	}
+	if err := validateExperimentAlgorithmConfig(config); err != nil {
+		return experiments.Experiment{}, err
+	}
 	now := s.clock().UTC()
 	experiment := experiments.Experiment{
 		ID:          fmt.Sprintf("exp-%d", now.UnixNano()),
@@ -341,6 +405,9 @@ func (s *ExperimentService) Get(ctx context.Context, id string) (experiments.Exp
 func (s *ExperimentService) Update(ctx context.Context, id, name, description string, config map[string]any) (experiments.Experiment, error) {
 	item, err := s.Get(ctx, id)
 	if err != nil {
+		return experiments.Experiment{}, err
+	}
+	if err := validateExperimentAlgorithmConfig(config); err != nil {
 		return experiments.Experiment{}, err
 	}
 	item.Name = name

@@ -20,7 +20,7 @@ export function AppShell({
         <div className="brand">
           <div className="brand-title">Federated Research OS</div>
           <div className="brand-copy">
-            Milestone dashboard shell for experiments, privacy, scheduling, and platform operations.
+            Phase dashboard shell for experiments, privacy, scheduling, and platform operations.
           </div>
         </div>
         <nav className="nav-stack">
@@ -33,15 +33,27 @@ export function AppShell({
           <Link className="nav-link" href="/runs/run-demo-1">
             Live Run View
           </Link>
+          <Link className="nav-link" href="/models">
+            Model Registry
+          </Link>
+          <Link className="nav-link" href="/datasets">
+            Dataset Registry
+          </Link>
+          <Link className="nav-link" href="/compare">
+            Algorithm Comparison
+          </Link>
           <Link className="nav-link" href="/audit">
             Audit Feed
+          </Link>
+          <Link className="nav-link" href="/security">
+            Security Center
           </Link>
           <Link className="nav-link" href="/login">
             Auth Shell
           </Link>
         </nav>
         <div className="sidebar-footnote">
-          Current milestone keeps auth and live streaming interfaces ready for future Go-backed integration.
+          Current phase keeps auth and live streaming interfaces ready for future Go-backed integration.
         </div>
       </aside>
       <main className="main-panel">

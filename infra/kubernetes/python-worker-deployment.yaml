@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: python-worker
-          image: fl-platform/python-worker:milestone
+          image: fl-platform/python-worker:latest
           envFrom:
             - configMapRef:
                 name: fl-platform-config

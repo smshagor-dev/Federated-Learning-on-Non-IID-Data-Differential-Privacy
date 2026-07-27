@@ -123,27 +123,39 @@ std::string write_tensor_field(const std::string& name, const TensorBuffer& tens
     return out.str();
 }
 
-void write_collection(std::ostream& out, const std::string& key, const TensorCollection& collection) {
+void write_collection(std::ostream& out,
+                      const std::string& key,
+                      const TensorCollection& collection) {
     for (const auto& [name, tensor] : collection.tensors()) {
         out << key << "=" << write_tensor_field(name, tensor) << "\n";
     }
 }
 
 AggregationAlgorithm parse_algorithm(const std::string& value) {
-    if (value == "fedavg") return AggregationAlgorithm::kFedAvg;
-    if (value == "fedprox") return AggregationAlgorithm::kFedProx;
-    if (value == "scaffold") return AggregationAlgorithm::kScaffold;
-    if (value == "fedadagrad") return AggregationAlgorithm::kFedAdagrad;
-    if (value == "fedadam") return AggregationAlgorithm::kFedAdam;
-    if (value == "fedyogi") return AggregationAlgorithm::kFedYogi;
+    if (value == "fedavg")
+        return AggregationAlgorithm::kFedAvg;
+    if (value == "fedprox")
+        return AggregationAlgorithm::kFedProx;
+    if (value == "scaffold")
+        return AggregationAlgorithm::kScaffold;
+    if (value == "fedadagrad")
+        return AggregationAlgorithm::kFedAdagrad;
+    if (value == "fedadam")
+        return AggregationAlgorithm::kFedAdam;
+    if (value == "fedyogi")
+        return AggregationAlgorithm::kFedYogi;
     throw std::invalid_argument("unknown algorithm: " + value);
 }
 
 WeightingStrategyType parse_weighting(const std::string& value) {
-    if (value == "sample_count") return WeightingStrategyType::kSampleCount;
-    if (value == "uniform") return WeightingStrategyType::kUniform;
-    if (value == "capped_sample_count") return WeightingStrategyType::kCappedSampleCount;
-    if (value == "normalized_bounded") return WeightingStrategyType::kNormalizedBounded;
+    if (value == "sample_count")
+        return WeightingStrategyType::kSampleCount;
+    if (value == "uniform")
+        return WeightingStrategyType::kUniform;
+    if (value == "capped_sample_count")
+        return WeightingStrategyType::kCappedSampleCount;
+    if (value == "normalized_bounded")
+        return WeightingStrategyType::kNormalizedBounded;
     throw std::invalid_argument("unknown weighting strategy: " + value);
 }
 
@@ -183,35 +195,61 @@ Request parse_request(std::istream& in) {
         const auto value = line.substr(position + 1);
 
         if (current_update != nullptr) {
-            if (key == "client_id") current_update->client_id = value;
-            else if (key == "update_id") current_update->update_id = value;
-            else if (key == "nonce") current_update->nonce = value;
-            else if (key == "worker_id") current_update->worker_id = value;
-            else if (key == "base_model_version") current_update->base_model_version = value;
-            else if (key == "run_id") current_update->run_id = value;
-            else if (key == "round_id") current_update->round_id = std::stoull(value);
-            else if (key == "algorithm") current_update->algorithm = parse_algorithm(value);
-            else if (key == "sample_count") current_update->sample_count = std::stoull(value);
-            else if (key == "delta") current_update->delta.insert(parse_tensor_field(value));
-            else if (key == "control_delta") current_update->control_delta.insert(parse_tensor_field(value));
-            else throw std::invalid_argument("unknown update field: " + key);
+            if (key == "client_id")
+                current_update->client_id = value;
+            else if (key == "update_id")
+                current_update->update_id = value;
+            else if (key == "nonce")
+                current_update->nonce = value;
+            else if (key == "worker_id")
+                current_update->worker_id = value;
+            else if (key == "base_model_version")
+                current_update->base_model_version = value;
+            else if (key == "run_id")
+                current_update->run_id = value;
+            else if (key == "round_id")
+                current_update->round_id = std::stoull(value);
+            else if (key == "algorithm")
+                current_update->algorithm = parse_algorithm(value);
+            else if (key == "sample_count")
+                current_update->sample_count = std::stoull(value);
+            else if (key == "delta")
+                current_update->delta.insert(parse_tensor_field(value));
+            else if (key == "control_delta")
+                current_update->control_delta.insert(parse_tensor_field(value));
+            else
+                throw std::invalid_argument("unknown update field: " + key);
             continue;
         }
 
-        if (key == "algorithm") request.options.algorithm = parse_algorithm(value);
-        else if (key == "weighting") request.options.weighting = parse_weighting(value);
-        else if (key == "run_id") request.options.run_id = value;
-        else if (key == "round_id") request.options.round_id = std::stoull(value);
-        else if (key == "total_clients") request.options.total_clients = std::stoull(value);
-        else if (key == "contribution_cap") request.options.contribution_cap = std::stod(value);
-        else if (key == "minimum_weight") request.options.minimum_weight = std::stod(value);
-        else if (key == "maximum_weight") request.options.maximum_weight = std::stod(value);
-        else if (key == "server_lr") request.options.server_lr = std::stod(value);
-        else if (key == "beta1") request.options.beta1 = std::stod(value);
-        else if (key == "beta2") request.options.beta2 = std::stod(value);
-        else if (key == "tau") request.options.tau = std::stod(value);
-        else if (key == "model_id") request.manifest.model_id = value;
-        else if (key == "model_version") request.manifest.model_version = value;
+        if (key == "algorithm")
+            request.options.algorithm = parse_algorithm(value);
+        else if (key == "weighting")
+            request.options.weighting = parse_weighting(value);
+        else if (key == "run_id")
+            request.options.run_id = value;
+        else if (key == "round_id")
+            request.options.round_id = std::stoull(value);
+        else if (key == "total_clients")
+            request.options.total_clients = std::stoull(value);
+        else if (key == "contribution_cap")
+            request.options.contribution_cap = std::stod(value);
+        else if (key == "minimum_weight")
+            request.options.minimum_weight = std::stod(value);
+        else if (key == "maximum_weight")
+            request.options.maximum_weight = std::stod(value);
+        else if (key == "server_lr")
+            request.options.server_lr = std::stod(value);
+        else if (key == "beta1")
+            request.options.beta1 = std::stod(value);
+        else if (key == "beta2")
+            request.options.beta2 = std::stod(value);
+        else if (key == "tau")
+            request.options.tau = std::stod(value);
+        else if (key == "model_id")
+            request.manifest.model_id = value;
+        else if (key == "model_version")
+            request.manifest.model_version = value;
         else if (key == "manifest_tensor") {
             request.manifest.tensors.push_back(parse_tensor_descriptor_field(value));
         } else if (key == "prev_step") {
@@ -234,8 +272,7 @@ int main() {
         const auto request = parse_request(std::cin);
         const auto aggregator = fl::core::make_aggregator(request.options.algorithm);
         const auto result = aggregator->aggregate(
-            request.manifest, request.updates, request.options, request.previous_state
-        );
+            request.manifest, request.updates, request.options, request.previous_state);
 
         std::cout << "status=ok\n";
         write_collection(std::cout, "model_delta", result.model_delta);

@@ -10,8 +10,8 @@ const MAX_EVENT_HISTORY = 25;
 const HEALTH_POLL_INTERVAL_MS = 5_000;
 
 // This panel is additive: it surfaces the live C++ coordinator's round
-// state and event stream (Milestone 3) alongside the existing
-// project/experiment/run bookkeeping dashboard (Milestone 1), which
+// state and event stream (the Coordinator Runtime phase) alongside the existing
+// project/experiment/run bookkeeping dashboard (the Foundation phase), which
 // keeps working unchanged whether or not a coordinator is configured.
 // See docs/go-coordinator-integration.md.
 export function CoordinatorStatusPanel({ runId, token }: { runId: string; token: string | undefined }) {

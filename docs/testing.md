@@ -1,8 +1,8 @@
 # Testing
 
 This document is the index of what runs where. For narrative results from
-one specific run, see [milestone-1-validation.md](milestone-1-validation.md)
-and [milestone-2-report.md](milestone-2-report.md).
+one specific run, see [foundation-validation.md](foundation-validation.md)
+and [aggregation-core-report.md](aggregation-core-report.md).
 
 ## Python
 
@@ -23,7 +23,7 @@ and [milestone-2-report.md](milestone-2-report.md).
 * Types: **mypy** `strict = true` (`python/pyproject.toml`), scoped to
   `python/src` only (test code and the legacy prototype are not
   type-checked).
-* New in this milestone: `tests/baseline/test_python_cpp_compat.py` (12
+* New in this phase: `tests/baseline/test_python_cpp_compat.py` (12
   tests, `unittest.TestCase`-based, `setUp` skips the whole class if
   `fl_aggregate_cli` hasn't been built) and
   `python/src/fl_platform/compat/` (the adapter itself, covered by mypy
@@ -33,7 +33,7 @@ and [milestone-2-report.md](milestone-2-report.md).
 
 * Runner: **CTest**, four binaries registered as tests:
   * `fl_core_smoke` — build-info + one FedAvg + one SCAFFOLD sanity check +
-    one state-machine transition (this predates this milestone).
+    one state-machine transition (this predates this phase).
   * `fl_aggregator_golden` — prints deterministic numeric output for every
     algorithm/weighting combination; consumed both directly by CTest
     (exit code) and by `tests/baseline/test_cpp_golden_parity.py` (parses
@@ -41,14 +41,14 @@ and [milestone-2-report.md](milestone-2-report.md).
   * `fl_validation_tests` — 8 explicit rejection-path assertions (see
     [update-validation.md](update-validation.md)).
   * `fl_checkpoint_tests` — round trip, tamper/truncation/schema-version
-    rejection, and file-based atomic-write tests (new this milestone; see
+    rejection, and file-based atomic-write tests (new this phase; see
     [checkpoint-format.md](checkpoint-format.md)).
 * Debug and Release configurations are both configured, built, and tested
   independently (`build/cpp-debug`, `build/cpp-release`).
 * `clang-format` / `clang-tidy` / AddressSanitizer / UndefinedBehaviorSanitizer
   targets exist in the Makefile (`cpp-format-check`, `cpp-tidy`, `cpp-asan`,
   `cpp-ubsan`) but require `clang-format`/`clang-tidy`/a Clang toolchain,
-  none of which are installed on the Windows machine this milestone was
+  none of which are installed on the Windows machine this phase was
   executed on (MSVC-only). They run in CI on `ubuntu-latest` instead — see
   `.github/workflows/ci.yml`. ThreadSanitizer is intentionally **not**
   wired up anywhere: it is not supported under MSVC and is not required to
@@ -98,8 +98,9 @@ and [milestone-2-report.md](milestone-2-report.md).
   `docs/current-architecture.md`), not a stable, running backend; adding
   E2E tests against a system that isn't wired end-to-end would either mock
   so much that the test proves little, or be flaky against a backend this
-  milestone does not stand up. Deferred until Milestone 3+ connects the Go
-  API to a real persistence/coordinator backend, per the task's own
+  phase does not stand up. Deferred until the Coordinator Runtime phase
+  (or later) connects the Go API to a real persistence/coordinator
+  backend, per the task's own
   instruction to defer E2E when "a minimal stable application flow and
   backend mock are [not] already available."
 
@@ -114,5 +115,5 @@ and [milestone-2-report.md](milestone-2-report.md).
   through `fl_aggregate_cli`, PyTorch tensors, compared against the legacy
   `federated.server.Server` (FedAvg/FedProx/SCAFFOLD) or an independently
   written FedOpt reference (FedAdagrad/FedAdam/FedYogi). See
-  [milestone-2-report.md](milestone-2-report.md) for the full case list and
+  [aggregation-core-report.md](aggregation-core-report.md) for the full case list and
   results.

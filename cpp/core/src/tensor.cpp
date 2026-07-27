@@ -16,11 +16,9 @@ void ensure_compatible(const TensorBuffer& lhs, const TensorBuffer& rhs) {
     }
 }
 
-TensorBuffer unary_apply(
-    const TensorBuffer& tensor,
-    const std::string& suffix,
-    const std::function<double(double)>& fn
-) {
+TensorBuffer unary_apply(const TensorBuffer& tensor,
+                         const std::string& suffix,
+                         const std::function<double(double)>& fn) {
     auto descriptor = tensor.descriptor();
     descriptor.name += suffix;
     std::vector<double> values;
@@ -32,11 +30,9 @@ TensorBuffer unary_apply(
     return TensorBuffer(std::move(descriptor), std::move(values));
 }
 
-TensorBuffer binary_apply(
-    const TensorBuffer& lhs,
-    const TensorBuffer& rhs,
-    const std::function<double(double, double)>& fn
-) {
+TensorBuffer binary_apply(const TensorBuffer& lhs,
+                          const TensorBuffer& rhs,
+                          const std::function<double(double, double)>& fn) {
     ensure_compatible(lhs, rhs);
     auto descriptor = lhs.descriptor();
     std::vector<double> values;
@@ -55,8 +51,7 @@ std::size_t TensorDescriptor::element_count() const {
         if (dimension == 0) {
             throw std::invalid_argument("tensor shape dimensions must be positive");
         }
-        if (total > std::numeric_limits<std::size_t>::max() /
-                static_cast<std::size_t>(dimension)) {
+        if (total > std::numeric_limits<std::size_t>::max() / static_cast<std::size_t>(dimension)) {
             throw std::invalid_argument("tensor shape element count overflows");
         }
         total *= static_cast<std::size_t>(dimension);
@@ -191,11 +186,7 @@ TensorBuffer hadamard_abs(const TensorBuffer& tensor) {
 }
 
 TensorBuffer hadamard_sign(const TensorBuffer& tensor) {
-    return unary_apply(
-        tensor,
-        "",
-        [](double value) { return (value > 0.0) - (value < 0.0); }
-    );
+    return unary_apply(tensor, "", [](double value) { return (value > 0.0) - (value < 0.0); });
 }
 
 TensorBuffer add_scalar(const TensorBuffer& tensor, double value) {

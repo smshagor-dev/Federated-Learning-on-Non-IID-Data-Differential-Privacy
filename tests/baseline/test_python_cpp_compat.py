@@ -1,4 +1,4 @@
-"""Python-to-C++ aggregation golden compatibility tests (Milestone 2, Work
+"""Python-to-C++ aggregation golden compatibility tests (the Aggregation Core phase, Work
 Package D).
 
 These tests build deterministic PyTorch state dicts and client updates,

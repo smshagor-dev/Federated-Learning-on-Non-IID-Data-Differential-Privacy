@@ -6,7 +6,7 @@
   requiring `protoc` at all (`scripts/verify_proto_contracts.py`).
 * **Actual code generation:** scripted and documented, but **not run in
   this environment** — `protoc` is not installed on the machine this
-  milestone was executed on (`protoc --version` → command not found on
+  phase was executed on (`protoc --version` → command not found on
   Windows, `where protoc` → nothing). This is stated plainly rather than
   claimed as passing; see the CI job below for where generation actually
   runs.
@@ -15,7 +15,7 @@
 
 Documented (and enforced by the generation scripts' preflight check) as
 **libprotoc 25.x or newer**. This is not independently pinned via a
-lockfile/container image in this milestone; the CI job below installs
+lockfile/container image in this phase; the CI job below installs
 whatever `apt`'s `protobuf-compiler` package provides on `ubuntu-latest`,
 which was 25.x at time of writing. A fully reproducible pin (a specific
 protoc release binary, hash-checked) is listed as a follow-up in

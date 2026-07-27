@@ -1,4 +1,5 @@
-"""Real gRPC client/server code for the Milestone 3 coordinator contract.
+"""Real gRPC client/server code for the Coordinator Runtime phase's
+coordinator contract.
 
 Generated protobuf/gRPC Python modules live in
 ``python/src/fl_platform/generated/`` and are regenerated on demand (see
