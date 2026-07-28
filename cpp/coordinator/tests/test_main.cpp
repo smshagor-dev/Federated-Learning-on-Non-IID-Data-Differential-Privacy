@@ -64,7 +64,8 @@ int main(int argc, char** argv) {
     guarded("[5/8] run_manager", fl::coordinator::testing::run_run_manager_tests);
     guarded("[6/8] recovery",
             [&]() { fl::coordinator::testing::run_recovery_tests(scratch_dir + "/recovery"); });
-    guarded("[7/14] aggregation_manifest", fl::coordinator::testing::run_aggregation_manifest_tests);
+    guarded("[7/14] aggregation_manifest",
+            fl::coordinator::testing::run_aggregation_manifest_tests);
     guarded("[8/14] personalization_summary",
             fl::coordinator::testing::run_personalization_summary_tests);
     guarded("[9/14] user_level_dp", fl::coordinator::testing::run_user_level_dp_tests);
@@ -79,11 +80,11 @@ int main(int argc, char** argv) {
             fl::coordinator::testing::run_worker_privacy_capability_tests);
     guarded("[15/16] worker_identity_registry", [&]() {
         fl::coordinator::testing::run_worker_identity_registry_tests(scratch_dir +
-                                                                      "/worker_identity_registry");
+                                                                     "/worker_identity_registry");
     });
     guarded("[16/17] replay_protection_store", [&]() {
         fl::coordinator::testing::run_replay_protection_store_tests(scratch_dir +
-                                                                     "/replay_protection_store");
+                                                                    "/replay_protection_store");
     });
     guarded("[17/18] accountant_monotonicity_store", [&]() {
         fl::coordinator::testing::run_accountant_monotonicity_store_tests(
@@ -91,7 +92,7 @@ int main(int argc, char** argv) {
     });
     guarded("[18/22] signing_key_registry", [&]() {
         fl::coordinator::testing::run_signing_key_registry_tests(scratch_dir +
-                                                                  "/signing_key_registry");
+                                                                 "/signing_key_registry");
     });
     guarded("[19/22] coordinator_signing_key_registry", [&]() {
         fl::coordinator::testing::run_coordinator_signing_key_registry_tests(
@@ -110,15 +111,17 @@ int main(int argc, char** argv) {
     guarded("[23/25] security_event", fl::coordinator::testing::run_security_event_tests);
     guarded("[24/25] security_event_journal", [&]() {
         fl::coordinator::testing::run_security_event_journal_tests(scratch_dir +
-                                                                     "/security_event_journal");
+                                                                   "/security_event_journal");
     });
     guarded("[25/28] security_audit_journal", [&]() {
         fl::coordinator::testing::run_security_audit_journal_tests(scratch_dir +
-                                                                     "/security_audit_journal");
+                                                                   "/security_audit_journal");
     });
-    guarded("[26/29] fixed_point_encoding", fl::coordinator::testing::run_fixed_point_encoding_tests);
+    guarded("[26/29] fixed_point_encoding",
+            fl::coordinator::testing::run_fixed_point_encoding_tests);
     guarded("[27/29] pairwise_mask", fl::coordinator::testing::run_pairwise_mask_tests);
-    guarded("[28/29] cohort_state_machine", fl::coordinator::testing::run_cohort_state_machine_tests);
+    guarded("[28/29] cohort_state_machine",
+            fl::coordinator::testing::run_cohort_state_machine_tests);
     guarded("[29/29] secure_aggregation_session_store", [&]() {
         fl::coordinator::testing::run_secure_aggregation_session_store_tests(
             scratch_dir + "/secure_aggregation_session_store");

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from fl_platform.secure_aggregation.fixed_point_encoding import FixedPointEncodingProfile
+from fl_platform.secure_aggregation.fixed_point_encoding import (
+    FixedPointEncodingProfile,
+)
 
 # -- Provider ----------------------------------------------------------------
 # Explicit per run, never an implicit default (Work Package B: "no silent
@@ -105,7 +107,9 @@ class CohortStateMachine:
     def failure_reason(self) -> str:
         return self._failure_reason
 
-    def transition_to(self, next_state: str, timestamp_unix_s: float, reason: str = "") -> None:
+    def transition_to(
+        self, next_state: str, timestamp_unix_s: float, reason: str = ""
+    ) -> None:
         allowed_next = _ALLOWED_FORWARD_TRANSITIONS.get(self._state)
         if allowed_next != next_state:
             raise CohortStateMachineError(
@@ -113,14 +117,16 @@ class CohortStateMachine:
                 f"{self._state} to {next_state} (forward progress only, one step at a "
                 "time, never out of a terminal state)"
             )
-        self._history.append(CohortStateTransition(self._state, next_state, timestamp_unix_s, reason))
+        self._history.append(
+            CohortStateTransition(self._state, next_state, timestamp_unix_s, reason)
+        )
         self._state = next_state
 
     def abort(self, reason: str, timestamp_unix_s: float, detail: str = "") -> None:
         if self.is_terminal:
             raise CohortStateMachineError(
-                f"CohortStateMachine[{self.session_id}]: cannot abort a session already "
-                f"in terminal state {self._state}"
+                f"CohortStateMachine[{self.session_id}]: cannot abort a session "
+                f"already in terminal state {self._state}"
             )
         if reason == ABORT_REASON_NONE:
             raise CohortStateMachineError(
@@ -128,7 +134,11 @@ class CohortStateMachine:
                 "abort reason, not ABORT_REASON_NONE"
             )
         recorded_reason = f"abort:{reason}" + (f" - {detail}" if detail else "")
-        self._history.append(CohortStateTransition(self._state, STATE_ABORTED, timestamp_unix_s, recorded_reason))
+        self._history.append(
+            CohortStateTransition(
+                self._state, STATE_ABORTED, timestamp_unix_s, recorded_reason
+            )
+        )
         self._state = STATE_ABORTED
         self._abort_reason = reason
 
@@ -136,7 +146,9 @@ class CohortStateMachine:
         # Deliberately unconditional, matching the C++ implementation:
         # a FAILED marking must never itself be blocked by the state
         # machine's own transition table.
-        self._history.append(CohortStateTransition(self._state, STATE_FAILED, timestamp_unix_s, reason))
+        self._history.append(
+            CohortStateTransition(self._state, STATE_FAILED, timestamp_unix_s, reason)
+        )
         self._state = STATE_FAILED
         self._failure_reason = reason
 
@@ -169,7 +181,9 @@ class SecureAggregationSessionConfig:
     tensor_manifest_hash: str = ""
     model_manifest_hash: str = ""
 
-    fixed_point_profile: FixedPointEncodingProfile = field(default_factory=FixedPointEncodingProfile)
+    fixed_point_profile: FixedPointEncodingProfile = field(
+        default_factory=FixedPointEncodingProfile
+    )
     domain_profile: str = "ring_mod_2_64"
 
     scale_factor: float = 0.0

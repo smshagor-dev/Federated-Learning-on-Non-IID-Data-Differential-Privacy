@@ -85,13 +85,15 @@ struct X25519KeyPair {
 // well-known X25519 pitfall; RFC 7748 Section 6.1 explicitly calls out
 // checking for this).
 [[nodiscard]] std::string derive_x25519_shared_secret(const std::string& self_private_key_raw,
-                                                        const std::string& peer_public_key_raw);
+                                                      const std::string& peer_public_key_raw);
 
 // RFC 5869 extract-then-expand HKDF-SHA-256 (OpenSSL's default HKDF
 // mode). `output_length` may exceed a single SHA-256 block; OpenSSL
 // performs the multi-block expand internally.
-[[nodiscard]] std::string hkdf_sha256(const std::string& salt, const std::string& ikm, const std::string& info,
-                                       std::size_t output_length);
+[[nodiscard]] std::string hkdf_sha256(const std::string& salt,
+                                      const std::string& ikm,
+                                      const std::string& info,
+                                      std::size_t output_length);
 
 // Fixed, public domain-separation salt for every purpose-specific key
 // this protocol derives -- not secret (HKDF's salt need not be secret;
@@ -108,6 +110,11 @@ inline constexpr char kHkdfDomainSalt[] = "FL_PLATFORM_SECURE_AGGREGATION_HKDF_S
 // caller responsibility, not computed inside this crypto module.
 inline constexpr char kHkdfPurposeTensorMaskStream[] = "tensor_mask_stream";
 inline constexpr char kHkdfPurposeWeightMaskStream[] = "weight_mask_stream";
+// Secure Adaptive Clipping with Private Indicator Aggregation slice: a
+// third sibling label, domain-separating the masked clipping-indicator
+// scalar from both tensor and weight masks -- see
+// docs/secure-adaptive-clipping-semantics.md section 14.
+inline constexpr char kHkdfPurposeClippingIndicatorMaskStream[] = "clipping_indicator_mask_stream";
 
 // Derives a purpose-specific key from a pairwise shared secret.
 // `canonical_context` is supplied by the caller (not computed here)
@@ -119,9 +126,10 @@ inline constexpr char kHkdfPurposeWeightMaskStream[] = "weight_mask_stream";
 // participant_sorts_before -- duplicating that ordering logic inside
 // this crypto module would risk the two copies silently drifting apart
 // over time.
-[[nodiscard]] std::string derive_purpose_key(const std::string& shared_secret, const std::string& purpose_label,
-                                              const std::string& canonical_context,
-                                              std::size_t output_length = kChaCha20KeyLength);
+[[nodiscard]] std::string derive_purpose_key(const std::string& shared_secret,
+                                             const std::string& purpose_label,
+                                             const std::string& canonical_context,
+                                             std::size_t output_length = kChaCha20KeyLength);
 
 // RFC 8439 IETF ChaCha20 keystream (OpenSSL EVP_chacha20, encrypting
 // an all-zero plaintext of the requested length -- the standard way to
@@ -130,8 +138,10 @@ inline constexpr char kHkdfPurposeWeightMaskStream[] = "weight_mask_stream";
 // kChaCha20NonceLength bytes; `initial_counter` is the 32-bit block
 // counter OpenSSL encodes as the first 4 bytes of its internal 16-byte
 // IV (little-endian), matching RFC 8439's counter placement exactly.
-[[nodiscard]] std::string chacha20_keystream(const std::string& key, const std::string& nonce,
-                                              std::uint32_t initial_counter, std::size_t length);
+[[nodiscard]] std::string chacha20_keystream(const std::string& key,
+                                             const std::string& nonce,
+                                             std::uint32_t initial_counter,
+                                             std::size_t length);
 
 [[nodiscard]] std::string sha256_digest(const std::string& data);  // raw kSha256DigestLength bytes
 [[nodiscard]] std::string sha256_hex(const std::string& data);
@@ -147,8 +157,11 @@ inline constexpr char kHkdfPurposeWeightMaskStream[] = "weight_mask_stream";
 // this is the binding that makes "the roster I'm masking against" and
 // "the roster the coordinator actually signed" the same roster,
 // cryptographically, not just by trusting the RPC response.
-[[nodiscard]] std::string compute_cohort_commitment(const std::string& session_id, const std::string& run_id,
-                                                      std::uint64_t round_id, const std::string& model_version,
-                                                      const std::vector<std::string>& ordered_participant_ids);
+[[nodiscard]] std::string compute_cohort_commitment(
+    const std::string& session_id,
+    const std::string& run_id,
+    std::uint64_t round_id,
+    const std::string& model_version,
+    const std::vector<std::string>& ordered_participant_ids);
 
 }  // namespace fl::coordinator

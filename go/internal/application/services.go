@@ -17,6 +17,7 @@ import (
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/models"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/observability"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/projects"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/research"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/runs"
 )
 
@@ -67,6 +68,7 @@ type Services struct {
 	Coordinator *CoordinatorService
 	Models      *ModelService
 	Datasets    *DatasetService
+	Research    *ResearchService
 	Metrics     *observability.MetricsRecorder
 }
 
@@ -124,7 +126,7 @@ func NewServicesWithCoordinator(
 ) *Services {
 	return NewServicesWithRegistries(
 		projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo,
-		models.NewInMemoryRepository(), datasets.NewInMemoryRepository(),
+		models.NewInMemoryRepository(), datasets.NewInMemoryRepository(), nil, nil,
 		coordinatorClient, clock,
 	)
 }
@@ -141,6 +143,8 @@ func NewServicesWithRegistries(
 	auditRepo observability.AuditRepository,
 	modelRepo models.Repository,
 	datasetRepo datasets.Repository,
+	researchRepo research.Repository,
+	researchWriter research.CommandClient,
 	coordinatorClient coordinator.Client,
 	clock Clock,
 ) *Services {
@@ -163,6 +167,7 @@ func NewServicesWithRegistries(
 	coordinatorService := &CoordinatorService{client: coordinatorClient, clock: clock, audit: auditService, metrics: metrics}
 	modelService := &ModelService{repo: modelRepo, clock: clock, audit: auditService}
 	datasetService := &DatasetService{repo: datasetRepo, clock: clock, audit: auditService}
+	researchService := &ResearchService{repo: researchRepo, writer: researchWriter}
 	return &Services{
 		Projects:    projectService,
 		Experiments: experimentService,
@@ -172,6 +177,7 @@ func NewServicesWithRegistries(
 		Coordinator: coordinatorService,
 		Models:      modelService,
 		Datasets:    datasetService,
+		Research:    researchService,
 		Metrics:     metrics,
 	}
 }

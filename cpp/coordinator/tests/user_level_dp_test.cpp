@@ -78,7 +78,9 @@ void register_workers(fl::coordinator::RunManager& manager) {
     manager.worker_registry().register_worker("worker-b", fl::coordinator::WorkerCapability{}, 0.0);
 }
 
-std::string run_one_round(fl::coordinator::RunInstance& run, double& now, double delta_a,
+std::string run_one_round(fl::coordinator::RunInstance& run,
+                          double& now,
+                          double delta_a,
                           double delta_b) {
     run.advance(now);
     const auto task_a = run.acquire_task("worker-a", now).value();
@@ -106,7 +108,8 @@ void run_user_level_dp_tests() {
 
     // --- Ledger entries are created, epsilon grows across rounds ---
     {
-        RunManager manager(coordinator_config, "user_level_dp_test_scratch/checkpoints_a",
+        RunManager manager(coordinator_config,
+                           "user_level_dp_test_scratch/checkpoints_a",
                            "user_level_dp_test_scratch/scaffold_a");
         manager.create_run(make_private_config("run-privacy-a", /*noise_seed=*/123), 0.0);
         auto& run = manager.get("run-privacy-a");
@@ -138,10 +141,13 @@ void run_user_level_dp_tests() {
     // the exact noise value added, since clip_bound=10.0 means neither
     // client's delta (2.0, 0.0) is actually clipped (norm 2.0 < 10.0). ---
     {
-        RunManager manager(coordinator_config, "user_level_dp_test_scratch/checkpoints_b",
+        RunManager manager(coordinator_config,
+                           "user_level_dp_test_scratch/checkpoints_b",
                            "user_level_dp_test_scratch/scaffold_b");
-        auto config = make_private_config("run-privacy-b", /*noise_seed=*/999,
-                                          /*noise_multiplier=*/2.0, /*clip_bound=*/10.0);
+        auto config = make_private_config("run-privacy-b",
+                                          /*noise_seed=*/999,
+                                          /*noise_multiplier=*/2.0,
+                                          /*clip_bound=*/10.0);
         manager.create_run(config, 0.0);
         auto& run = manager.get("run-privacy-b");
         register_workers(manager);
@@ -172,9 +178,11 @@ void run_user_level_dp_tests() {
     // independently-run private rounds with identical config/seed
     // produce identical accounting). ---
     {
-        RunManager manager_x(coordinator_config, "user_level_dp_test_scratch/checkpoints_x",
+        RunManager manager_x(coordinator_config,
+                             "user_level_dp_test_scratch/checkpoints_x",
                              "user_level_dp_test_scratch/scaffold_x");
-        RunManager manager_y(coordinator_config, "user_level_dp_test_scratch/checkpoints_y",
+        RunManager manager_y(coordinator_config,
+                             "user_level_dp_test_scratch/checkpoints_y",
                              "user_level_dp_test_scratch/scaffold_y");
         manager_x.create_run(make_private_config("run-x", 555), 0.0);
         manager_y.create_run(make_private_config("run-y", 555), 0.0);
@@ -197,7 +205,8 @@ void run_user_level_dp_tests() {
     // --- Non-private runs are completely unaffected: no ledger entries,
     // no accountant constructed. ---
     {
-        RunManager manager(coordinator_config, "user_level_dp_test_scratch/checkpoints_c",
+        RunManager manager(coordinator_config,
+                           "user_level_dp_test_scratch/checkpoints_c",
                            "user_level_dp_test_scratch/scaffold_c");
         fl::coordinator::RunConfig config;
         config.run_id = "run-non-private";
@@ -235,7 +244,8 @@ void run_user_level_dp_tests() {
     // that runs after finalize() already returned a (possibly noised)
     // aggregate. ---
     {
-        RunManager manager(coordinator_config, "user_level_dp_test_scratch/checkpoints_secure",
+        RunManager manager(coordinator_config,
+                           "user_level_dp_test_scratch/checkpoints_secure",
                            "user_level_dp_test_scratch/scaffold_secure");
         auto config = make_private_config("run-secure-user-level", /*noise_seed=*/99, 1.0, 5.0);
         config.max_rounds = 2;
@@ -253,7 +263,8 @@ void run_user_level_dp_tests() {
               "secure test setup: user_level_privacy() accessor reports the configured clip bound");
         check(run.user_level_noise_provider() != nullptr,
               "secure test setup: user_level_noise_provider() is non-null for a kUserLevelDp run");
-        const double projected_before_any_step = run.project_user_level_epsilon_after_one_more_step();
+        const double projected_before_any_step =
+            run.project_user_level_epsilon_after_one_more_step();
         check(projected_before_any_step > 0.0,
               "project_user_level_epsilon_after_one_more_step: a non-mutating projection of the "
               "very first step is a real positive epsilon, not zero/uninitialized");
@@ -320,7 +331,8 @@ void run_user_level_dp_tests() {
         auto config = make_private_config("run-restart", /*noise_seed=*/321, 1.5, 4.0);
         double epsilon_before_restart = 0.0;
         {
-            RunManager manager(coordinator_config, checkpoint_root, "user_level_dp_test_scratch/scaffold_restart");
+            RunManager manager(
+                coordinator_config, checkpoint_root, "user_level_dp_test_scratch/scaffold_restart");
             manager.create_run(config, 0.0);
             auto& run = manager.get("run-restart");
             register_workers(manager);
@@ -336,7 +348,8 @@ void run_user_level_dp_tests() {
         // checkpointed, per restore_from_checkpoint's own doc comment),
         // then restore_from_checkpoint() to load the persisted state.
         {
-            RunManager manager(coordinator_config, checkpoint_root, "user_level_dp_test_scratch/scaffold_restart");
+            RunManager manager(
+                coordinator_config, checkpoint_root, "user_level_dp_test_scratch/scaffold_restart");
             manager.create_run(config, 100.0);
             auto& run = manager.get("run-restart");
             run.restore_from_checkpoint();
@@ -360,7 +373,8 @@ void run_user_level_dp_tests() {
         std::filesystem::remove_all(checkpoint_root);
         auto config = make_private_config("run-corrupt", /*noise_seed=*/321, 1.5, 4.0);
         {
-            RunManager manager(coordinator_config, checkpoint_root, "user_level_dp_test_scratch/scaffold_corrupt");
+            RunManager manager(
+                coordinator_config, checkpoint_root, "user_level_dp_test_scratch/scaffold_corrupt");
             manager.create_run(config, 0.0);
             auto& run = manager.get("run-corrupt");
             register_workers(manager);
@@ -391,7 +405,8 @@ void run_user_level_dp_tests() {
             out << text;
         }
         {
-            RunManager manager(coordinator_config, checkpoint_root, "user_level_dp_test_scratch/scaffold_corrupt");
+            RunManager manager(
+                coordinator_config, checkpoint_root, "user_level_dp_test_scratch/scaffold_corrupt");
             manager.create_run(config, 200.0);
             auto& run = manager.get("run-corrupt");
             bool threw = false;
@@ -415,7 +430,8 @@ void run_user_level_dp_tests() {
     // locally buildable without the gRPC-gated coordinator_service.cpp
     // this mechanism's wire-level binding lives in. ---
     {
-        RunManager manager(coordinator_config, "user_level_dp_test_scratch/checkpoints_hybrid",
+        RunManager manager(coordinator_config,
+                           "user_level_dp_test_scratch/checkpoints_hybrid",
                            "user_level_dp_test_scratch/scaffold_hybrid");
         auto config = make_private_config("run-hybrid", /*noise_seed=*/777, 1.0, 5.0);
         config.privacy_mode = fl::core::PrivacyMode::kHybridDp;
@@ -437,8 +453,7 @@ void run_user_level_dp_tests() {
               "-- the same construction gate kUserLevelDp uses already includes kHybridDp");
         check(run.sample_level_ledger().empty(),
               "hybrid test setup: sample-level ledger starts empty");
-        check(run.user_level_ledger().empty(),
-              "hybrid test setup: user-level ledger starts empty");
+        check(run.user_level_ledger().empty(), "hybrid test setup: user-level ledger starts empty");
 
         double now = 0.0;
         run.advance(now);  // kRunning -> kWaitingForClients (dispatches round 1)
@@ -494,6 +509,132 @@ void run_user_level_dp_tests() {
         check(run.user_level_ledger().size() == 1,
               "the user-level ledger still has exactly the one entry committed at finalization "
               "-- sample-level entries never inflate it");
+    }
+
+    // --- Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: proves apply_secure_aggregate_and_advance's new
+    // indicator_over_threshold_count parameter commits BOTH the model
+    // and indicator mechanisms together (one atomic transaction, see
+    // docs/secure-adaptive-clipping-semantics.md section 18), the
+    // caller-contract violation (adaptive active but no count supplied)
+    // throws rather than silently skipping the clip-state update, the
+    // bound moves in the correct direction from a real step, and an
+    // idempotent retry double-commits neither ledger. All protobuf-free
+    // -- the masked-indicator wire binding/reconstruction this feeds
+    // from lives in the gRPC-gated coordinator_service.cpp /
+    // secure_aggregation_session_manager.cpp this test file cannot
+    // link, covered instead by secure_aggregation_session_manager_test.cpp
+    // and coordinator_service_test.cpp. ---
+    {
+        RunManager manager(coordinator_config,
+                           "user_level_dp_test_scratch/checkpoints_adaptive",
+                           "user_level_dp_test_scratch/scaffold_adaptive");
+        auto config = make_private_config("run-adaptive", /*noise_seed=*/2024, 1.0, 5.0);
+        config.adaptive_clipping_enabled = true;
+        config.adaptive_clipping.initial_clip = 5.0;
+        config.adaptive_clipping.target_quantile = 0.5;
+        config.adaptive_clipping.clip_learning_rate = 0.5;
+        config.adaptive_clipping.min_clip = 0.1;
+        config.adaptive_clipping.max_clip = 100.0;
+        // Deliberately tiny -- an effectively-deterministic step for
+        // this test's direction assertions (matches
+        // adaptive_clipping_test.cpp's own established convention).
+        config.adaptive_clipping.count_noise_multiplier = 1e-6;
+        config.adaptive_clipping.target_delta = 1e-5;
+        manager.create_run(config, 0.0);
+        auto& run = manager.get("run-adaptive");
+        register_workers(manager);
+        run.start("", 0.0);
+
+        check(run.secure_adaptive_clipping_active(),
+              "adaptive test setup: secure_adaptive_clipping_active() is true when "
+              "adaptive_clipping_enabled AND privacy_mode is kUserLevelDp");
+        check(std::abs(run.current_adaptive_clip_bound() - 5.0) < 1e-12,
+              "adaptive test setup: current_adaptive_clip_bound() reports the configured "
+              "initial_clip before any step");
+        check(run.adaptive_clip_state_step_count() == 0,
+              "adaptive test setup: adaptive_clip_state_step_count() is 0 before any step");
+        check(run.adaptive_clipping_ledger().empty(),
+              "adaptive test setup: adaptive clipping ledger starts empty");
+
+        double now = 0.0;
+        run.advance(now);  // kRunning -> kWaitingForClients (dispatches round 1)
+
+        fl::core::AggregationResult aggregate;
+        aggregate.model_delta.insert(fl::core::TensorBuffer(
+            fl::core::TensorDescriptor{
+                .name = "weight", .shape = {1}, .dtype = fl::core::DType::kFloat32},
+            {1.0}));
+
+        // Contract violation: adaptive is active but no indicator count
+        // is supplied -- must throw, never silently skip the clip-state
+        // update.
+        bool threw_on_missing_count = false;
+        try {
+            [[maybe_unused]] const bool result =
+                run.apply_secure_aggregate_and_advance(1, aggregate, now);
+        } catch (const std::logic_error&) {
+            threw_on_missing_count = true;
+        }
+        check(threw_on_missing_count,
+              "apply_secure_aggregate_and_advance throws std::logic_error when adaptive "
+              "clipping is active but no indicator_over_threshold_count was supplied");
+        check(run.user_level_ledger().empty(),
+              "the throwing call above committed nothing to either ledger");
+        check(run.adaptive_clipping_ledger().empty(),
+              "the throwing call above committed nothing to either ledger");
+
+        // 2 of 2 participants over threshold -> error = 1.0 - 0.5 = 0.5
+        // -> bound RAISES (too many clipped -> bound too low).
+        check(run.apply_secure_aggregate_and_advance(
+                  1, aggregate, now, /*indicator_over_threshold_count=*/2),
+              "apply_secure_aggregate_and_advance applies round 1's secure aggregate with a "
+              "real indicator count");
+        check(run.user_level_ledger().size() == 1,
+              "the model mechanism commits exactly once, alongside the indicator mechanism");
+        check(run.adaptive_clipping_ledger().size() == 1,
+              "the indicator mechanism commits exactly once, alongside the model mechanism -- "
+              "one atomic transaction, not two independently-timed ones");
+        check(run.adaptive_clipping_ledger().back().clip_value > 4.999 &&
+                  run.adaptive_clipping_ledger().back().clip_value < 5.001,
+              "the ledger entry's clip_value is the bound THIS round actually used (5.0), not "
+              "the bound computed for next round");
+        check(run.current_adaptive_clip_bound() > 5.0,
+              "2 of 2 participants over threshold (fraction 1.0 > target_quantile 0.5) raises "
+              "the bound for next round -- too many clients being clipped means the bound was "
+              "too low (docs/secure-adaptive-clipping-runtime-audit.md's direction derivation)");
+        check(run.adaptive_clip_state_step_count() == 1,
+              "adaptive_clip_state_step_count() advances to 1 after the real step");
+
+        // Idempotent retry: the same round_id must not double-commit
+        // either ledger.
+        check(!run.apply_secure_aggregate_and_advance(
+                  1, aggregate, now, /*indicator_over_threshold_count=*/2),
+              "a retried call for the already-applied round_id is refused (idempotent no-op)");
+        check(run.user_level_ledger().size() == 1,
+              "the idempotent retry did not append a second model-mechanism ledger entry");
+        check(run.adaptive_clipping_ledger().size() == 1,
+              "the idempotent retry did not append a second indicator-mechanism ledger entry");
+
+        // Round 2: 0 of 2 over threshold -> error = 0.0 - 0.5 = -0.5 ->
+        // bound LOWERS (too few clipped -> bound too high).
+        run.advance(now);  // kRunning -> kWaitingForClients (dispatches round 2)
+        const double bound_before_round_2 = run.current_adaptive_clip_bound();
+        fl::core::AggregationResult aggregate_2;
+        aggregate_2.model_delta.insert(fl::core::TensorBuffer(
+            fl::core::TensorDescriptor{
+                .name = "weight", .shape = {1}, .dtype = fl::core::DType::kFloat32},
+            {0.5}));
+        check(run.apply_secure_aggregate_and_advance(
+                  2, aggregate_2, now, /*indicator_over_threshold_count=*/0),
+              "apply_secure_aggregate_and_advance applies round 2's secure aggregate");
+        check(run.current_adaptive_clip_bound() < bound_before_round_2,
+              "0 of 2 participants over threshold lowers the bound for next round -- the "
+              "opposite direction from round 1's step, confirming this is a genuine "
+              "data-dependent update, not a monotonic drift");
+        check(run.adaptive_clipping_ledger().size() == 2,
+              "exactly two indicator-mechanism ledger entries exist after the second secure "
+              "round");
     }
 }
 

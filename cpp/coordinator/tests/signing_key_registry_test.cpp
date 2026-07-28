@@ -18,8 +18,10 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
     std::filesystem::create_directories(scratch_dir);
     const std::string store_path = scratch_dir + "/signing_key_registry.dat";
 
-    auto make_initial = [](const std::string& worker_id, const std::string& key_id,
-                           const std::string& public_key_hex, double now) {
+    auto make_initial = [](const std::string& worker_id,
+                           const std::string& key_id,
+                           const std::string& public_key_hex,
+                           double now) {
         InitialSigningKeyRegistration request;
         request.worker_id = worker_id;
         request.signing_key_id = key_id;
@@ -39,7 +41,8 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
     {
         SigningKeyRegistry registry(store_path);
 
-        const auto record = registry.register_initial_key(make_initial("worker-1", "key-1", kKeyA, 100.0));
+        const auto record =
+            registry.register_initial_key(make_initial("worker-1", "key-1", kKeyA, 100.0));
         check(record.status == SigningKeyStatus::kActive,
               "a worker's first-ever registered key is ACTIVE immediately");
         check(record.registration_source == "registration",
@@ -53,24 +56,31 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
 
         // A different public key under the SAME key_id must be rejected outright.
         expect_throw(
-            [&]() { registry.register_initial_key(make_initial("worker-1", "key-1", kKeyB, 102.0)); },
+            [&]() {
+                registry.register_initial_key(make_initial("worker-1", "key-1", kKeyB, 102.0));
+            },
             "a key-swap attempt under the same signing_key_id is rejected");
 
         // A second, brand-new worker gets its own independent first key.
-        const auto worker2 = registry.register_initial_key(make_initial("worker-2", "key-2", kKeyB, 103.0));
+        const auto worker2 =
+            registry.register_initial_key(make_initial("worker-2", "key-2", kKeyB, 103.0));
         check(worker2.status == SigningKeyStatus::kActive,
               "a second worker's first key is independently ACTIVE");
 
         // Duplicate signing_key_id across different workers is rejected.
         expect_throw(
-            [&]() { registry.register_initial_key(make_initial("worker-3", "key-1", kKeyC, 104.0)); },
+            [&]() {
+                registry.register_initial_key(make_initial("worker-3", "key-1", kKeyC, 104.0));
+            },
             "a signing_key_id already used by a different worker is rejected");
 
         // Attempting a second "initial" registration for a worker that
         // already has an ACTIVE key (a different key_id) must be
         // rejected -- that is a rotation, not an initial registration.
         expect_throw(
-            [&]() { registry.register_initial_key(make_initial("worker-1", "key-99", kKeyD, 105.0)); },
+            [&]() {
+                registry.register_initial_key(make_initial("worker-1", "key-99", kKeyD, 105.0));
+            },
             "registering a second key for a worker with an existing ACTIVE key is rejected "
             "(rotation required instead)");
     }
@@ -121,8 +131,8 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
         SigningKeyRotationRequest unknown_current = rotation;
         unknown_current.current_signing_key_id = "no-such-key";
         const auto unknown_result = registry.validate_rotation(unknown_current);
-        check(!unknown_result.accepted && unknown_result.reason ==
-                                              SigningKeyRotationRejectionReason::kUnknownCurrentKey,
+        check(!unknown_result.accepted &&
+                  unknown_result.reason == SigningKeyRotationRejectionReason::kUnknownCurrentKey,
               "an unknown current_signing_key_id is rejected as kUnknownCurrentKey");
 
         // Duplicate new key id (reuse worker-2's existing key-2).
@@ -143,8 +153,8 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
         bad_length.new_signing_key_id = "key-1-bad-length";
         bad_length.new_public_key_hex = "deadbeef";
         const auto bad_length_result = registry.validate_rotation(bad_length);
-        check(!bad_length_result.accepted && bad_length_result.reason ==
-                                                  SigningKeyRotationRejectionReason::kInvalidKeyLength,
+        check(!bad_length_result.accepted &&
+                  bad_length_result.reason == SigningKeyRotationRejectionReason::kInvalidKeyLength,
               "an invalid-length public key is rejected as kInvalidKeyLength");
 
         // Excessive grace period.
@@ -155,9 +165,10 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
         excessive_grace.new_public_key_fingerprint = "fp-" + kKeyD;
         excessive_grace.grace_period_seconds = SigningKeyRegistry::kMaxGracePeriodSeconds + 1.0;
         const auto excessive_result = registry.validate_rotation(excessive_grace);
-        check(!excessive_result.accepted &&
-                  excessive_result.reason == SigningKeyRotationRejectionReason::kExcessiveGracePeriod,
-              "a grace period beyond the maximum is rejected as kExcessiveGracePeriod");
+        check(
+            !excessive_result.accepted &&
+                excessive_result.reason == SigningKeyRotationRejectionReason::kExcessiveGracePeriod,
+            "a grace period beyond the maximum is rejected as kExcessiveGracePeriod");
     }
 
     {
@@ -170,7 +181,8 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
 
         const auto after_expiry = registry.find("worker-1", "key-1", 200.0 + 3600.0 + 1.0);
         check(after_expiry.has_value() && after_expiry->status == SigningKeyStatus::kExpired,
-              "after grace_period_end, find() lazily reports EXPIRED without requiring sweep_expired()");
+              "after grace_period_end, find() lazily reports EXPIRED without requiring "
+              "sweep_expired()");
 
         check(registry.has_any_valid_key("worker-1", 250.0),
               "worker-1 has a valid key (its rotated-to ACTIVE key) well before any expiry");
@@ -190,7 +202,8 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
               "a worker whose only key was revoked has no valid key");
 
         // Idempotent.
-        const auto revoked_again = registry.revoke_key("worker-2", "key-2", "different reason", 301.0);
+        const auto revoked_again =
+            registry.revoke_key("worker-2", "key-2", "different reason", 301.0);
         check(revoked_again.revocation_reason == "compromised",
               "revoking an already-revoked key is idempotent (first reason wins)");
 
@@ -210,8 +223,9 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
               "restart-persisted REVOKED status survives reopening the store from disk");
 
         const auto all_for_worker1 = registry.list_for_worker("worker-1", 250.0);
-        check(all_for_worker1.size() == 2,
-              "list_for_worker returns every key ever registered for a worker (ACTIVE + superseded)");
+        check(
+            all_for_worker1.size() == 2,
+            "list_for_worker returns every key ever registered for a worker (ACTIVE + superseded)");
     }
 
     {
@@ -220,7 +234,8 @@ void run_signing_key_registry_tests(const std::string& scratch_dir) {
         const auto transitioned = registry.sweep_expired(200.0 + 3600.0 + 1.0);
         bool found = false;
         for (const auto& [worker_id, key_id] : transitioned) {
-            if (worker_id == "worker-1" && key_id == "key-1") found = true;
+            if (worker_id == "worker-1" && key_id == "key-1")
+                found = true;
         }
         check(found, "sweep_expired() transitions and persists the expired GRACE_PERIOD key");
 

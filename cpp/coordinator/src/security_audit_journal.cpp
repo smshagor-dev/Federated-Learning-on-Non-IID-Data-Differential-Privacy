@@ -30,9 +30,8 @@ std::string format_iso8601(double now_unix_s) {
 
 std::string format_iso8601_now() {
     const auto now = std::chrono::system_clock::now();
-    return format_iso8601(
-        static_cast<double>(std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
-                                 .count()));
+    return format_iso8601(static_cast<double>(
+        std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count()));
 }
 
 std::uint64_t fnv1a_hash(const std::string& data) {
@@ -238,8 +237,8 @@ void SecurityAuditJournal::maybe_rotate() {
     }
     for (std::size_t generation = options_.max_retained_files; generation >= 1; --generation) {
         const std::string from = generation == 1
-                                      ? persistence_path_
-                                      : persistence_path_ + "." + std::to_string(generation - 1);
+                                     ? persistence_path_
+                                     : persistence_path_ + "." + std::to_string(generation - 1);
         const std::string to = persistence_path_ + "." + std::to_string(generation);
         if (generation == options_.max_retained_files && std::filesystem::exists(to)) {
             std::filesystem::remove(to, error_code);
@@ -282,8 +281,10 @@ void SecurityAuditJournal::append(SecurityAuditRecord record) {
 SecurityAuditJournal::ListResult SecurityAuditJournal::list(const ListFilters& filters) const {
     std::lock_guard<std::mutex> lock(mutex_);
     ListResult result;
-    const std::string since_ts = filters.since_unix_s > 0.0 ? format_iso8601(filters.since_unix_s) : "";
-    const std::string until_ts = filters.until_unix_s > 0.0 ? format_iso8601(filters.until_unix_s) : "";
+    const std::string since_ts =
+        filters.since_unix_s > 0.0 ? format_iso8601(filters.since_unix_s) : "";
+    const std::string until_ts =
+        filters.until_unix_s > 0.0 ? format_iso8601(filters.until_unix_s) : "";
     bool past_cursor = filters.after_record_id.empty();
     for (const auto& record : in_memory_) {
         if (!past_cursor) {

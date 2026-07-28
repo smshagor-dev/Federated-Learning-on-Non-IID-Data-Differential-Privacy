@@ -78,11 +78,11 @@ void OsEntropySecureRandomProvider::draw_from_os(unsigned char* out, std::size_t
     // entry point (CryptGenRandom/wincrypt.h is deprecated). A non-
     // STATUS_SUCCESS return is a hard failure -- never fall back to a
     // weaker source.
-    const NTSTATUS status = BCryptGenRandom(
-        nullptr, out, static_cast<ULONG>(count), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    const NTSTATUS status =
+        BCryptGenRandom(nullptr, out, static_cast<ULONG>(count), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
     if (status != 0 /* STATUS_SUCCESS */) {
-        throw SecureRandomUnavailableError(
-            "BCryptGenRandom failed with NTSTATUS " + std::to_string(status));
+        throw SecureRandomUnavailableError("BCryptGenRandom failed with NTSTATUS " +
+                                           std::to_string(status));
     }
 }
 
@@ -98,15 +98,15 @@ void OsEntropySecureRandomProvider::draw_from_os(unsigned char* out, std::size_t
     // guarantee is non-deterministic) is the whole point of this class.
     std::FILE* source = std::fopen("/dev/urandom", "rb");
     if (source == nullptr) {
-        throw SecureRandomUnavailableError(
-            "failed to open /dev/urandom: errno " + std::to_string(errno));
+        throw SecureRandomUnavailableError("failed to open /dev/urandom: errno " +
+                                           std::to_string(errno));
     }
     const std::size_t read_count = std::fread(out, 1, count, source);
     std::fclose(source);
     if (read_count != count) {
-        throw SecureRandomUnavailableError(
-            "short read from /dev/urandom (" + std::to_string(read_count) + " of " +
-            std::to_string(count) + " bytes)");
+        throw SecureRandomUnavailableError("short read from /dev/urandom (" +
+                                           std::to_string(read_count) + " of " +
+                                           std::to_string(count) + " bytes)");
     }
 }
 

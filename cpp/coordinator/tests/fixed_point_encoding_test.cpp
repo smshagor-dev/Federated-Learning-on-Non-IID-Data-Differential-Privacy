@@ -7,12 +7,12 @@
 namespace fl::coordinator::testing {
 
 void run_fixed_point_encoding_tests() {
-    using fl::coordinator::EncodingRejectionReason;
-    using fl::coordinator::FixedPointEncodingProfile;
-    using fl::coordinator::RoundingRule;
     using fl::coordinator::decode_value;
     using fl::coordinator::encode_value;
+    using fl::coordinator::EncodingRejectionReason;
+    using fl::coordinator::FixedPointEncodingProfile;
     using fl::coordinator::prove_domain_bounds;
+    using fl::coordinator::RoundingRule;
 
     // Default profile round-trips a representative sample -- positive,
     // negative, zero, negative zero, and a value requiring rounding.
@@ -21,7 +21,8 @@ void run_fixed_point_encoding_tests() {
 
         const auto positive = encode_value(3.5, profile);
         check(positive.ok, "3.5 encodes successfully under the default profile");
-        check(decode_value(positive.encoded, profile) == 3.5, "3.5 round-trips exactly (power-of-two scale factor)");
+        check(decode_value(positive.encoded, profile) == 3.5,
+              "3.5 round-trips exactly (power-of-two scale factor)");
 
         const auto negative = encode_value(-3.5, profile);
         check(negative.ok, "-3.5 encodes successfully");
@@ -39,7 +40,8 @@ void run_fixed_point_encoding_tests() {
         // grid, not a floating-point-imprecision artifact.
         const double half_step = 0.5 / profile.scale_factor;
         const auto halfway = encode_value(half_step, profile);
-        check(halfway.ok && halfway.encoded == 1, "a value exactly halfway between two grid points rounds away from zero");
+        check(halfway.ok && halfway.encoded == 1,
+              "a value exactly halfway between two grid points rounds away from zero");
         const auto halfway_negative = encode_value(-half_step, profile);
         check(halfway_negative.ok && halfway_negative.encoded == -1,
               "a negative halfway value rounds away from zero (toward -1, not 0)");
@@ -58,15 +60,17 @@ void run_fixed_point_encoding_tests() {
               "+Infinity is rejected as non-finite");
 
         const auto neg_inf_result = encode_value(-std::numeric_limits<double>::infinity(), profile);
-        check(!neg_inf_result.ok && neg_inf_result.reason == EncodingRejectionReason::kNonFiniteInput,
-              "-Infinity is rejected as non-finite");
+        check(
+            !neg_inf_result.ok && neg_inf_result.reason == EncodingRejectionReason::kNonFiniteInput,
+            "-Infinity is rejected as non-finite");
 
         const auto too_large = encode_value(profile.max_input_magnitude + 1.0, profile);
         check(!too_large.ok && too_large.reason == EncodingRejectionReason::kMagnitudeOverflow,
               "a value exceeding max_input_magnitude is rejected");
 
         const auto at_boundary = encode_value(profile.max_input_magnitude, profile);
-        check(at_boundary.ok, "a value exactly at max_input_magnitude is accepted (inclusive boundary)");
+        check(at_boundary.ok,
+              "a value exactly at max_input_magnitude is accepted (inclusive boundary)");
     }
 
     // Quantization error is reported honestly for a non-exact value.
@@ -74,7 +78,8 @@ void run_fixed_point_encoding_tests() {
         FixedPointEncodingProfile profile;
         const auto result = encode_value(1.0 / 3.0, profile);
         check(result.ok, "1/3 encodes successfully (well within magnitude bound)");
-        check(result.quantization_error >= 0.0 && result.quantization_error < 1.0 / profile.scale_factor,
+        check(result.quantization_error >= 0.0 &&
+                  result.quantization_error < 1.0 / profile.scale_factor,
               "quantization error for a non-exact value is small and non-negative");
     }
 
@@ -83,10 +88,12 @@ void run_fixed_point_encoding_tests() {
         FixedPointEncodingProfile profile;
         const auto proof = prove_domain_bounds(profile);
         check(proof.safe, "the default fixed-point encoding profile proves domain-safe");
-        check(!proof.computation_overflowed, "the default profile's bound computation does not overflow");
+        check(!proof.computation_overflowed,
+              "the default profile's bound computation does not overflow");
         check(proof.worst_case_aggregate_magnitude <
                   static_cast<std::uint64_t>(FixedPointEncodingProfile::kSignedDecodingBoundary),
-              "the proven worst-case aggregate magnitude is strictly less than the signed decoding boundary");
+              "the proven worst-case aggregate magnitude is strictly less than the signed decoding "
+              "boundary");
     }
 
     // A deliberately unsafe profile (huge scale factor, huge cohort) is
@@ -100,7 +107,8 @@ void run_fixed_point_encoding_tests() {
 
         const auto proof = prove_domain_bounds(profile);
         check(!proof.safe, "a profile whose worst-case aggregate cannot fit is rejected as unsafe");
-        check(!proof.explanation.empty(), "an unsafe profile's proof carries a human-readable explanation");
+        check(!proof.explanation.empty(),
+              "an unsafe profile's proof carries a human-readable explanation");
     }
 
     // An intermediate computation that itself overflows uint64_t is
@@ -111,9 +119,11 @@ void run_fixed_point_encoding_tests() {
         profile.max_input_magnitude = 1e300;
 
         const auto proof = prove_domain_bounds(profile);
-        check(!proof.safe, "a profile whose own single-value bound cannot fit in uint64_t is unsafe");
+        check(!proof.safe,
+              "a profile whose own single-value bound cannot fit in uint64_t is unsafe");
         check(proof.computation_overflowed,
-              "the overflow is reported distinctly via computation_overflowed, not conflated with 'merely unsafe'");
+              "the overflow is reported distinctly via computation_overflowed, not conflated with "
+              "'merely unsafe'");
     }
 
     // Golden fixture values -- mirrors
@@ -141,7 +151,8 @@ void run_fixed_point_encoding_tests() {
         check(zero.ok && zero.encoded == 0, "golden fixture 'zero': encode(0.0) == 0");
 
         const auto negative_zero = encode_value(-0.0, profile);
-        check(negative_zero.ok && negative_zero.encoded == 0, "golden fixture 'negative_zero': encode(-0.0) == 0");
+        check(negative_zero.ok && negative_zero.encoded == 0,
+              "golden fixture 'negative_zero': encode(-0.0) == 0");
 
         const auto halfway_positive = encode_value(0.000000476837158203125, profile);
         check(halfway_positive.ok && halfway_positive.encoded == 1,
@@ -185,7 +196,8 @@ void run_fixed_point_encoding_tests() {
                   magnitude_overflow_negative.reason == EncodingRejectionReason::kMagnitudeOverflow,
               "golden fixture 'magnitude_overflow_negative': rejected as magnitude_overflow");
 
-        check(decode_value(3670016, profile) == 3.5, "golden fixture 'decode_positive_exact': decode(3670016) == 3.5");
+        check(decode_value(3670016, profile) == 3.5,
+              "golden fixture 'decode_positive_exact': decode(3670016) == 3.5");
         check(decode_value(-3670016, profile) == -3.5,
               "golden fixture 'decode_negative_exact': decode(-3670016) == -3.5");
         check(decode_value(0, profile) == 0.0, "golden fixture 'decode_zero': decode(0) == 0.0");
@@ -201,7 +213,8 @@ void run_fixed_point_encoding_tests() {
     {
         check(to_string(RoundingRule::kRoundHalfAwayFromZero) == "round_half_away_from_zero",
               "RoundingRule::kRoundHalfAwayFromZero stringifies as expected");
-        check(to_string(EncodingRejectionReason::kNone) == "none", "EncodingRejectionReason::kNone stringifies as 'none'");
+        check(to_string(EncodingRejectionReason::kNone) == "none",
+              "EncodingRejectionReason::kNone stringifies as 'none'");
         check(to_string(EncodingRejectionReason::kMagnitudeOverflow) == "magnitude_overflow",
               "EncodingRejectionReason::kMagnitudeOverflow stringifies as expected");
     }

@@ -96,6 +96,39 @@ func TestDatasetServiceCreatePartitionDirichletRequiresAlpha(t *testing.T) {
 	}
 }
 
+func TestDatasetServiceCreatePartitionQuantitySkewRequiresSigma(t *testing.T) {
+	ctx := context.Background()
+	service := newDatasetService()
+	if _, err := service.Register(ctx, datasets.Dataset{DatasetID: "mnist-iid", NumClasses: 10, TrainSampleCount: 60000}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	_, err := service.CreatePartition(ctx, datasets.Partition{
+		PartitionID: "p1", DatasetID: "mnist-iid", Strategy: "quantity_skew", NumClients: 4,
+	})
+	if !errors.Is(err, ErrInvalidPartitionManifest) {
+		t.Fatalf("expected ErrInvalidPartitionManifest for missing quantity_skew_sigma, got %v", err)
+	}
+}
+
+func TestDatasetServiceCreatePartitionQuantitySkewSucceeds(t *testing.T) {
+	ctx := context.Background()
+	service := newDatasetService()
+	if _, err := service.Register(ctx, datasets.Dataset{DatasetID: "mnist-iid", NumClasses: 10, TrainSampleCount: 60000}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	sigma := 0.8
+	partition := datasets.Partition{
+		PartitionID:       "p-quantity-skew",
+		DatasetID:         "mnist-iid",
+		Strategy:          "quantity_skew",
+		NumClients:        4,
+		QuantitySkewSigma: &sigma,
+	}
+	if _, err := service.CreatePartition(ctx, partition); err != nil {
+		t.Fatalf("create quantity_skew partition: %v", err)
+	}
+}
+
 func TestDatasetServiceCreatePartitionSucceedsAndRejectsDuplicateID(t *testing.T) {
 	ctx := context.Background()
 	service := newDatasetService()

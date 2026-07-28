@@ -210,6 +210,22 @@ enum class SecurityEventType {
     kSecureHybridDpBindingAccepted,
     kSecureHybridDpRoundCompleted,
     kSecureHybridDpRoundAborted,
+
+    // Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: a deliberately bounded, representative subset of the
+    // requested ~21-name SECURE_ADAPTIVE_CLIPPING_* vocabulary,
+    // mirroring the hybrid slice's own identical scope-bounding
+    // decision immediately above. Never carries an individual norm,
+    // individual indicator, raw indicator count, noise value, clipping
+    // factor, masked bytes, shared secret, key, or nonce.
+    kSecureAdaptiveClippingConfigurationAccepted,
+    kSecureAdaptiveClippingConfigurationRejected,
+    kSecureAdaptiveClippingIndicatorAccepted,
+    kSecureAdaptiveClippingIndicatorRejected,
+    kSecureAdaptiveClippingCompleteCohortReconstructed,
+    kSecureAdaptiveClippingNextStatePublished,
+    kSecureAdaptiveClippingRoundCompleted,
+    kSecureAdaptiveClippingRoundAborted,
 };
 
 [[nodiscard]] std::string to_string(SecuritySeverity value);
@@ -225,10 +241,12 @@ enum class SecurityEventType {
 // line to skip, not a crash.
 [[nodiscard]] bool security_severity_from_string(const std::string& value, SecuritySeverity& out);
 [[nodiscard]] bool security_outcome_from_string(const std::string& value, SecurityOutcome& out);
-[[nodiscard]] bool security_actor_type_from_string(const std::string& value, SecurityActorType& out);
+[[nodiscard]] bool security_actor_type_from_string(const std::string& value,
+                                                   SecurityActorType& out);
 [[nodiscard]] bool security_subject_type_from_string(const std::string& value,
-                                                      SecuritySubjectType& out);
-[[nodiscard]] bool security_event_type_from_string(const std::string& value, SecurityEventType& out);
+                                                     SecuritySubjectType& out);
+[[nodiscard]] bool security_event_type_from_string(const std::string& value,
+                                                   SecurityEventType& out);
 
 // Default severity for a given event type, per Work Package C's "Document
 // each event's default severity" requirement -- a producer may still
@@ -250,7 +268,7 @@ struct SecurityEvent {
     std::string event_id;  // assigned by the journal on emit(), not the caller
     SecurityEventType event_type = SecurityEventType::kSecurityPermissionDenied;
     SecuritySeverity severity = SecuritySeverity::kInfo;
-    std::string timestamp;  // ISO-8601 UTC, assigned by the journal if empty
+    std::string timestamp;         // ISO-8601 UTC, assigned by the journal if empty
     std::string source_service;    // e.g. "coordinator", "go-api", "python-worker"
     std::string source_component;  // e.g. "worker_registry", "signed_envelope_verifier"
     SecurityActorType actor_type = SecurityActorType::kSystem;

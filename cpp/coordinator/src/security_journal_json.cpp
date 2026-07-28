@@ -11,9 +11,8 @@ class Cursor {
     explicit Cursor(const std::string& text) : text_(text) {}
 
     void skip_ws() {
-        while (pos_ < text_.size() &&
-               (text_[pos_] == ' ' || text_[pos_] == '\t' || text_[pos_] == '\n' ||
-                text_[pos_] == '\r')) {
+        while (pos_ < text_.size() && (text_[pos_] == ' ' || text_[pos_] == '\t' ||
+                                       text_[pos_] == '\n' || text_[pos_] == '\r')) {
             ++pos_;
         }
     }
@@ -53,14 +52,30 @@ class Cursor {
             }
             const char escape = text_[pos_++];
             switch (escape) {
-                case '"': out += '"'; break;
-                case '\\': out += '\\'; break;
-                case '/': out += '/'; break;
-                case 'b': out += '\b'; break;
-                case 'f': out += '\f'; break;
-                case 'n': out += '\n'; break;
-                case 'r': out += '\r'; break;
-                case 't': out += '\t'; break;
+                case '"':
+                    out += '"';
+                    break;
+                case '\\':
+                    out += '\\';
+                    break;
+                case '/':
+                    out += '/';
+                    break;
+                case 'b':
+                    out += '\b';
+                    break;
+                case 'f':
+                    out += '\f';
+                    break;
+                case 'n':
+                    out += '\n';
+                    break;
+                case 'r':
+                    out += '\r';
+                    break;
+                case 't':
+                    out += '\t';
+                    break;
                 case 'u': {
                     if (pos_ + 4 > text_.size()) {
                         return std::nullopt;
@@ -69,10 +84,14 @@ class Cursor {
                     for (int k = 0; k < 4; ++k) {
                         const char hex = text_[pos_++];
                         int digit;
-                        if (hex >= '0' && hex <= '9') digit = hex - '0';
-                        else if (hex >= 'a' && hex <= 'f') digit = hex - 'a' + 10;
-                        else if (hex >= 'A' && hex <= 'F') digit = hex - 'A' + 10;
-                        else return std::nullopt;
+                        if (hex >= '0' && hex <= '9')
+                            digit = hex - '0';
+                        else if (hex >= 'a' && hex <= 'f')
+                            digit = hex - 'a' + 10;
+                        else if (hex >= 'A' && hex <= 'F')
+                            digit = hex - 'A' + 10;
+                        else
+                            return std::nullopt;
                         code_unit = (code_unit << 4) | static_cast<unsigned int>(digit);
                     }
                     // This module's own encoder only ever emits \u00XX for
@@ -244,7 +263,7 @@ int json_field_int(const JsonFlatObject& object, const std::string& key) {
 }
 
 std::map<std::string, std::string> json_field_map(const JsonFlatObject& object,
-                                                    const std::string& key) {
+                                                  const std::string& key) {
     const auto it = object.find(key);
     if (it == object.end() || !it->second.is_map) {
         return {};

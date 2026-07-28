@@ -35,14 +35,14 @@ constexpr int kSecurityAuditRecordSchemaVersion = 1;
 
 struct SecurityAuditRecord {
     int schema_version = kSecurityAuditRecordSchemaVersion;
-    std::string record_id;  // assigned by the journal on append(), not the caller
-    std::string timestamp;  // ISO-8601 UTC, assigned by the journal if empty
-    std::string safe_actor_id;   // e.g. the calling service's certificate identity
-    std::string actor_role;      // e.g. "go-api", "admin"
-    std::string action;          // e.g. "SuspendWorker", "RotateCoordinatorSigningKey"
-    std::string resource_type;   // e.g. "worker_identity", "coordinator_signing_key"
+    std::string record_id;      // assigned by the journal on append(), not the caller
+    std::string timestamp;      // ISO-8601 UTC, assigned by the journal if empty
+    std::string safe_actor_id;  // e.g. the calling service's certificate identity
+    std::string actor_role;     // e.g. "go-api", "admin"
+    std::string action;         // e.g. "SuspendWorker", "RotateCoordinatorSigningKey"
+    std::string resource_type;  // e.g. "worker_identity", "coordinator_signing_key"
     std::string resource_id;
-    std::string outcome;         // ACCEPTED / REJECTED / etc. -- reuses SecurityOutcome's strings
+    std::string outcome;  // ACCEPTED / REJECTED / etc. -- reuses SecurityOutcome's strings
     std::string reason;
     std::string request_id;
     std::string trace_id;
@@ -70,12 +70,12 @@ class SecurityAuditJournal {
     struct ListFilters {
         std::string after_record_id;  // cursor
         std::size_t limit = 100;
-        std::string actor_id;      // exact match if non-empty
-        std::string action;        // exact match if non-empty
-        std::string resource_type; // exact match if non-empty
-        std::string outcome;       // exact match if non-empty
-        double since_unix_s = 0.0;   // 0 == no lower bound
-        double until_unix_s = 0.0;   // 0 == no upper bound
+        std::string actor_id;       // exact match if non-empty
+        std::string action;         // exact match if non-empty
+        std::string resource_type;  // exact match if non-empty
+        std::string outcome;        // exact match if non-empty
+        double since_unix_s = 0.0;  // 0 == no lower bound
+        double until_unix_s = 0.0;  // 0 == no upper bound
     };
     struct ListResult {
         std::vector<SecurityAuditRecord> records;

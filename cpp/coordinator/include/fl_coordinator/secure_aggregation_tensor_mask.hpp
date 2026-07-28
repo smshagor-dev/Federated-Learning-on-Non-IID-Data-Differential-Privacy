@@ -52,10 +52,11 @@ struct PeerMaskStream {
 // canonically-ordered participant pair) -- constructing that string is
 // the caller's responsibility (see secure_aggregation_crypto.hpp's
 // derive_purpose_key doc comment for why).
-[[nodiscard]] std::vector<std::uint64_t> derive_tensor_mask_stream(const std::string& shared_secret,
-                                                                    const std::string& purpose_label,
-                                                                    const std::string& canonical_context,
-                                                                    std::size_t element_count);
+[[nodiscard]] std::vector<std::uint64_t> derive_tensor_mask_stream(
+    const std::string& shared_secret,
+    const std::string& purpose_label,
+    const std::string& canonical_context,
+    std::size_t element_count);
 
 // Work Package T, steps 7-9: combines an encoded tensor (one signed
 // ring value per element, as produced by encode_value) with every
@@ -64,8 +65,9 @@ struct PeerMaskStream {
 // mask_encoded_value (secure_aggregation_mask.hpp) applied
 // element-wise. Throws std::invalid_argument if any peer's
 // mask_values length does not match encoded_tensor's length.
-[[nodiscard]] std::vector<std::uint64_t> mask_tensor(const std::vector<std::int64_t>& encoded_tensor,
-                                                      const std::vector<PeerMaskStream>& peer_streams);
+[[nodiscard]] std::vector<std::uint64_t> mask_tensor(
+    const std::vector<std::int64_t>& encoded_tensor,
+    const std::vector<PeerMaskStream>& peer_streams);
 
 // Work Package Z's masked-sum step, generalized to a tensor: sums a
 // set of already-masked tensors (one per frozen cohort participant)
@@ -84,7 +86,8 @@ struct PeerMaskStream {
 // secure_aggregation_mask.hpp's existing mask_encoded_value (weight
 // masking needs no separate combining function -- it is already
 // exactly the scalar case that function handles).
-[[nodiscard]] std::uint64_t derive_weight_mask(const std::string& shared_secret, const std::string& purpose_label,
-                                                const std::string& canonical_context);
+[[nodiscard]] std::uint64_t derive_weight_mask(const std::string& shared_secret,
+                                               const std::string& purpose_label,
+                                               const std::string& canonical_context);
 
 }  // namespace fl::coordinator

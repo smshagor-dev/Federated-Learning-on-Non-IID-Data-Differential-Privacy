@@ -58,15 +58,16 @@ enum class PairwiseMaskSign {
 // a pairwise mask against itself, so equal identities are a caller
 // error, not a valid input this function silently resolves).
 [[nodiscard]] PairwiseMaskSign resolve_pairwise_mask_sign(const std::string& self_participant_id,
-                                                           const std::string& peer_participant_id);
+                                                          const std::string& peer_participant_id);
 
 // Applies one pairwise mask value to a ring accumulator: `accumulator
 // + mask` (kAdd) or `accumulator - mask` (kSubtract), both exactly
 // std::uint64_t wraparound arithmetic (defined-behavior modulo-2^64
 // addition/subtraction, matching secure_aggregation_encoding.hpp's
 // ring choice).
-[[nodiscard]] std::uint64_t apply_pairwise_mask(std::uint64_t accumulator, std::uint64_t mask,
-                                                 PairwiseMaskSign sign);
+[[nodiscard]] std::uint64_t apply_pairwise_mask(std::uint64_t accumulator,
+                                                std::uint64_t mask,
+                                                PairwiseMaskSign sign);
 
 // Combines a base encoded value with every pairwise mask this
 // participant computed against every other participant in the frozen
@@ -83,7 +84,7 @@ struct SignedMask {
 };
 
 [[nodiscard]] std::uint64_t mask_encoded_value(std::int64_t base_encoded_value,
-                                                const std::vector<SignedMask>& pairwise_masks);
+                                               const std::vector<SignedMask>& pairwise_masks);
 
 // Sums a set of already-masked ring values (e.g. every frozen
 // participant's masked contribution for one tensor element) into one

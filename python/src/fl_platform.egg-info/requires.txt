@@ -3,3 +3,9 @@
 pytest<9,>=8.2
 ruff<1,>=0.6
 mypy<2,>=1.11
+grpcio<2,>=1.76
+protobuf<8,>=7.35.1
+
+[security]
+pynacl<2,>=1.5
+cryptography<50,>=42

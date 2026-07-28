@@ -61,9 +61,8 @@ TransportConfig transport_config_from_environment() {
     } else if (mode_str == "mtls") {
         config.mode = TransportMode::kMtlsRequired;
     } else {
-        throw TransportConfigurationError(
-            "unrecognized FL_TRANSPORT_MODE '" + mode_str +
-            "' (expected insecure_development, tls, or mtls)");
+        throw TransportConfigurationError("unrecognized FL_TRANSPORT_MODE '" + mode_str +
+                                          "' (expected insecure_development, tls, or mtls)");
     }
 
     if (config.mode == TransportMode::kInsecureDevelopment) {
@@ -99,14 +98,15 @@ TransportConfig transport_config_from_environment() {
     return config;
 }
 
-std::shared_ptr<grpc::ServerCredentials> build_server_credentials(
-    const TransportConfig& config) {
+std::shared_ptr<grpc::ServerCredentials> build_server_credentials(const TransportConfig& config) {
     if (config.mode == TransportMode::kInsecureDevelopment) {
         return grpc::InsecureServerCredentials();
     }
 
-    const std::string cert_chain = read_file_or_throw(config.server_cert_path, "server certificate");
-    const std::string private_key = read_file_or_throw(config.server_key_path, "server private key");
+    const std::string cert_chain =
+        read_file_or_throw(config.server_cert_path, "server certificate");
+    const std::string private_key =
+        read_file_or_throw(config.server_key_path, "server private key");
 
     grpc::SslServerCredentialsOptions ssl_options(
         config.mode == TransportMode::kMtlsRequired
@@ -127,7 +127,8 @@ std::shared_ptr<grpc::ServerCredentials> build_server_credentials(
     if (!credentials) {
         throw TransportConfigurationError(
             "grpc::SslServerCredentials returned null -- malformed certificate/key "
-            "material for mode " + to_string(config.mode));
+            "material for mode " +
+            to_string(config.mode));
     }
     return credentials;
 }

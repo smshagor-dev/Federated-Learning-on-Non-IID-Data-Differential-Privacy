@@ -107,8 +107,11 @@ std::string sign_hex(EVP_PKEY* pkey, const std::string& message) {
     EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, pkey);
     unsigned char signature[64];
     std::size_t signature_len = sizeof(signature);
-    EVP_DigestSign(ctx, signature, &signature_len,
-                   reinterpret_cast<const unsigned char*>(message.data()), message.size());
+    EVP_DigestSign(ctx,
+                   signature,
+                   &signature_len,
+                   reinterpret_cast<const unsigned char*>(message.data()),
+                   message.size());
     EVP_MD_CTX_free(ctx);
     return hex_encode(signature, signature_len);
 }
@@ -162,8 +165,7 @@ int main() {
         tampered.set_cpu_count(999);
         const auto tampered_result =
             verify_capability_statement(tampered, /*now_unix_s=*/1785000100.0);
-        check(!tampered_result.valid,
-              "tampering with a signed field after signing is rejected");
+        check(!tampered_result.valid, "tampering with a signed field after signing is rejected");
         check(tampered_result.reason == "payload_hash does not match the payload",
               "tampering is specifically reported as a payload_hash mismatch");
 
@@ -181,8 +183,7 @@ int main() {
         wrong_key_statement.set_signing_public_key(wrong_key_keypair.public_key_hex);
         const auto wrong_key_result =
             verify_capability_statement(wrong_key_statement, /*now_unix_s=*/1785000100.0);
-        check(!wrong_key_result.valid,
-              "verifying against the wrong public key is rejected");
+        check(!wrong_key_result.valid, "verifying against the wrong public key is rejected");
         check(wrong_key_result.reason == "invalid signature",
               "wrong-key rejection is reported as an invalid signature");
 

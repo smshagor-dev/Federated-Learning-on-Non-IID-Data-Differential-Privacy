@@ -530,6 +530,63 @@ message MaskedClientUpdate {
   // sample_privacy_record_hash above is absent when sample-level DP is
   // not active.
   SignedUserLevelPrivacyAttestation user_level_attestation = 25;
+  // Secure Adaptive Clipping with Private Indicator Aggregation slice:
+  // present only when this contribution is bound to a secure adaptive-
+  // clipping round (task.secure_aggregation.secure_adaptive_clipping_active).
+  // Absent for fixed-clip secure user-level-DP/hybrid rounds, exactly
+  // like user_level_attestation above is absent for NONE/SAMPLE_LEVEL
+  // secure rounds. The indicator itself is a single ring value -- 0 or
+  // 1 cast directly, never fixed-point-scaled (see the semantics doc
+  // section 14) -- masked under a domain-separated purpose distinct
+  // from masked_tensors/masked_weight above.
+  uint64 masked_clipping_indicator = 26;
+  string masked_clipping_indicator_checksum = 27;
+  SignedAdaptiveClippingBinding adaptive_clipping_binding = 28;
+}
+
+// Secure Adaptive Clipping with Private Indicator Aggregation slice:
+// an independently signed binding that a worker received, verified,
+// and applied the exact signed adaptive-clipping configuration
+// (current bound, clip-state version, indicator definition) for one
+// secure round -- structurally identical in shape and trust meaning to
+// SignedUserLevelPrivacyAttestation above (evidence of configured
+// worker behavior, never cryptographic proof of correct indicator
+// computation -- see the Mandatory Privacy Trust Statement in
+// docs/secure-adaptive-clipping-semantics.md). Kept as a separate
+// message rather than merged into SignedUserLevelPrivacyAttestation so
+// the two pieces of evidence (clipping-configuration attestation,
+// adaptive-indicator binding) remain independently verifiable -- the
+// same separation SignedSamplePrivacyRecord and
+// SignedUserLevelPrivacyAttestation already keep. Deliberately
+// excludes the clear indicator value, the unclipped norm, the clipped
+// norm, the clipping factor, and whether clipping occurred for this
+// specific worker. Self-contained (signing_key_id/payload_hash/
+// signature are fields on this message itself) -- verified using the
+// SAME resolved signing key already verified for the outer
+// MaskedClientUpdate's envelope, no second independent key lookup.
+message SignedAdaptiveClippingBinding {
+  uint32 schema_version = 1;
+  string worker_id = 2;
+  string client_id = 3;
+  string run_id = 4;
+  uint64 round_id = 5;
+  string task_id = 6;
+  string session_id = 7;
+  string model_version = 8;
+  string adaptive_configuration_hash = 9;
+  uint64 clip_state_step_count = 10;
+  // The signed C_t this worker actually used -- public,
+  // coordinator-already-knows-it information (it issued this exact
+  // value in the signed task), evidence of configuration consistency,
+  // not a new information leak. Never the unclipped or clipped norm.
+  double current_clip_bound = 11;
+  SecureAggregationProvider provider = 12;
+  bool operation_completed = 13;
+  double issued_at = 14;
+  double expires_at = 15;
+  string signing_key_id = 16;
+  string payload_hash = 17;
+  string signature = 18;
 }
 
 // Secure User-Level Differential Privacy Runtime slice, Work Area I: an

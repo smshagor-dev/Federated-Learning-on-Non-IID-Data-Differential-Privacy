@@ -199,37 +199,46 @@ void run_run_manager_tests() {
                 .name = "weight", .shape = {1}, .dtype = fl::core::DType::kFloat32},
             {1.0}));
 
-        check(!run.apply_secure_aggregate_and_advance(1, round_1_aggregate, now),
-              "apply_secure_aggregate_and_advance: refuses to apply before the round has even been "
-              "dispatched (state is RUNNING, not WAITING_FOR_CLIENTS) -- returns false, not a crash");
+        check(
+            !run.apply_secure_aggregate_and_advance(1, round_1_aggregate, now),
+            "apply_secure_aggregate_and_advance: refuses to apply before the round has even been "
+            "dispatched (state is RUNNING, not WAITING_FOR_CLIENTS) -- returns false, not a crash");
 
         run.advance(now);  // kRunning -> kWaitingForClients (dispatches round 1)
         check(run.snapshot().state == fl::core::RunState::kWaitingForClients,
               "round dispatch moves to WAITING_FOR_CLIENTS before the secure aggregate arrives");
 
         check(!run.apply_secure_aggregate_and_advance(99, round_1_aggregate, now),
-              "apply_secure_aggregate_and_advance: a mismatched round_id is refused (false, not applied) -- a "
-              "stale SubmitMaskedClientUpdate for a round that is no longer current must never silently apply");
+              "apply_secure_aggregate_and_advance: a mismatched round_id is refused (false, not "
+              "applied) -- a "
+              "stale SubmitMaskedClientUpdate for a round that is no longer current must never "
+              "silently apply");
         check(run.snapshot().model_version == "v0",
-              "apply_secure_aggregate_and_advance: the mismatched-round_id call above did not touch the model");
+              "apply_secure_aggregate_and_advance: the mismatched-round_id call above did not "
+              "touch the model");
 
         check(run.apply_secure_aggregate_and_advance(1, round_1_aggregate, now),
-              "apply_secure_aggregate_and_advance: applies successfully for the real current round_id in "
+              "apply_secure_aggregate_and_advance: applies successfully for the real current "
+              "round_id in "
               "WAITING_FOR_CLIENTS state");
         check(run.snapshot().model_version == "v1",
               "apply_secure_aggregate_and_advance: model_version advances exactly like an ordinary "
-              "finalize_round() would, via the same TAIL logic (checkpoint, event emission, transition)");
+              "finalize_round() would, via the same TAIL logic (checkpoint, event emission, "
+              "transition)");
         check(run.snapshot().state == fl::core::RunState::kRunning,
-              "apply_secure_aggregate_and_advance: mid-run round returns to RUNNING (max_rounds not yet reached)");
+              "apply_secure_aggregate_and_advance: mid-run round returns to RUNNING (max_rounds "
+              "not yet reached)");
 
         // Work Area O/AC: an idempotent retry of the exact same round_id
         // after it has already been applied must be a safe no-op, not a
         // double-application of the aggregate.
         check(!run.apply_secure_aggregate_and_advance(1, round_1_aggregate, now),
-              "apply_secure_aggregate_and_advance: a retry for a round that already advanced (state is no "
+              "apply_secure_aggregate_and_advance: a retry for a round that already advanced "
+              "(state is no "
               "longer WAITING_FOR_CLIENTS) is refused -- idempotent, never double-applies");
         check(run.snapshot().model_version == "v1",
-              "apply_secure_aggregate_and_advance: the idempotent retry above left the model version unchanged");
+              "apply_secure_aggregate_and_advance: the idempotent retry above left the model "
+              "version unchanged");
 
         run.advance(now);  // kRunning -> kWaitingForClients (dispatches round 2)
         fl::core::AggregationResult round_2_aggregate;
@@ -239,8 +248,10 @@ void run_run_manager_tests() {
             {0.5}));
         check(run.apply_secure_aggregate_and_advance(2, round_2_aggregate, now),
               "apply_secure_aggregate_and_advance: applies the final round");
-        check(run.snapshot().model_version == "v2" && run.snapshot().state == fl::core::RunState::kCompleted,
-              "apply_secure_aggregate_and_advance: the last round transitions all the way to COMPLETED, exactly "
+        check(run.snapshot().model_version == "v2" &&
+                  run.snapshot().state == fl::core::RunState::kCompleted,
+              "apply_secure_aggregate_and_advance: the last round transitions all the way to "
+              "COMPLETED, exactly "
               "matching finalize_round()'s own terminal-round behavior");
     }
 

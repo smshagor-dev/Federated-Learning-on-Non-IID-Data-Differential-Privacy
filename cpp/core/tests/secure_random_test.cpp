@@ -146,8 +146,7 @@ void run_gaussian_distribution_tests() {
     for (int i = 0; i < kSamples; ++i) {
         samples.push_back(provider.gaussian_sample(kStdDev));
     }
-    const double mean =
-        std::accumulate(samples.begin(), samples.end(), 0.0) / samples.size();
+    const double mean = std::accumulate(samples.begin(), samples.end(), 0.0) / samples.size();
     double sum_squared_deviation = 0.0;
     for (const double value : samples) {
         sum_squared_deviation += (value - mean) * (value - mean);
@@ -337,8 +336,8 @@ void run_bounded_statistical_noise_smoke_test() {
               << "  provider=CryptoSecureNoiseProvider (OS-CSPRNG-backed, non-deterministic)\n"
               << "  draw_count=" << kSamples << "\n"
               << "  configured_std_dev=" << kStdDev << "\n"
-              << "  expected_mean=0.0 observed_mean=" << mean
-              << " tolerance=+/-" << kMeanTolerance << "\n"
+              << "  expected_mean=0.0 observed_mean=" << mean << " tolerance=+/-" << kMeanTolerance
+              << "\n"
               << "  expected_variance=" << expected_variance << " observed_variance=" << variance
               << " relative_tolerance=" << kVarianceTolerance << "\n"
 #if defined(NDEBUG)

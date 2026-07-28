@@ -158,8 +158,8 @@ class WorkerIdentityRegistry {
     // worker_id exists, since it is meant to be usable as an
     // unconditional emergency action.
     WorkerIdentityRecord revoke(const std::string& worker_id,
-                               const std::string& reason,
-                               double now_unix_s);
+                                const std::string& reason,
+                                double now_unix_s);
 
     // Marks every kPending/kActive/kSuspended record whose
     // expires_at_unix_s has passed as kExpired. Returns the worker_ids

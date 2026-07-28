@@ -5,6 +5,16 @@ implemented and tested as described in the other `docs/` files — this
 document exists specifically to prevent scaffold code from being read as
 production-ready.
 
+## Current Secure-Aggregation Recovery Status
+
+* **Threshold recovery remains blocked as of July 28, 2026.** The
+  repository's dependency evaluation concluded
+  `NO_ACCEPTABLE_DEPENDENCY_FOUND` — see
+  [threshold-recovery-dependency-decision.md](threshold-recovery-dependency-decision.md)
+  and [threshold-recovery-evaluation-report.md](threshold-recovery-evaluation-report.md).
+  Secure aggregation remains real and validated only for the complete-
+  cohort provider `SECAGG_NO_DROPOUT_EXPERIMENTAL`.
+
 ## Coordinator Runtime Phase (coordinator runtime / gRPC / Docker Compose)
 
 * **The C++ gRPC coordinator server (`fl_coordinator_grpc_server`) is real
@@ -93,6 +103,12 @@ production-ready.
 * **Go race tests do not run locally.** `go test -race` requires cgo and a
   C compiler; neither gcc nor clang is installed on this Windows machine.
   Added to CI (`ubuntu-latest`, which has gcc) instead of skipped outright.
+* **Research-registry live closure is improved but not fully exhausted in
+  one slice.** The public validate/create hash mismatch was fixed and the
+  registered `research-registry` runtime group passed on Tuesday, July
+  28, 2026, but not every broader closure gate has a fresh post-fix
+  report yet (notably response-loss replay and separately documented
+  writer-unavailable/corruption/restart follow-up evidence).
 * **`protoc` is not installed locally.** Contract-compatibility checking
   (`make proto-check`) does not need it and passes locally; actual code
   generation (`make proto`) only runs in CI where `protoc` is installed.

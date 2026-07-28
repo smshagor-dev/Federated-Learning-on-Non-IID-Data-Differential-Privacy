@@ -1,0 +1,215 @@
+{
+  "fixtures": [
+    {
+      "name": "validate",
+      "command_type": "ValidateExperimentSpecification",
+      "public_request": {
+        "specification": {
+          "schema_version": 1,
+          "experiment_id": "exp-fixture-validate",
+          "experiment_name": "Runtime <spec> Δ",
+          "research_question": "Will unicode α and <html> stay stable & safe?",
+          "dataset": {
+            "dataset_id": "cifar10",
+            "dataset_version": "1.0",
+            "dataset_checksum": "sha256:cifar10-demo",
+            "split_seed": 7,
+            "train_split_fraction": 0.8,
+            "validation_split_fraction": 0.1,
+            "test_split_fraction": 0.1,
+            "preprocessing_configuration": {
+              "html": "<safe>&\"quoted\"",
+              "unicode": "привет",
+              "empty_object": {}
+            }
+          },
+          "partition": {
+            "strategy": "dirichlet",
+            "num_clients": 5,
+            "seed": 11,
+            "minimum_client_samples": 4,
+            "alpha": 0.3,
+            "classes_per_client": null,
+            "quantity_skew_sigma": null,
+            "partition_manifest_hash": "manifest-hash-123"
+          },
+          "model": {
+            "model_id": "groupnorm_cnn",
+            "model_version": "v1",
+            "initialization_seed": 19
+          },
+          "algorithm": {
+            "algorithm_id": "fedavg",
+            "parameters": {}
+          },
+          "privacy": {
+            "privacy_mode": "user_level_dp",
+            "noise_multiplier": 1.0,
+            "target_delta": 1e-5,
+            "user_level_clip_norm": 1.5,
+            "sample_level_max_grad_norm": null,
+            "epsilon_budget": null,
+            "combined_epsilon": null,
+            "client_weighting": "uniform"
+          },
+          "secure_aggregation": {
+            "provider": "SECAGG_NO_DROPOUT_EXPERIMENTAL",
+            "dropout_recovery_requested": false
+          },
+          "adaptive_clipping": {
+            "mode": "disabled",
+            "initial_bound": null,
+            "min_bound": null,
+            "max_bound": null,
+            "target_quantile": null,
+            "learning_rate": null,
+            "indicator_noise_multiplier": null
+          },
+          "runtime": {
+            "max_rounds": 3,
+            "local_epochs": 1,
+            "batch_size": 8,
+            "learning_rate": 0.01,
+            "evaluation_frequency": 1,
+            "selected_clients_per_round": 3
+          },
+          "seeds": {
+            "seeds": [1, 2, 3],
+            "partition_seed": 11,
+            "worker_assignment_seed": 13,
+            "coordinator_seed": 17
+          },
+          "determinism_level": "STRICT_CPU",
+          "tags": [],
+          "creation_timestamp": "",
+          "specification_hash": ""
+        },
+        "client_specification_hash": "fixture-client-hash",
+        "correlation_id": "fixture-correlation"
+      },
+      "expected_payload_canonical_json": "{\"client_specification_hash\":\"fixture-client-hash\",\"specification\":{\"adaptive_clipping\":{\"indicator_noise_multiplier\":null,\"initial_bound\":null,\"learning_rate\":null,\"max_bound\":null,\"min_bound\":null,\"mode\":\"disabled\",\"target_quantile\":null},\"algorithm\":{\"algorithm_id\":\"fedavg\",\"parameters\":{}},\"creation_timestamp\":\"\",\"dataset\":{\"dataset_checksum\":\"sha256:cifar10-demo\",\"dataset_id\":\"cifar10\",\"dataset_version\":\"1.0\",\"preprocessing_configuration\":{\"empty_object\":{},\"html\":\"<safe>&\\\"quoted\\\"\",\"unicode\":\"\\u043f\\u0440\\u0438\\u0432\\u0435\\u0442\"},\"split_seed\":7,\"test_split_fraction\":0.1,\"train_split_fraction\":0.8,\"validation_split_fraction\":0.1},\"determinism_level\":\"STRICT_CPU\",\"experiment_id\":\"exp-fixture-validate\",\"experiment_name\":\"Runtime <spec> \\u0394\",\"model\":{\"initialization_seed\":19,\"model_id\":\"groupnorm_cnn\",\"model_version\":\"v1\"},\"partition\":{\"alpha\":0.3,\"classes_per_client\":null,\"minimum_client_samples\":4,\"num_clients\":5,\"partition_manifest_hash\":\"manifest-hash-123\",\"quantity_skew_sigma\":null,\"seed\":11,\"strategy\":\"dirichlet\"},\"privacy\":{\"client_weighting\":\"uniform\",\"combined_epsilon\":null,\"epsilon_budget\":null,\"noise_multiplier\":1,\"privacy_mode\":\"user_level_dp\",\"sample_level_max_grad_norm\":null,\"target_delta\":0.00001,\"user_level_clip_norm\":1.5},\"research_question\":\"Will unicode \\u03b1 and <html> stay stable & safe?\",\"runtime\":{\"batch_size\":8,\"evaluation_frequency\":1,\"learning_rate\":0.01,\"local_epochs\":1,\"max_rounds\":3,\"selected_clients_per_round\":3},\"schema_version\":1,\"secure_aggregation\":{\"dropout_recovery_requested\":false,\"provider\":\"SECAGG_NO_DROPOUT_EXPERIMENTAL\"},\"seeds\":{\"coordinator_seed\":17,\"partition_seed\":11,\"seeds\":[1,2,3],\"worker_assignment_seed\":13},\"specification_hash\":\"\",\"tags\":[]}}",
+      "expected_payload_sha256": "662e91b46e9a46065554a1a7f97ccc3f1a7e0ea3418b80fac8c1b2ecd964f9c4",
+      "expected_payload_byte_length": 1727
+    },
+    {
+      "name": "create",
+      "command_type": "CreateExperiment",
+      "public_request": {
+        "specification": {
+          "schema_version": 1,
+          "experiment_id": "exp-fixture-create",
+          "experiment_name": "Runtime <spec> Δ",
+          "research_question": "Will unicode α and <html> stay stable & safe?",
+          "dataset": {
+            "dataset_id": "cifar10",
+            "dataset_version": "1.0",
+            "dataset_checksum": "sha256:cifar10-demo",
+            "split_seed": 7,
+            "train_split_fraction": 0.8,
+            "validation_split_fraction": 0.1,
+            "test_split_fraction": 0.1,
+            "preprocessing_configuration": {
+              "html": "<safe>&\"quoted\"",
+              "unicode": "привет",
+              "empty_object": {}
+            }
+          },
+          "partition": {
+            "strategy": "dirichlet",
+            "num_clients": 5,
+            "seed": 11,
+            "minimum_client_samples": 4,
+            "alpha": 0.3,
+            "classes_per_client": null,
+            "quantity_skew_sigma": null,
+            "partition_manifest_hash": "manifest-hash-123"
+          },
+          "model": {
+            "model_id": "groupnorm_cnn",
+            "model_version": "v1",
+            "initialization_seed": 19
+          },
+          "algorithm": {
+            "algorithm_id": "fedavg",
+            "parameters": {}
+          },
+          "privacy": {
+            "privacy_mode": "user_level_dp",
+            "noise_multiplier": 1.0,
+            "target_delta": 1e-5,
+            "user_level_clip_norm": 1.5,
+            "sample_level_max_grad_norm": null,
+            "epsilon_budget": null,
+            "combined_epsilon": null,
+            "client_weighting": "uniform"
+          },
+          "secure_aggregation": {
+            "provider": "SECAGG_NO_DROPOUT_EXPERIMENTAL",
+            "dropout_recovery_requested": false
+          },
+          "adaptive_clipping": {
+            "mode": "disabled",
+            "initial_bound": null,
+            "min_bound": null,
+            "max_bound": null,
+            "target_quantile": null,
+            "learning_rate": null,
+            "indicator_noise_multiplier": null
+          },
+          "runtime": {
+            "max_rounds": 3,
+            "local_epochs": 1,
+            "batch_size": 8,
+            "learning_rate": 0.01,
+            "evaluation_frequency": 1,
+            "selected_clients_per_round": 3
+          },
+          "seeds": {
+            "seeds": [1, 2, 3],
+            "partition_seed": 11,
+            "worker_assignment_seed": 13,
+            "coordinator_seed": 17
+          },
+          "determinism_level": "STRICT_CPU",
+          "tags": [],
+          "creation_timestamp": "",
+          "specification_hash": ""
+        },
+        "client_specification_hash": "fixture-client-hash",
+        "idempotency_key": "fixture-idempotency-key",
+        "correlation_id": "fixture-correlation"
+      },
+      "expected_payload_canonical_json": "{\"client_specification_hash\":\"fixture-client-hash\",\"specification\":{\"adaptive_clipping\":{\"indicator_noise_multiplier\":null,\"initial_bound\":null,\"learning_rate\":null,\"max_bound\":null,\"min_bound\":null,\"mode\":\"disabled\",\"target_quantile\":null},\"algorithm\":{\"algorithm_id\":\"fedavg\",\"parameters\":{}},\"creation_timestamp\":\"\",\"dataset\":{\"dataset_checksum\":\"sha256:cifar10-demo\",\"dataset_id\":\"cifar10\",\"dataset_version\":\"1.0\",\"preprocessing_configuration\":{\"empty_object\":{},\"html\":\"<safe>&\\\"quoted\\\"\",\"unicode\":\"\\u043f\\u0440\\u0438\\u0432\\u0435\\u0442\"},\"split_seed\":7,\"test_split_fraction\":0.1,\"train_split_fraction\":0.8,\"validation_split_fraction\":0.1},\"determinism_level\":\"STRICT_CPU\",\"experiment_id\":\"exp-fixture-create\",\"experiment_name\":\"Runtime <spec> \\u0394\",\"model\":{\"initialization_seed\":19,\"model_id\":\"groupnorm_cnn\",\"model_version\":\"v1\"},\"partition\":{\"alpha\":0.3,\"classes_per_client\":null,\"minimum_client_samples\":4,\"num_clients\":5,\"partition_manifest_hash\":\"manifest-hash-123\",\"quantity_skew_sigma\":null,\"seed\":11,\"strategy\":\"dirichlet\"},\"privacy\":{\"client_weighting\":\"uniform\",\"combined_epsilon\":null,\"epsilon_budget\":null,\"noise_multiplier\":1,\"privacy_mode\":\"user_level_dp\",\"sample_level_max_grad_norm\":null,\"target_delta\":0.00001,\"user_level_clip_norm\":1.5},\"research_question\":\"Will unicode \\u03b1 and <html> stay stable & safe?\",\"runtime\":{\"batch_size\":8,\"evaluation_frequency\":1,\"learning_rate\":0.01,\"local_epochs\":1,\"max_rounds\":3,\"selected_clients_per_round\":3},\"schema_version\":1,\"secure_aggregation\":{\"dropout_recovery_requested\":false,\"provider\":\"SECAGG_NO_DROPOUT_EXPERIMENTAL\"},\"seeds\":{\"coordinator_seed\":17,\"partition_seed\":11,\"seeds\":[1,2,3],\"worker_assignment_seed\":13},\"specification_hash\":\"\",\"tags\":[]}}",
+      "expected_payload_sha256": "187ba8c72cac43d302c014000cd586b21e2120ea1cc59db9c7a1bfab035143f2",
+      "expected_payload_byte_length": 1725
+    },
+    {
+      "name": "start",
+      "command_type": "StartSyntheticExperiment",
+      "public_request": {
+        "execution_mode": "SYNTHETIC_TEST_EXECUTION",
+        "expected_experiment_version": 7,
+        "idempotency_key": "fixture-start-key",
+        "correlation_id": "fixture-start-correlation",
+        "experiment_id": "exp-fixture-start"
+      },
+      "expected_payload_canonical_json": "{\"execution_mode\":\"SYNTHETIC_TEST_EXECUTION\",\"experiment_id\":\"exp-fixture-start\"}",
+      "expected_payload_sha256": "928ca851cb754377de7522e054b1de3e1d59cddc99a5dd2334ebca251cbc28cc",
+      "expected_payload_byte_length": 81
+    },
+    {
+      "name": "cancel",
+      "command_type": "CancelExperiment",
+      "public_request": {
+        "reason": "cancel <html> & keep unicode α safe",
+        "expected_experiment_version": 9,
+        "idempotency_key": "fixture-cancel-key",
+        "correlation_id": "fixture-cancel-correlation",
+        "experiment_id": "exp-fixture-cancel"
+      },
+      "expected_payload_canonical_json": "{\"experiment_id\":\"exp-fixture-cancel\",\"reason\":\"cancel <html> & keep unicode \\u03b1 safe\"}",
+      "expected_payload_sha256": "ea8ef364d14c9ac347afc9952481a3e1f1db2b35fa10e846e0cfa2ddbb431cd5",
+      "expected_payload_byte_length": 90
+    }
+  ]
+}

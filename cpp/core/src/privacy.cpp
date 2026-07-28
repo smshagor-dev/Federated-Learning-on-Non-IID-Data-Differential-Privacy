@@ -148,7 +148,8 @@ TensorCollection clip_client_delta(const TensorCollection& delta,
     // scale_i = min(1, C_t / (norm_i + numerical_epsilon)) — the exact
     // required formula. Never returned or logged: only `clipped` leaves
     // this function.
-    const double scale_factor = std::min(1.0, config.clip_bound / (norm + config.numerical_epsilon));
+    const double scale_factor =
+        std::min(1.0, config.clip_bound / (norm + config.numerical_epsilon));
 
     TensorCollection clipped;
     for (const auto& [name, tensor] : delta.tensors()) {
@@ -203,7 +204,8 @@ TensorCollection add_central_gaussian_noise(const TensorCollection& aggregated_d
     return noised;
 }
 
-UserLevelAccountant::UserLevelAccountant(double noise_multiplier, double sample_rate,
+UserLevelAccountant::UserLevelAccountant(double noise_multiplier,
+                                         double sample_rate,
                                          double target_delta)
     : noise_multiplier_(noise_multiplier), sample_rate_(sample_rate), target_delta_(target_delta) {
     if (sample_rate_ < 0.0 || sample_rate_ > 1.0) {
@@ -222,9 +224,13 @@ UserLevelAccountant::UserLevelAccountant(double noise_multiplier, double sample_
     }
 }
 
-void UserLevelAccountant::step(std::uint64_t num_rounds) { steps_ += num_rounds; }
+void UserLevelAccountant::step(std::uint64_t num_rounds) {
+    steps_ += num_rounds;
+}
 
-double UserLevelAccountant::get_epsilon(double delta) const { return project_epsilon(0, delta); }
+double UserLevelAccountant::get_epsilon(double delta) const {
+    return project_epsilon(0, delta);
+}
 
 double UserLevelAccountant::project_epsilon(std::uint64_t additional_steps, double delta) const {
     const double target = delta > 0.0 ? delta : target_delta_;
@@ -265,7 +271,7 @@ AdaptiveClipController::AdaptiveClipController(AdaptiveClippingConfig config,
 }
 
 AdaptiveClipStepResult AdaptiveClipController::step(std::uint64_t over_threshold_count,
-                                                     std::uint64_t cohort_size) {
+                                                    std::uint64_t cohort_size) {
     if (cohort_size == 0) {
         throw std::invalid_argument("cohort_size must be positive");
     }

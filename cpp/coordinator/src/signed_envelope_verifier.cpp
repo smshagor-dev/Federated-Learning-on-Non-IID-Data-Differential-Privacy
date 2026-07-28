@@ -7,8 +7,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <sstream>
@@ -148,9 +148,12 @@ std::vector<std::uint8_t> hex_decode(const std::string& hex, bool& ok) {
     std::vector<std::uint8_t> bytes;
     bytes.reserve(hex.size() / 2);
     auto nibble = [&](char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F')
+            return c - 'A' + 10;
         return -1;
     };
     for (std::size_t i = 0; i < hex.size(); i += 2) {
@@ -188,19 +191,22 @@ std::string sha256_hex(const std::string& message) {
 }
 
 bool ed25519_verify(const std::vector<std::uint8_t>& public_key,
-                    const std::vector<std::uint8_t>& signature, const std::string& message) {
+                    const std::vector<std::uint8_t>& signature,
+                    const std::string& message) {
     if (public_key.size() != 32 || signature.size() != 64) {
         return false;
     }
-    EVP_PKEY* pkey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, public_key.data(),
-                                                 public_key.size());
+    EVP_PKEY* pkey = EVP_PKEY_new_raw_public_key(
+        EVP_PKEY_ED25519, nullptr, public_key.data(), public_key.size());
     if (pkey == nullptr) {
         return false;
     }
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     bool ok = false;
     if (EVP_DigestVerifyInit(ctx, nullptr, nullptr, nullptr, pkey) == 1) {
-        ok = EVP_DigestVerify(ctx, signature.data(), signature.size(),
+        ok = EVP_DigestVerify(ctx,
+                              signature.data(),
+                              signature.size(),
                               reinterpret_cast<const unsigned char*>(message.data()),
                               message.size()) == 1;
     }
@@ -256,14 +262,15 @@ std::string heartbeat_payload_hash_input(const fl::worker::v1::WorkerHeartbeatRe
 namespace {
 
 bool all_finite(std::initializer_list<double> values) {
-    return std::all_of(values.begin(), values.end(),
-                       [](double value) { return std::isfinite(value); });
+    return std::all_of(
+        values.begin(), values.end(), [](double value) { return std::isfinite(value); });
 }
 
 std::string json_shape_array(const google::protobuf::RepeatedField<std::uint64_t>& shape) {
     std::string out = "[";
     for (int i = 0; i < shape.size(); ++i) {
-        if (i > 0) out += ",";
+        if (i > 0)
+            out += ",";
         out += std::to_string(shape.Get(i));
     }
     out += "]";
@@ -295,16 +302,17 @@ std::string json_client_metric(const fl::worker::v1::ClientMetric& metric) {
 // not a JSON null -- so a genuinely-absent sub-message can never be
 // confused with one whose fields happen to canonicalize to the same
 // bytes as some other non-empty state.
-std::string json_personalization_metrics(const fl::coordinator::v1::SubmitClientResultRequest& request,
-                                         bool& all_finite_out) {
+std::string json_personalization_metrics(
+    const fl::coordinator::v1::SubmitClientResultRequest& request, bool& all_finite_out) {
     if (!request.has_personalization_metrics()) {
         return "{}";
     }
     const auto& metrics = request.personalization_metrics();
-    all_finite_out = all_finite_out &&
-                     all_finite({metrics.global_local_accuracy(), metrics.personalized_local_accuracy(),
-                                metrics.global_local_loss(), metrics.personalized_local_loss(),
-                                metrics.personalized_improvement()});
+    all_finite_out = all_finite_out && all_finite({metrics.global_local_accuracy(),
+                                                   metrics.personalized_local_accuracy(),
+                                                   metrics.global_local_loss(),
+                                                   metrics.personalized_local_loss(),
+                                                   metrics.personalized_improvement()});
     std::ostringstream out;
     out << "{";
     out << "\"algorithm\":" << json_escape_string(metrics.algorithm()) << ",";
@@ -312,7 +320,8 @@ std::string json_personalization_metrics(const fl::coordinator::v1::SubmitClient
     out << "\"global_local_loss\":" << json_double(metrics.global_local_loss()) << ",";
     out << "\"has_personalized_model\":" << (metrics.has_personalized_model() ? "true" : "false")
         << ",";
-    out << "\"personalized_improvement\":" << json_double(metrics.personalized_improvement()) << ",";
+    out << "\"personalized_improvement\":" << json_double(metrics.personalized_improvement())
+        << ",";
     out << "\"personalized_local_accuracy\":" << json_double(metrics.personalized_local_accuracy())
         << ",";
     out << "\"personalized_local_loss\":" << json_double(metrics.personalized_local_loss()) << ",";
@@ -341,10 +350,13 @@ std::string json_privacy_record(const fl::coordinator::v1::SubmitClientResultReq
         return "{}";
     }
     const auto& privacy = request.sample_level_privacy();
-    all_finite_out = all_finite_out && all_finite({privacy.epsilon(), privacy.delta(),
-                                                    privacy.noise_multiplier(), privacy.sample_rate()});
+    all_finite_out = all_finite_out && all_finite({privacy.epsilon(),
+                                                   privacy.delta(),
+                                                   privacy.noise_multiplier(),
+                                                   privacy.sample_rate()});
     const std::string privacy_record_payload_hash =
-        request.has_privacy_record_envelope() ? request.privacy_record_envelope().payload_hash() : "";
+        request.has_privacy_record_envelope() ? request.privacy_record_envelope().payload_hash()
+                                              : "";
     std::ostringstream out;
     out << "{";
     out << "\"accountant\":" << static_cast<int>(privacy.accountant()) << ",";
@@ -353,7 +365,8 @@ std::string json_privacy_record(const fl::coordinator::v1::SubmitClientResultReq
     out << "\"entry_id\":" << json_escape_string(privacy.entry_id()) << ",";
     out << "\"epsilon\":" << json_double(privacy.epsilon()) << ",";
     out << "\"noise_multiplier\":" << json_double(privacy.noise_multiplier()) << ",";
-    out << "\"privacy_record_payload_hash\":" << json_escape_string(privacy_record_payload_hash) << ",";
+    out << "\"privacy_record_payload_hash\":" << json_escape_string(privacy_record_payload_hash)
+        << ",";
     out << "\"round_id\":" << privacy.round_id() << ",";
     out << "\"run_id\":" << json_escape_string(privacy.run_id()) << ",";
     out << "\"sample_rate\":" << json_double(privacy.sample_rate()) << ",";
@@ -384,8 +397,8 @@ bool tensor_checksum_matches(const fl::worker::v1::TensorManifest& tensor) {
     packed.resize(static_cast<std::size_t>(tensor.values_size()) * sizeof(double));
     for (int i = 0; i < tensor.values_size(); ++i) {
         const double value = tensor.values(i);
-        std::memcpy(packed.data() + static_cast<std::size_t>(i) * sizeof(double), &value,
-                   sizeof(double));
+        std::memcpy(
+            packed.data() + static_cast<std::size_t>(i) * sizeof(double), &value, sizeof(double));
     }
     return sha256_hex(packed) == tensor.checksum();
 }
@@ -405,9 +418,9 @@ ClientResultPayloadHashResult client_result_payload_hash_input(
             return {false, "", "a tensor descriptor with an empty name cannot be hashed"};
         }
         if (!tensor_checksum_matches(tensor)) {
-            return {false, "",
-                   "tensor '" + tensor.name() +
-                       "' checksum does not match its declared values"};
+            return {false,
+                    "",
+                    "tensor '" + tensor.name() + "' checksum does not match its declared values"};
         }
     }
     const std::string personalization_json = json_personalization_metrics(request, finite);
@@ -426,16 +439,18 @@ ClientResultPayloadHashResult client_result_payload_hash_input(
     for (const auto& tensor : result.tensor_manifest()) {
         tensors.push_back(&tensor);
     }
-    std::sort(tensors.begin(), tensors.end(),
-             [](const auto* a, const auto* b) { return a->name() < b->name(); });
+    std::sort(tensors.begin(), tensors.end(), [](const auto* a, const auto* b) {
+        return a->name() < b->name();
+    });
 
     std::vector<const fl::worker::v1::ClientMetric*> metrics;
     metrics.reserve(static_cast<std::size_t>(result.metrics_size()));
     for (const auto& metric : result.metrics()) {
         metrics.push_back(&metric);
     }
-    std::sort(metrics.begin(), metrics.end(),
-             [](const auto* a, const auto* b) { return a->name() < b->name(); });
+    std::sort(metrics.begin(), metrics.end(), [](const auto* a, const auto* b) {
+        return a->name() < b->name();
+    });
 
     std::ostringstream out;
     out << "{";
@@ -454,13 +469,15 @@ ClientResultPayloadHashResult client_result_payload_hash_input(
     out << "\"task_id\":" << json_escape_string(request.task_id()) << ",";
     out << "\"tensor_manifest\":[";
     for (std::size_t i = 0; i < tensors.size(); ++i) {
-        if (i > 0) out << ",";
+        if (i > 0)
+            out << ",";
         out << json_tensor_descriptor(*tensors[i]);
     }
     out << "],";
     out << "\"training_metrics\":[";
     for (std::size_t i = 0; i < metrics.size(); ++i) {
-        if (i > 0) out << ",";
+        if (i > 0)
+            out << ",";
         out << json_client_metric(*metrics[i]);
     }
     out << "],";
@@ -472,20 +489,27 @@ ClientResultPayloadHashResult client_result_payload_hash_input(
 
 PrivacyRecordPayloadHashResult sample_privacy_record_payload_hash_input(
     const fl::privacy::v1::SignedSamplePrivacyRecord& record) {
-    const bool finite = all_finite({record.epsilon(), record.delta(), record.noise_multiplier(),
-                                    record.max_grad_norm(), record.sample_rate(),
-                                    record.budget_target_epsilon(), record.budget_target_delta()});
+    const bool finite = all_finite({record.epsilon(),
+                                    record.delta(),
+                                    record.noise_multiplier(),
+                                    record.max_grad_norm(),
+                                    record.sample_rate(),
+                                    record.budget_target_epsilon(),
+                                    record.budget_target_delta()});
     if (!finite) {
         return {false, "", "a NaN or infinite value cannot be hashed (privacy record)"};
     }
     if (record.epsilon() < 0.0 || record.delta() < 0.0 || record.noise_multiplier() < 0.0 ||
         record.max_grad_norm() < 0.0 || record.sample_rate() < 0.0) {
-        return {false, "", "epsilon/delta/noise_multiplier/max_grad_norm/sample_rate cannot be negative"};
+        return {false,
+                "",
+                "epsilon/delta/noise_multiplier/max_grad_norm/sample_rate cannot be negative"};
     }
 
     std::ostringstream out;
     out << "{";
-    out << "\"accountant_state_hash\":" << json_escape_string(record.accountant_state_hash()) << ",";
+    out << "\"accountant_state_hash\":" << json_escape_string(record.accountant_state_hash())
+        << ",";
     out << "\"accountant_step\":" << record.accountant_step() << ",";
     out << "\"accountant_type\":" << static_cast<int>(record.accountant_type()) << ",";
     out << "\"algorithm\":" << json_escape_string(record.algorithm()) << ",";
@@ -507,27 +531,32 @@ PrivacyRecordPayloadHashResult sample_privacy_record_payload_hash_input(
     out << "\"run_id\":" << json_escape_string(record.run_id()) << ",";
     out << "\"sample_rate\":" << json_double(record.sample_rate()) << ",";
     out << "\"schema_version\":" << record.schema_version() << ",";
-    out << "\"secure_random_available\":" << (record.secure_random_available() ? "true" : "false") << ",";
-    out << "\"secure_random_provider\":" << json_escape_string(record.secure_random_provider()) << ",";
-    out << "\"secure_random_required\":" << (record.secure_random_required() ? "true" : "false") << ",";
+    out << "\"secure_random_available\":" << (record.secure_random_available() ? "true" : "false")
+        << ",";
+    out << "\"secure_random_provider\":" << json_escape_string(record.secure_random_provider())
+        << ",";
+    out << "\"secure_random_required\":" << (record.secure_random_required() ? "true" : "false")
+        << ",";
     out << "\"task_id\":" << json_escape_string(record.task_id()) << ",";
     out << "\"worker_id\":" << json_escape_string(record.worker_id());
     out << "}";
     return {true, out.str(), ""};
 }
 
-EnvelopeVerificationResult verify_signed_envelope(const fl::worker::v1::SignedWorkerEnvelope& envelope,
-                                                  int expected_message_type,
-                                                  const std::string& payload_hash_input,
-                                                  const std::string& signing_public_key_hex,
-                                                  double now_unix_s,
-                                                  double future_issued_tolerance_seconds) {
+EnvelopeVerificationResult verify_signed_envelope(
+    const fl::worker::v1::SignedWorkerEnvelope& envelope,
+    int expected_message_type,
+    const std::string& payload_hash_input,
+    const std::string& signing_public_key_hex,
+    double now_unix_s,
+    double future_issued_tolerance_seconds) {
     if (envelope.schema_version() != kSignedWorkerEnvelopeSchemaVersion) {
         return {false, "unsupported envelope schema_version", "unsupported_schema_version"};
     }
     if (static_cast<int>(envelope.message_type()) != expected_message_type) {
-        return {false, "envelope message_type does not match the RPC it was sent with",
-               "wrong_message_type"};
+        return {false,
+                "envelope message_type does not match the RPC it was sent with",
+                "wrong_message_type"};
     }
 
     const auto recomputed_payload_hash = sha256_hex(payload_hash_input);
@@ -591,10 +620,13 @@ RotationPayloadHashResult rotation_payload_hash_input(
     return {true, out.str(), ""};
 }
 
-SecureAggregationKeyAdvertisementPayloadHashResult secure_aggregation_key_advertisement_payload_hash_input(
+SecureAggregationKeyAdvertisementPayloadHashResult
+secure_aggregation_key_advertisement_payload_hash_input(
     const fl::worker::v1::SecureAggregationKeyAdvertisement& advertisement) {
     if (!std::isfinite(advertisement.issued_at()) || !std::isfinite(advertisement.expires_at())) {
-        return {false, "", "a NaN or infinite value cannot be hashed (secure aggregation key advertisement)"};
+        return {false,
+                "",
+                "a NaN or infinite value cannot be hashed (secure aggregation key advertisement)"};
     }
     std::ostringstream out;
     out << "{";
@@ -604,7 +636,8 @@ SecureAggregationKeyAdvertisementPayloadHashResult secure_aggregation_key_advert
     out << "\"expires_at\":" << json_double(advertisement.expires_at()) << ",";
     out << "\"issued_at\":" << json_double(advertisement.issued_at()) << ",";
     out << "\"model_version\":" << json_escape_string(advertisement.model_version()) << ",";
-    out << "\"public_key_fingerprint\":" << json_escape_string(advertisement.public_key_fingerprint()) << ",";
+    out << "\"public_key_fingerprint\":"
+        << json_escape_string(advertisement.public_key_fingerprint()) << ",";
     out << "\"round_id\":" << advertisement.round_id() << ",";
     out << "\"run_id\":" << json_escape_string(advertisement.run_id()) << ",";
     out << "\"schema_version\":" << advertisement.schema_version() << ",";
@@ -618,7 +651,8 @@ MaskedClientUpdatePayloadHashResult masked_client_update_payload_hash_input(
     const fl::worker::v1::MaskedClientUpdate& update) {
     const auto& stats = update.encoding_statistics();
     if (!std::isfinite(update.issued_at()) || !std::isfinite(update.expires_at()) ||
-        !std::isfinite(stats.max_quantization_error()) || !std::isfinite(stats.mean_quantization_error())) {
+        !std::isfinite(stats.max_quantization_error()) ||
+        !std::isfinite(stats.mean_quantization_error())) {
         return {false, "", "a NaN or infinite value cannot be hashed (masked client update)"};
     }
     // Canonical tensor ordering: sorted by tensor_name, not the wire's
@@ -628,25 +662,39 @@ MaskedClientUpdatePayloadHashResult masked_client_update_payload_hash_input(
     for (const auto& tensor : update.masked_tensors()) {
         sorted_tensors.push_back(&tensor);
     }
-    std::sort(sorted_tensors.begin(), sorted_tensors.end(),
-              [](const auto* a, const auto* b) { return a->tensor_name() < b->tensor_name(); });
+    std::sort(sorted_tensors.begin(), sorted_tensors.end(), [](const auto* a, const auto* b) {
+        return a->tensor_name() < b->tensor_name();
+    });
 
     std::ostringstream out;
     out << "{";
     out << "\"attempt\":" << update.attempt() << ",";
     out << "\"client_id\":" << json_escape_string(update.client_id()) << ",";
     out << "\"cohort_commitment\":" << json_escape_string(update.cohort_commitment()) << ",";
-    out << "\"cryptographic_profile_hash\":" << json_escape_string(update.cryptographic_profile_hash()) << ",";
+    out << "\"cryptographic_profile_hash\":"
+        << json_escape_string(update.cryptographic_profile_hash()) << ",";
     out << "\"encoding_statistics\":{";
     out << "\"max_quantization_error\":" << json_double(stats.max_quantization_error()) << ",";
     out << "\"mean_quantization_error\":" << json_double(stats.mean_quantization_error()) << ",";
     out << "\"total_elements\":" << stats.total_elements();
     out << "},";
     out << "\"expires_at\":" << json_double(update.expires_at()) << ",";
-    out << "\"fixed_point_profile_hash\":" << json_escape_string(update.fixed_point_profile_hash()) << ",";
-    out << "\"frozen_roster_payload_hash\":" << json_escape_string(update.frozen_roster_payload_hash()) << ",";
+    out << "\"fixed_point_profile_hash\":" << json_escape_string(update.fixed_point_profile_hash())
+        << ",";
+    out << "\"frozen_roster_payload_hash\":"
+        << json_escape_string(update.frozen_roster_payload_hash()) << ",";
     out << "\"issued_at\":" << json_double(update.issued_at()) << ",";
     out << "\"lease_id\":" << json_escape_string(update.lease_id()) << ",";
+    // Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: masked_clipping_indicator/_checksum are covered by this
+    // outer hash exactly like masked_weight/masked_weight_checksum
+    // above -- tampering is caught by the outer envelope signature.
+    // adaptive_clipping_binding is deliberately NOT included here,
+    // exactly like user_level_attestation is not: it is a separate,
+    // self-contained signed structure with its own signature.
+    out << "\"masked_clipping_indicator\":" << update.masked_clipping_indicator() << ",";
+    out << "\"masked_clipping_indicator_checksum\":"
+        << json_escape_string(update.masked_clipping_indicator_checksum()) << ",";
     out << "\"masked_tensors\":[";
     for (std::size_t i = 0; i < sorted_tensors.size(); ++i) {
         const auto* tensor = sorted_tensors[i];
@@ -664,13 +712,15 @@ MaskedClientUpdatePayloadHashResult masked_client_update_payload_hash_input(
     }
     out << "],";
     out << "\"masked_weight\":" << update.masked_weight() << ",";
-    out << "\"masked_weight_checksum\":" << json_escape_string(update.masked_weight_checksum()) << ",";
+    out << "\"masked_weight_checksum\":" << json_escape_string(update.masked_weight_checksum())
+        << ",";
     out << "\"model_version\":" << json_escape_string(update.model_version()) << ",";
     out << "\"protocol_version\":" << update.protocol_version() << ",";
     out << "\"provider\":" << static_cast<int>(update.provider()) << ",";
     out << "\"round_id\":" << update.round_id() << ",";
     out << "\"run_id\":" << json_escape_string(update.run_id()) << ",";
-    out << "\"sample_privacy_record_hash\":" << json_escape_string(update.sample_privacy_record_hash()) << ",";
+    out << "\"sample_privacy_record_hash\":"
+        << json_escape_string(update.sample_privacy_record_hash()) << ",";
     out << "\"schema_version\":" << update.schema_version() << ",";
     out << "\"session_id\":" << json_escape_string(update.session_id()) << ",";
     out << "\"task_id\":" << json_escape_string(update.task_id()) << ",";
@@ -683,8 +733,10 @@ MaskedClientUpdatePayloadHashResult masked_client_update_payload_hash_input(
 UserLevelPrivacyAttestationPayloadHashResult user_level_privacy_attestation_payload_hash_input(
     const fl::worker::v1::SignedUserLevelPrivacyAttestation& attestation) {
     if (!std::isfinite(attestation.issued_at()) || !std::isfinite(attestation.expires_at()) ||
-        !std::isfinite(attestation.clip_norm()) || !std::isfinite(attestation.effective_sensitivity())) {
-        return {false, "", "a NaN or infinite value cannot be hashed (user-level privacy attestation)"};
+        !std::isfinite(attestation.clip_norm()) ||
+        !std::isfinite(attestation.effective_sensitivity())) {
+        return {
+            false, "", "a NaN or infinite value cannot be hashed (user-level privacy attestation)"};
     }
     std::ostringstream out;
     out << "{";
@@ -693,13 +745,15 @@ UserLevelPrivacyAttestationPayloadHashResult user_level_privacy_attestation_payl
     out << "\"clipping_strategy\":" << json_escape_string(attestation.clipping_strategy()) << ",";
     out << "\"effective_sensitivity\":" << json_double(attestation.effective_sensitivity()) << ",";
     out << "\"expires_at\":" << json_double(attestation.expires_at()) << ",";
-    out << "\"fixed_point_profile_hash\":" << json_escape_string(attestation.fixed_point_profile_hash()) << ",";
+    out << "\"fixed_point_profile_hash\":"
+        << json_escape_string(attestation.fixed_point_profile_hash()) << ",";
     out << "\"fixed_weight\":" << attestation.fixed_weight() << ",";
     out << "\"issued_at\":" << json_double(attestation.issued_at()) << ",";
     out << "\"model_version\":" << json_escape_string(attestation.model_version()) << ",";
-    out << "\"operation_completed\":" << (attestation.operation_completed() ? "true" : "false") << ",";
-    out << "\"privacy_configuration_hash\":" << json_escape_string(attestation.privacy_configuration_hash())
+    out << "\"operation_completed\":" << (attestation.operation_completed() ? "true" : "false")
         << ",";
+    out << "\"privacy_configuration_hash\":"
+        << json_escape_string(attestation.privacy_configuration_hash()) << ",";
     out << "\"privacy_mode\":" << static_cast<int>(attestation.privacy_mode()) << ",";
     out << "\"provider\":" << static_cast<int>(attestation.provider()) << ",";
     out << "\"round_id\":" << attestation.round_id() << ",";
@@ -707,15 +761,18 @@ UserLevelPrivacyAttestationPayloadHashResult user_level_privacy_attestation_payl
     out << "\"schema_version\":" << attestation.schema_version() << ",";
     out << "\"session_id\":" << json_escape_string(attestation.session_id()) << ",";
     out << "\"task_id\":" << json_escape_string(attestation.task_id()) << ",";
-    out << "\"tensor_manifest_hash\":" << json_escape_string(attestation.tensor_manifest_hash()) << ",";
+    out << "\"tensor_manifest_hash\":" << json_escape_string(attestation.tensor_manifest_hash())
+        << ",";
     out << "\"worker_id\":" << json_escape_string(attestation.worker_id());
     out << "}";
     return {true, out.str(), ""};
 }
 
 namespace {
-constexpr char kUserLevelAttestationSigningPrefix[] = "FL_PLATFORM_SECURE_USER_LEVEL_DP_ATTESTATION_V1\x00";
-constexpr std::size_t kUserLevelAttestationSigningPrefixLength = sizeof(kUserLevelAttestationSigningPrefix) - 1;
+constexpr char kUserLevelAttestationSigningPrefix[] =
+    "FL_PLATFORM_SECURE_USER_LEVEL_DP_ATTESTATION_V1\x00";
+constexpr std::size_t kUserLevelAttestationSigningPrefixLength =
+    sizeof(kUserLevelAttestationSigningPrefix) - 1;
 }  // namespace
 
 std::string user_level_privacy_attestation_signing_bytes(
@@ -728,14 +785,16 @@ std::string user_level_privacy_attestation_signing_bytes(
     out << "\"clipping_strategy\":" << json_escape_string(attestation.clipping_strategy()) << ",";
     out << "\"effective_sensitivity\":" << json_double(attestation.effective_sensitivity()) << ",";
     out << "\"expires_at\":" << json_double(attestation.expires_at()) << ",";
-    out << "\"fixed_point_profile_hash\":" << json_escape_string(attestation.fixed_point_profile_hash()) << ",";
+    out << "\"fixed_point_profile_hash\":"
+        << json_escape_string(attestation.fixed_point_profile_hash()) << ",";
     out << "\"fixed_weight\":" << attestation.fixed_weight() << ",";
     out << "\"issued_at\":" << json_double(attestation.issued_at()) << ",";
     out << "\"model_version\":" << json_escape_string(attestation.model_version()) << ",";
-    out << "\"operation_completed\":" << (attestation.operation_completed() ? "true" : "false") << ",";
-    out << "\"payload_hash\":" << json_escape_string(attestation.payload_hash()) << ",";
-    out << "\"privacy_configuration_hash\":" << json_escape_string(attestation.privacy_configuration_hash())
+    out << "\"operation_completed\":" << (attestation.operation_completed() ? "true" : "false")
         << ",";
+    out << "\"payload_hash\":" << json_escape_string(attestation.payload_hash()) << ",";
+    out << "\"privacy_configuration_hash\":"
+        << json_escape_string(attestation.privacy_configuration_hash()) << ",";
     out << "\"privacy_mode\":" << static_cast<int>(attestation.privacy_mode()) << ",";
     out << "\"provider\":" << static_cast<int>(attestation.provider()) << ",";
     out << "\"round_id\":" << attestation.round_id() << ",";
@@ -744,7 +803,8 @@ std::string user_level_privacy_attestation_signing_bytes(
     out << "\"session_id\":" << json_escape_string(attestation.session_id()) << ",";
     out << "\"signing_key_id\":" << json_escape_string(attestation.signing_key_id()) << ",";
     out << "\"task_id\":" << json_escape_string(attestation.task_id()) << ",";
-    out << "\"tensor_manifest_hash\":" << json_escape_string(attestation.tensor_manifest_hash()) << ",";
+    out << "\"tensor_manifest_hash\":" << json_escape_string(attestation.tensor_manifest_hash())
+        << ",";
     out << "\"worker_id\":" << json_escape_string(attestation.worker_id());
     out << "}";
     bytes += out.str();
@@ -753,14 +813,17 @@ std::string user_level_privacy_attestation_signing_bytes(
 
 EnvelopeVerificationResult verify_user_level_privacy_attestation(
     const fl::worker::v1::SignedUserLevelPrivacyAttestation& attestation,
-    const std::string& signing_public_key_hex, double now_unix_s) {
+    const std::string& signing_public_key_hex,
+    double now_unix_s) {
     const auto hash_result = user_level_privacy_attestation_payload_hash_input(attestation);
     if (!hash_result.ok) {
         return {false, hash_result.reason, "payload_hash_computation_failed"};
     }
     const auto recomputed_payload_hash = sha256_hex(hash_result.hash_input);
     if (recomputed_payload_hash != attestation.payload_hash()) {
-        return {false, "payload_hash does not match the attestation's own fields", "payload_hash_mismatch"};
+        return {false,
+                "payload_hash does not match the attestation's own fields",
+                "payload_hash_mismatch"};
     }
     bool key_ok = false;
     const auto public_key_bytes = hex_decode(signing_public_key_hex, key_ok);
@@ -769,12 +832,111 @@ EnvelopeVerificationResult verify_user_level_privacy_attestation(
     if (!key_ok || !signature_ok) {
         return {false, "signing key or signature is not valid hex", "invalid_signature"};
     }
-    if (!ed25519_verify(public_key_bytes, signature_bytes,
+    if (!ed25519_verify(public_key_bytes,
+                        signature_bytes,
                         user_level_privacy_attestation_signing_bytes(attestation))) {
         return {false, "invalid signature", "invalid_signature"};
     }
     if (attestation.expires_at() <= 0.0 || now_unix_s >= attestation.expires_at()) {
         return {false, "attestation has expired", "expired"};
+    }
+    return {true, "ok", ""};
+}
+
+// Secure Adaptive Clipping with Private Indicator Aggregation slice.
+// Identical structure to the three UserLevelPrivacyAttestation
+// functions above, for SignedAdaptiveClippingBinding instead -- see
+// docs/secure-adaptive-clipping-semantics.md section 15.
+AdaptiveClippingBindingPayloadHashResult adaptive_clipping_binding_payload_hash_input(
+    const fl::worker::v1::SignedAdaptiveClippingBinding& binding) {
+    if (!std::isfinite(binding.issued_at()) || !std::isfinite(binding.expires_at()) ||
+        !std::isfinite(binding.current_clip_bound())) {
+        return {false, "", "a NaN or infinite value cannot be hashed (adaptive clipping binding)"};
+    }
+    std::ostringstream out;
+    out << "{";
+    out << "\"adaptive_configuration_hash\":"
+        << json_escape_string(binding.adaptive_configuration_hash()) << ",";
+    out << "\"client_id\":" << json_escape_string(binding.client_id()) << ",";
+    out << "\"clip_state_step_count\":" << binding.clip_state_step_count() << ",";
+    out << "\"current_clip_bound\":" << json_double(binding.current_clip_bound()) << ",";
+    out << "\"expires_at\":" << json_double(binding.expires_at()) << ",";
+    out << "\"issued_at\":" << json_double(binding.issued_at()) << ",";
+    out << "\"model_version\":" << json_escape_string(binding.model_version()) << ",";
+    out << "\"operation_completed\":" << (binding.operation_completed() ? "true" : "false") << ",";
+    out << "\"provider\":" << static_cast<int>(binding.provider()) << ",";
+    out << "\"round_id\":" << binding.round_id() << ",";
+    out << "\"run_id\":" << json_escape_string(binding.run_id()) << ",";
+    out << "\"schema_version\":" << binding.schema_version() << ",";
+    out << "\"session_id\":" << json_escape_string(binding.session_id()) << ",";
+    out << "\"task_id\":" << json_escape_string(binding.task_id()) << ",";
+    out << "\"worker_id\":" << json_escape_string(binding.worker_id());
+    out << "}";
+    return {true, out.str(), ""};
+}
+
+namespace {
+constexpr char kAdaptiveClippingBindingSigningPrefix[] =
+    "FL_PLATFORM_SECURE_ADAPTIVE_CLIPPING_ATTESTATION_V1\x00";
+constexpr std::size_t kAdaptiveClippingBindingSigningPrefixLength =
+    sizeof(kAdaptiveClippingBindingSigningPrefix) - 1;
+}  // namespace
+
+std::string adaptive_clipping_binding_signing_bytes(
+    const fl::worker::v1::SignedAdaptiveClippingBinding& binding) {
+    std::string bytes(kAdaptiveClippingBindingSigningPrefix,
+                      kAdaptiveClippingBindingSigningPrefixLength);
+    std::ostringstream out;
+    out << "{";
+    out << "\"adaptive_configuration_hash\":"
+        << json_escape_string(binding.adaptive_configuration_hash()) << ",";
+    out << "\"client_id\":" << json_escape_string(binding.client_id()) << ",";
+    out << "\"clip_state_step_count\":" << binding.clip_state_step_count() << ",";
+    out << "\"current_clip_bound\":" << json_double(binding.current_clip_bound()) << ",";
+    out << "\"expires_at\":" << json_double(binding.expires_at()) << ",";
+    out << "\"issued_at\":" << json_double(binding.issued_at()) << ",";
+    out << "\"model_version\":" << json_escape_string(binding.model_version()) << ",";
+    out << "\"operation_completed\":" << (binding.operation_completed() ? "true" : "false") << ",";
+    out << "\"payload_hash\":" << json_escape_string(binding.payload_hash()) << ",";
+    out << "\"provider\":" << static_cast<int>(binding.provider()) << ",";
+    out << "\"round_id\":" << binding.round_id() << ",";
+    out << "\"run_id\":" << json_escape_string(binding.run_id()) << ",";
+    out << "\"schema_version\":" << binding.schema_version() << ",";
+    out << "\"session_id\":" << json_escape_string(binding.session_id()) << ",";
+    out << "\"signing_key_id\":" << json_escape_string(binding.signing_key_id()) << ",";
+    out << "\"task_id\":" << json_escape_string(binding.task_id()) << ",";
+    out << "\"worker_id\":" << json_escape_string(binding.worker_id());
+    out << "}";
+    bytes += out.str();
+    return bytes;
+}
+
+EnvelopeVerificationResult verify_adaptive_clipping_binding(
+    const fl::worker::v1::SignedAdaptiveClippingBinding& binding,
+    const std::string& signing_public_key_hex,
+    double now_unix_s) {
+    const auto hash_result = adaptive_clipping_binding_payload_hash_input(binding);
+    if (!hash_result.ok) {
+        return {false, hash_result.reason, "payload_hash_computation_failed"};
+    }
+    const auto recomputed_payload_hash = sha256_hex(hash_result.hash_input);
+    if (recomputed_payload_hash != binding.payload_hash()) {
+        return {
+            false, "payload_hash does not match the binding's own fields", "payload_hash_mismatch"};
+    }
+    bool key_ok = false;
+    const auto public_key_bytes = hex_decode(signing_public_key_hex, key_ok);
+    bool signature_ok = false;
+    const auto signature_bytes = hex_decode(binding.signature(), signature_ok);
+    if (!key_ok || !signature_ok) {
+        return {false, "signing key or signature is not valid hex", "invalid_signature"};
+    }
+    if (!ed25519_verify(
+            public_key_bytes, signature_bytes, adaptive_clipping_binding_signing_bytes(binding))) {
+        return {false, "invalid signature", "invalid_signature"};
+    }
+    if (binding.expires_at() <= 0.0 || now_unix_s >= binding.expires_at()) {
+        return {false, "binding has expired", "expired"};
     }
     return {true, "ok", ""};
 }
@@ -789,7 +951,8 @@ std::string json_string_map(const google::protobuf::Map<std::string, std::string
     std::string out = "{";
     bool first = true;
     for (const auto& [key, value] : sorted) {
-        if (!first) out += ",";
+        if (!first)
+            out += ",";
         first = false;
         out += json_escape_string(key);
         out += ":";
@@ -799,7 +962,8 @@ std::string json_string_map(const google::protobuf::Map<std::string, std::string
     return out;
 }
 
-std::string json_worker_security_event_payload(const fl::worker::v1::WorkerSecurityEventPayload& event) {
+std::string json_worker_security_event_payload(
+    const fl::worker::v1::WorkerSecurityEventPayload& event) {
     std::ostringstream out;
     out << "{";
     out << "\"actor_type\":" << json_escape_string(event.actor_type()) << ",";
@@ -832,7 +996,8 @@ SecurityEventBatchPayloadHashResult security_event_batch_payload_hash_input(
     out << "{";
     out << "\"events\":[";
     for (int i = 0; i < batch.events_size(); ++i) {
-        if (i > 0) out << ",";
+        if (i > 0)
+            out << ",";
         out << json_worker_security_event_payload(batch.events(i));
     }
     out << "],";

@@ -59,11 +59,12 @@ func (d Dataset) CanTransitionTo(next Status) bool {
 type Partition struct {
 	PartitionID          string         `json:"partition_id"`
 	DatasetID            string         `json:"dataset_id"`
-	Strategy             string         `json:"strategy"` // "iid" | "dirichlet" | "pathological"
+	Strategy             string         `json:"strategy"` // "iid" | "dirichlet" | "pathological" | "quantity_skew"
 	Seed                 int64          `json:"seed"`
 	NumClients           int            `json:"num_clients"`
 	Alpha                *float64       `json:"alpha,omitempty"`
 	ClassesPerClient     *int           `json:"classes_per_client,omitempty"`
+	QuantitySkewSigma    *float64       `json:"quantity_skew_sigma,omitempty"`
 	MinimumClientSamples int            `json:"minimum_client_samples"`
 	ClientSampleCounts   map[string]int `json:"client_sample_counts"`
 	ManifestChecksum     string         `json:"manifest_checksum"`

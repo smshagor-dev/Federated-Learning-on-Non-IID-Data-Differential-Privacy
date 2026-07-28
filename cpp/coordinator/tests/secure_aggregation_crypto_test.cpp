@@ -59,25 +59,32 @@ int main() {
     {
         const auto alice = generate_x25519_keypair();
         const auto bob = generate_x25519_keypair();
-        check(alice.private_key_raw.size() == kX25519KeyLength, "generated private key is 32 bytes");
+        check(alice.private_key_raw.size() == kX25519KeyLength,
+              "generated private key is 32 bytes");
         check(alice.public_key_raw.size() == kX25519KeyLength, "generated public key is 32 bytes");
-        check(alice.private_key_raw != bob.private_key_raw, "two independently generated keypairs differ");
+        check(alice.private_key_raw != bob.private_key_raw,
+              "two independently generated keypairs differ");
 
-        const auto secret_from_alice = derive_x25519_shared_secret(alice.private_key_raw, bob.public_key_raw);
-        const auto secret_from_bob = derive_x25519_shared_secret(bob.private_key_raw, alice.public_key_raw);
+        const auto secret_from_alice =
+            derive_x25519_shared_secret(alice.private_key_raw, bob.public_key_raw);
+        const auto secret_from_bob =
+            derive_x25519_shared_secret(bob.private_key_raw, alice.public_key_raw);
         check(secret_from_alice.size() == kX25519KeyLength, "derived shared secret is 32 bytes");
         check(secret_from_alice == secret_from_bob,
               "both sides of an X25519 exchange derive the identical shared secret");
 
         const auto carol = generate_x25519_keypair();
-        const auto secret_with_carol = derive_x25519_shared_secret(alice.private_key_raw, carol.public_key_raw);
+        const auto secret_with_carol =
+            derive_x25519_shared_secret(alice.private_key_raw, carol.public_key_raw);
         check(secret_with_carol != secret_from_alice,
-              "the same private key against a different peer public key derives a different shared secret");
+              "the same private key against a different peer public key derives a different shared "
+              "secret");
 
         expect_throw([&]() { (void)derive_x25519_shared_secret("too-short", bob.public_key_raw); },
                      "derive_x25519_shared_secret rejects a self private key of the wrong length");
-        expect_throw([&]() { (void)derive_x25519_shared_secret(alice.private_key_raw, "too-short"); },
-                     "derive_x25519_shared_secret rejects a peer public key of the wrong length");
+        expect_throw(
+            [&]() { (void)derive_x25519_shared_secret(alice.private_key_raw, "too-short"); },
+            "derive_x25519_shared_secret rejects a peer public key of the wrong length");
     }
 
     // -- HKDF-SHA-256 -------------------------------------------------
@@ -102,18 +109,20 @@ int main() {
     // -- purpose-specific key derivation (Work Package Q) -------------
     {
         const std::string shared_secret = "a-pretend-32-byte-shared-secret";
-        const auto tensor_key =
-            derive_purpose_key(shared_secret, kHkdfPurposeTensorMaskStream, "session-1|round-1|worker-a|worker-b");
-        const auto weight_key =
-            derive_purpose_key(shared_secret, kHkdfPurposeWeightMaskStream, "session-1|round-1|worker-a|worker-b");
+        const auto tensor_key = derive_purpose_key(
+            shared_secret, kHkdfPurposeTensorMaskStream, "session-1|round-1|worker-a|worker-b");
+        const auto weight_key = derive_purpose_key(
+            shared_secret, kHkdfPurposeWeightMaskStream, "session-1|round-1|worker-a|worker-b");
         check(tensor_key != weight_key,
-              "distinct purpose labels derive distinct keys from the identical shared secret and context (Work "
+              "distinct purpose labels derive distinct keys from the identical shared secret and "
+              "context (Work "
               "Package Q)");
 
-        const auto same_purpose_different_context =
-            derive_purpose_key(shared_secret, kHkdfPurposeTensorMaskStream, "session-1|round-2|worker-a|worker-b");
+        const auto same_purpose_different_context = derive_purpose_key(
+            shared_secret, kHkdfPurposeTensorMaskStream, "session-1|round-2|worker-a|worker-b");
         check(tensor_key != same_purpose_different_context,
-              "the same purpose under a different context (e.g. a different round) derives a different key");
+              "the same purpose under a different context (e.g. a different round) derives a "
+              "different key");
     }
 
     // -- ChaCha20 IETF keystream ---------------------------------------
@@ -124,17 +133,22 @@ int main() {
         const auto stream1 = chacha20_keystream(key, nonce, 0, 64);
         const auto stream2 = chacha20_keystream(key, nonce, 0, 64);
         check(stream1.size() == 64, "chacha20_keystream produces the requested length");
-        check(stream1 == stream2, "chacha20_keystream is deterministic for identical key/nonce/counter");
+        check(stream1 == stream2,
+              "chacha20_keystream is deterministic for identical key/nonce/counter");
 
-        const auto stream_with_different_key = chacha20_keystream(std::string(kChaCha20KeyLength, '\x03'), nonce, 0, 64);
-        check(stream1 != stream_with_different_key, "a different key produces a different keystream");
+        const auto stream_with_different_key =
+            chacha20_keystream(std::string(kChaCha20KeyLength, '\x03'), nonce, 0, 64);
+        check(stream1 != stream_with_different_key,
+              "a different key produces a different keystream");
 
         const auto stream_with_different_nonce =
             chacha20_keystream(key, std::string(kChaCha20NonceLength, '\x04'), 0, 64);
-        check(stream1 != stream_with_different_nonce, "a different nonce produces a different keystream");
+        check(stream1 != stream_with_different_nonce,
+              "a different nonce produces a different keystream");
 
         const auto stream_with_different_counter = chacha20_keystream(key, nonce, 1, 64);
-        check(stream1 != stream_with_different_counter, "a different initial counter produces a different keystream");
+        check(stream1 != stream_with_different_counter,
+              "a different initial counter produces a different keystream");
 
         expect_throw([&]() { (void)chacha20_keystream("too-short", nonce, 0, 32); },
                      "chacha20_keystream rejects a key of the wrong length");
@@ -146,9 +160,11 @@ int main() {
     {
         check(sha256_hex("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
               "SHA-256('') matches the well-known empty-string digest");
-        check(sha256_hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-              "SHA-256('abc') matches the well-known NIST test vector");
-        check(sha256_digest("abc").size() == kSha256DigestLength, "sha256_digest returns exactly 32 raw bytes");
+        check(
+            sha256_hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "SHA-256('abc') matches the well-known NIST test vector");
+        check(sha256_digest("abc").size() == kSha256DigestLength,
+              "sha256_digest returns exactly 32 raw bytes");
     }
 
     // -- cohort commitment (Work Package O) -----------------------------
@@ -156,7 +172,8 @@ int main() {
         const std::vector<std::string> roster{"worker-1", "worker-2", "worker-3"};
         const auto commitment1 = compute_cohort_commitment("session-a", "run-1", 3, "v1", roster);
         const auto commitment2 = compute_cohort_commitment("session-a", "run-1", 3, "v1", roster);
-        check(commitment1 == commitment2, "compute_cohort_commitment is deterministic for identical inputs");
+        check(commitment1 == commitment2,
+              "compute_cohort_commitment is deterministic for identical inputs");
         // Golden fixture: fixtures/secure_aggregation/cohort_commitment_golden.json
         // -- frozen from a single reviewed run of this exact implementation
         // against these exact inputs (there is no way to hand-derive a
@@ -170,15 +187,21 @@ int main() {
               "golden fixture: compute_cohort_commitment matches the frozen reference value");
 
         const std::vector<std::string> reordered_roster{"worker-2", "worker-1", "worker-3"};
-        const auto commitment_reordered = compute_cohort_commitment("session-a", "run-1", 3, "v1", reordered_roster);
+        const auto commitment_reordered =
+            compute_cohort_commitment("session-a", "run-1", 3, "v1", reordered_roster);
         check(commitment1 != commitment_reordered,
-              "changing participant order changes the commitment -- order is part of what is committed to");
+              "changing participant order changes the commitment -- order is part of what is "
+              "committed to");
 
-        const auto commitment_different_round = compute_cohort_commitment("session-a", "run-1", 4, "v1", roster);
-        check(commitment1 != commitment_different_round, "changing round_id changes the commitment");
+        const auto commitment_different_round =
+            compute_cohort_commitment("session-a", "run-1", 4, "v1", roster);
+        check(commitment1 != commitment_different_round,
+              "changing round_id changes the commitment");
 
-        const auto commitment_different_session = compute_cohort_commitment("session-b", "run-1", 3, "v1", roster);
-        check(commitment1 != commitment_different_session, "changing session_id changes the commitment");
+        const auto commitment_different_session =
+            compute_cohort_commitment("session-b", "run-1", 3, "v1", roster);
+        check(commitment1 != commitment_different_session,
+              "changing session_id changes the commitment");
     }
 
     // -- session configuration hash --------------------------------------
@@ -191,12 +214,14 @@ int main() {
 
         const auto hash1 = compute_session_configuration_hash(config);
         const auto hash2 = compute_session_configuration_hash(config);
-        check(hash1 == hash2, "compute_session_configuration_hash is deterministic for identical config");
+        check(hash1 == hash2,
+              "compute_session_configuration_hash is deterministic for identical config");
         // Golden fixture: fixtures/secure_aggregation/session_configuration_hash_golden.json
         // -- same frozen-reference discipline as the cohort commitment
         // fixture above.
         check(hash1 == "76e4954d92f097321ee7fd340b88dd0294b29a3181e9416922635bd1b00c4ea2",
-              "golden fixture: compute_session_configuration_hash matches the frozen reference value");
+              "golden fixture: compute_session_configuration_hash matches the frozen reference "
+              "value");
 
         SecureAggregationSessionConfig config_changed = config;
         config_changed.round_id = 6;
@@ -206,7 +231,8 @@ int main() {
         SecureAggregationSessionConfig config_none_provider = config;
         config_none_provider.provider = SecureAggregationProvider::kNone;
         const auto hash_none_provider = compute_session_configuration_hash(config_none_provider);
-        check(hash1 != hash_none_provider, "changing the provider changes the session configuration hash");
+        check(hash1 != hash_none_provider,
+              "changing the provider changes the session configuration hash");
     }
 
     if (g_failures == 0) {

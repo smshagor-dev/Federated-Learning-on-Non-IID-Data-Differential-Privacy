@@ -22,7 +22,8 @@ fl::core::ModelManifest make_manifest() {
     };
 }
 
-fl::coordinator::RunConfig make_adaptive_config(const std::string& run_id, std::uint64_t noise_seed,
+fl::coordinator::RunConfig make_adaptive_config(const std::string& run_id,
+                                                std::uint64_t noise_seed,
                                                 double initial_clip = 5.0,
                                                 double count_noise_multiplier = 1e-6) {
     fl::coordinator::RunConfig config;
@@ -109,10 +110,12 @@ void run_adaptive_clipping_tests() {
     // exceed it (over_threshold_count = cohort_size -> fraction 1.0 >
     // target_quantile 0.5). ---
     {
-        RunManager manager(coordinator_config, "adaptive_clipping_test_scratch/checkpoints_a",
+        RunManager manager(coordinator_config,
+                           "adaptive_clipping_test_scratch/checkpoints_a",
                            "adaptive_clipping_test_scratch/scaffold_a");
         // initial_clip=1.0: both clients' delta norms (10.0, 8.0) exceed it.
-        auto config = make_adaptive_config("run-adaptive-a", /*noise_seed=*/123, /*initial_clip=*/1.0);
+        auto config =
+            make_adaptive_config("run-adaptive-a", /*noise_seed=*/123, /*initial_clip=*/1.0);
         manager.create_run(config, 0.0);
         auto& run = manager.get("run-adaptive-a");
         register_workers(manager);
@@ -122,7 +125,8 @@ void run_adaptive_clipping_tests() {
         run_one_round(run, now, 10.0, -8.0);
 
         check(run.user_level_ledger().size() == 1, "user-level ledger gains one entry");
-        check(run.adaptive_clipping_ledger().size() == 1, "adaptive-clipping ledger gains one entry");
+        check(run.adaptive_clipping_ledger().size() == 1,
+              "adaptive-clipping ledger gains one entry");
         const auto& clip_entry = run.adaptive_clipping_ledger().back();
         check(clip_entry.clip_value == 1.0,
               "ledger records the bound actually used THIS round (initial_clip)");
@@ -133,7 +137,8 @@ void run_adaptive_clipping_tests() {
         // Round 2: the bound should have risen above 1.0 in response.
         run_one_round(run, now, 10.0, -8.0);
         check(run.adaptive_clipping_ledger().size() == 2, "two adaptive-clipping ledger entries");
-        check(run.adaptive_clipping_ledger()[1].clip_value > run.adaptive_clipping_ledger()[0].clip_value,
+        check(run.adaptive_clipping_ledger()[1].clip_value >
+                  run.adaptive_clipping_ledger()[0].clip_value,
               "clip bound rises across rounds when clients stay over threshold");
         check(run.adaptive_clipping_ledger().back().epsilon >
                   run.adaptive_clipping_ledger()[0].epsilon,
@@ -143,8 +148,9 @@ void run_adaptive_clipping_tests() {
         // never be equal by construction (they're different mechanisms
         // with different noise multipliers/formulas) — this is a smoke
         // check that nothing accidentally aliases the two accountants.
-        check(run.user_level_ledger().back().epsilon != run.adaptive_clipping_ledger().back().epsilon,
-              "user-level and adaptive-clipping epsilon are tracked by distinct accountants");
+        check(
+            run.user_level_ledger().back().epsilon != run.adaptive_clipping_ledger().back().epsilon,
+            "user-level and adaptive-clipping epsilon are tracked by distinct accountants");
     }
 
     // --- Disabled by default: adaptive_clipping_enabled=false leaves the
@@ -152,7 +158,8 @@ void run_adaptive_clipping_tests() {
     // even though user-level DP itself is active (regression guard for
     // user_level_dp_test.cpp's existing fixed-bound behavior). ---
     {
-        RunManager manager(coordinator_config, "adaptive_clipping_test_scratch/checkpoints_b",
+        RunManager manager(coordinator_config,
+                           "adaptive_clipping_test_scratch/checkpoints_b",
                            "adaptive_clipping_test_scratch/scaffold_b");
         fl::coordinator::RunConfig config;
         config.run_id = "run-fixed-bound";
@@ -193,9 +200,11 @@ void run_adaptive_clipping_tests() {
     // --- Reproducibility: identical config/seed -> identical clip-bound
     // and epsilon trajectory. ---
     {
-        RunManager manager_x(coordinator_config, "adaptive_clipping_test_scratch/checkpoints_x",
+        RunManager manager_x(coordinator_config,
+                             "adaptive_clipping_test_scratch/checkpoints_x",
                              "adaptive_clipping_test_scratch/scaffold_x");
-        RunManager manager_y(coordinator_config, "adaptive_clipping_test_scratch/checkpoints_y",
+        RunManager manager_y(coordinator_config,
+                             "adaptive_clipping_test_scratch/checkpoints_y",
                              "adaptive_clipping_test_scratch/scaffold_y");
         manager_x.create_run(make_adaptive_config("run-x", 555, 1.0), 0.0);
         manager_y.create_run(make_adaptive_config("run-y", 555, 1.0), 0.0);

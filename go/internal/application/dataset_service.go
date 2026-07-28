@@ -18,7 +18,12 @@ var (
 	ErrInvalidPartitionManifest  = errors.New("invalid partition manifest")
 )
 
-var validPartitionStrategies = map[string]bool{"iid": true, "dirichlet": true, "pathological": true}
+var validPartitionStrategies = map[string]bool{
+	"iid":           true,
+	"dirichlet":     true,
+	"pathological":  true,
+	"quantity_skew": true,
+}
 
 type DatasetService struct {
 	repo  datasets.Repository
@@ -122,6 +127,9 @@ func (s *DatasetService) CreatePartition(ctx context.Context, partition datasets
 	}
 	if partition.Strategy == "pathological" && partition.ClassesPerClient == nil {
 		return datasets.Partition{}, fmt.Errorf("%w: pathological partitioning requires classes_per_client", ErrInvalidPartitionManifest)
+	}
+	if partition.Strategy == "quantity_skew" && partition.QuantitySkewSigma == nil {
+		return datasets.Partition{}, fmt.Errorf("%w: quantity_skew partitioning requires quantity_skew_sigma", ErrInvalidPartitionManifest)
 	}
 	if partition.NumClients <= 0 {
 		return datasets.Partition{}, fmt.Errorf("%w: num_clients must be > 0", ErrInvalidPartitionManifest)

@@ -39,6 +39,7 @@ from fl_platform.secure_aggregation.masked_update import (
     RosterContext,
     SecureCohortHandshakeMaskingError,
     encode_weighted_delta,
+    mask_clipping_indicator,
     mask_weighted_delta,
     validate_client_weight,
     validate_local_delta,
@@ -99,6 +100,20 @@ class SecureHandshakeResult:
     secure_user_level_dp_active: bool = False
     secure_user_level_clip_norm: float = 0.0
     secure_user_level_effective_sensitivity: float = 0.0
+    # Secure Adaptive Clipping with Private Indicator Aggregation
+    # slice: mirrors the signed task binding's own
+    # secure_adaptive_clipping_* fields -- current_bound defaults to
+    # 0.0 (a value clip_delta_to_l2_norm already rejects) when
+    # secure_adaptive_clipping_active is False, matching
+    # secure_user_level_clip_norm's identical "unset means inactive"
+    # convention above. When active, the worker MUST clip using
+    # current_bound instead of secure_user_level_clip_norm (the current
+    # round's signed adaptive bound, fixed at task-signing time -- see
+    # docs/secure-adaptive-clipping-semantics.md section 7).
+    secure_adaptive_clipping_active: bool = False
+    secure_adaptive_clipping_current_bound: float = 0.0
+    secure_adaptive_clipping_clip_state_step_count: int = 0
+    secure_adaptive_clipping_configuration_hash: str = ""
 
 
 @dataclass(slots=True)
@@ -253,7 +268,9 @@ class WorkerService:
                 roster = roster_outcome.roster
                 break
             if self._options.secure_aggregation_roster_poll_interval_seconds > 0:
-                time.sleep(self._options.secure_aggregation_roster_poll_interval_seconds)
+                time.sleep(
+                    self._options.secure_aggregation_roster_poll_interval_seconds
+                )
         if roster is None:
             raise SecureCohortHandshakeError(
                 f"frozen cohort roster for session '{binding.session_id}' was not "
@@ -328,6 +345,12 @@ class WorkerService:
             secure_user_level_dp_active=binding.secure_user_level_dp_active,
             secure_user_level_clip_norm=binding.secure_user_level_clip_norm,
             secure_user_level_effective_sensitivity=binding.secure_user_level_effective_sensitivity,
+            secure_adaptive_clipping_active=binding.secure_adaptive_clipping_active,
+            secure_adaptive_clipping_current_bound=binding.secure_adaptive_clipping_current_bound,
+            secure_adaptive_clipping_clip_state_step_count=(
+                binding.secure_adaptive_clipping_clip_state_step_count
+            ),
+            secure_adaptive_clipping_configuration_hash=task.secure_adaptive_clipping_configuration_hash,
         )
 
     def _submit_with_retry(
@@ -392,16 +415,21 @@ class WorkerService:
         delta: dict[str, torch.Tensor],
         sample_count: int,
         handshake: SecureHandshakeResult,
-    ) -> tuple[dict[str, list[int]], int, object]:
+    ) -> tuple[dict[str, list[int]], int, object, int, str]:
         """Work Areas E-J: local-update validation, bounded client-weight
         validation, fixed-point encoding, and pairwise tensor/weight
         masking -- the production wiring of the prior slice's tested
         pure-math library. Raises SecureCohortHandshakeMaskingError on
         any failure (never a partial/best-effort masked contribution).
-        Returns (masked_tensors, masked_weight, encoding) -- `encoding`
-        (a WeightedEncodingResult) is returned too since
+        Returns (masked_tensors, masked_weight, encoding,
+        masked_clipping_indicator, masked_clipping_indicator_checksum)
+        -- `encoding` (a WeightedEncodingResult) is returned too since
         build_signed_masked_update needs its tensor_names/
-        encoding_statistics.
+        encoding_statistics. The last two are 0/"" unless
+        handshake.secure_adaptive_clipping_active (Secure Adaptive
+        Clipping with Private Indicator Aggregation slice, Work Area
+        G) -- see docs/secure-adaptive-clipping-semantics.md sections
+        3/14.
 
         Uses the shared, hardcoded FixedPointEncodingProfile default
         (scale_factor=1048576.0, max_input_magnitude=100.0,
@@ -425,10 +453,21 @@ class WorkerService:
         # Weight is forced to exactly 1 (never derived from
         # sample_count) per the Initial Weighting Restriction --
         # validate_client_weight is never called on this path.
+        masked_clipping_indicator = 0
+        masked_clipping_indicator_checksum = ""
         if handshake.secure_user_level_dp_active:
-            clip_outcome = clip_delta_to_l2_norm(
-                delta, handshake.secure_user_level_clip_norm
+            # Secure Adaptive Clipping with Private Indicator
+            # Aggregation slice: the bound to clip THIS round's whole-
+            # user update with is the signed adaptive bound
+            # (current_bound, fixed at task-signing time -- see the
+            # semantics doc section 7) when adaptive clipping is
+            # active, otherwise the existing fixed bound, unchanged.
+            clip_bound_this_round = (
+                handshake.secure_adaptive_clipping_current_bound
+                if handshake.secure_adaptive_clipping_active
+                else handshake.secure_user_level_clip_norm
             )
+            clip_outcome = clip_delta_to_l2_norm(delta, clip_bound_this_round)
             delta = clip_outcome.clipped_delta
             # Logs the configured (public, coordinator-known) clip
             # norm only -- never the pre-clip norm or the clipping
@@ -438,7 +477,7 @@ class WorkerService:
             logger.info(
                 "secure user-level DP clipping applied: client='%s' clip_norm=%s",
                 task.client_id,
-                handshake.secure_user_level_clip_norm,
+                clip_bound_this_round,
             )
             # Secure User-Level DP Operations, Observability, and Release
             # Evidence slice, Work Area D: real call-site wiring, not
@@ -457,6 +496,28 @@ class WorkerService:
                     task_id=task.task_id,
                 )
             weight = 1
+            if handshake.secure_adaptive_clipping_active:
+                # Secure Adaptive Clipping with Private Indicator
+                # Aggregation slice, Work Area G: the over-threshold
+                # indicator, derived locally from the SAME clip_outcome
+                # clipping above already computed (pre_clip_norm is
+                # local-only, never transmitted -- see
+                # ClippingOutcome's own docstring) -- one comparison,
+                # never logged, persisted, or included in any signed
+                # record. Reused, not the task's suggested at-or-below
+                # convention (see docs/secure-adaptive-clipping-runtime-audit.md's
+                # "Existing indicator definition" section).
+                local_indicator = (
+                    1 if clip_outcome.pre_clip_norm > clip_bound_this_round else 0
+                )
+                masked_clipping_indicator, masked_clipping_indicator_checksum = (
+                    mask_clipping_indicator(
+                        local_indicator,
+                        self_worker_id=self._options.worker_id,
+                        self_private_key_raw=handshake.own_private_key_raw,
+                        roster=handshake.roster,
+                    )
+                )
         else:
             weight = validate_client_weight(sample_count, handshake.max_client_weight)
         validate_local_delta(
@@ -469,7 +530,13 @@ class WorkerService:
             self_private_key_raw=handshake.own_private_key_raw,
             roster=handshake.roster,
         )
-        return masked_tensors, masked_weight, encoding
+        return (
+            masked_tensors,
+            masked_weight,
+            encoding,
+            masked_clipping_indicator,
+            masked_clipping_indicator_checksum,
+        )
 
     def _submit_masked_with_retry(
         self,
@@ -481,6 +548,8 @@ class WorkerService:
         handshake: SecureHandshakeResult,
         sample_level_privacy: SampleLevelLedgerEntry | None = None,
         sample_privacy_decision: SampleBudgetDecision | None = None,
+        masked_clipping_indicator: int = 0,
+        masked_clipping_indicator_checksum: str = "",
     ) -> bool:
         """Work Area N's worker-side counterpart: submits a real signed
         MaskedClientUpdate, retrying only on transport-level
@@ -517,10 +586,19 @@ class WorkerService:
                     encoding,
                     handshake.roster,
                     secure_user_level_dp_active=handshake.secure_user_level_dp_active,
-                    clip_norm=handshake.secure_user_level_clip_norm,
+                    clip_norm=(
+                        handshake.secure_adaptive_clipping_current_bound
+                        if handshake.secure_adaptive_clipping_active
+                        else handshake.secure_user_level_clip_norm
+                    ),
                     effective_sensitivity=handshake.secure_user_level_effective_sensitivity,
                     sample_level_privacy=sample_level_privacy,
                     sample_privacy_decision=sample_privacy_decision,
+                    secure_adaptive_clipping_active=handshake.secure_adaptive_clipping_active,
+                    masked_clipping_indicator=masked_clipping_indicator,
+                    masked_clipping_indicator_checksum=masked_clipping_indicator_checksum,
+                    adaptive_configuration_hash=handshake.secure_adaptive_clipping_configuration_hash,
+                    clip_state_step_count=handshake.secure_adaptive_clipping_clip_state_step_count,
                 )
                 if not outcome.accepted:
                     logger.warning(
@@ -841,10 +919,14 @@ class WorkerService:
                 # cleartext ClientResult path) is never called on this
                 # branch, not even on a masking/encoding failure.
                 try:
-                    masked_tensors, masked_weight, encoding = (
-                        self._encode_and_mask_local_update(
-                            task, outcome.delta, outcome.sample_count, handshake
-                        )
+                    (
+                        masked_tensors,
+                        masked_weight,
+                        encoding,
+                        masked_clipping_indicator,
+                        masked_clipping_indicator_checksum,
+                    ) = self._encode_and_mask_local_update(
+                        task, outcome.delta, outcome.sample_count, handshake
                     )
                 except SecureCohortHandshakeMaskingError as error:
                     logger.warning(
@@ -864,6 +946,8 @@ class WorkerService:
                     handshake,
                     sample_level_privacy=sample_level_privacy,
                     sample_privacy_decision=sample_privacy_decision,
+                    masked_clipping_indicator=masked_clipping_indicator,
+                    masked_clipping_indicator_checksum=masked_clipping_indicator_checksum,
                 )
             else:
                 accepted = self._submit_with_retry(

@@ -62,7 +62,8 @@ CoordinatorTaskSequenceStore::CoordinatorTaskSequenceStore(std::string persisten
     const std::string body = payload.substr(0, marker + 1);
     std::string checksum_line = payload.substr(marker + 1);
     const auto equals = checksum_line.find('=');
-    std::string checksum_value = equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
+    std::string checksum_value =
+        equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
     while (!checksum_value.empty() &&
            (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
         checksum_value.pop_back();

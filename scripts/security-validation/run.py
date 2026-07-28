@@ -20,6 +20,7 @@ scenario ends FAIL.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -42,22 +43,36 @@ COMPOSE_FILES = (
     "infra/compose/docker-compose.dev.yml",
     "infra/compose/docker-compose.security.yml",
 )
-API_BASE = "http://localhost:8080"
-CORE_SERVICES = ("postgres", "redis", "coordinator", "api", "python-worker")
+API_BASE = os.environ.get("FL_RUNTIME_VALIDATION_API_BASE", "http://localhost:8080")
+CORE_SERVICES = (
+    "postgres",
+    "redis",
+    "coordinator",
+    "research-writer",
+    "api",
+    "python-worker",
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--group", type=str, default="", help="comma-separated group names (default: all)"
+        "--group",
+        type=str,
+        default="",
+        help="comma-separated group names (default: all)",
     )
     parser.add_argument(
         "--scenario",
         type=str,
         default="",
-        help="comma-separated exact scenario_id values (default: all in selected groups)",
+        help=(
+            "comma-separated exact scenario_id values (default: all in selected groups)"
+        ),
     )
-    parser.add_argument("--list", action="store_true", help="print the registry and exit")
+    parser.add_argument(
+        "--list", action="store_true", help="print the registry and exit"
+    )
     parser.add_argument(
         "--output-dir",
         type=str,
@@ -92,9 +107,13 @@ def print_registry(scenarios: list) -> None:
     for category in sorted(by_category):
         print(f"\n[{category}]")
         for scenario in by_category[category]:
-            marker = "RUN" if scenario.run is not None else scenario.support_status.value
+            marker = (
+                "RUN" if scenario.run is not None else scenario.support_status.value
+            )
             required = "required" if scenario.required else "optional"
-            print(f"  {marker:9s} {required:9s} {scenario.scenario_id} -- {scenario.name}")
+            print(
+                f"  {marker:9s} {required:9s} {scenario.scenario_id} -- {scenario.name}"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -113,7 +132,9 @@ def main(argv: list[str] | None = None) -> int:
         workspace = Path(workspace_str)
         ctx = Context(
             api_base=API_BASE,
-            coordinator_address="localhost:50051",
+            coordinator_address=os.environ.get(
+                "FL_RUNTIME_VALIDATION_COORDINATOR_ADDRESS", "localhost:50051"
+            ),
             compose_files=COMPOSE_FILES,
             workspace=workspace,
             verbose=args.verbose,
@@ -132,7 +153,8 @@ def main(argv: list[str] | None = None) -> int:
                 if not healthy:
                     eprint(
                         "warning: could not confirm API health within the wait window; "
-                        "proceeding anyway (individual scenarios will surface real failures)"
+                        "proceeding anyway "
+                        "(individual scenarios will surface real failures)"
                     )
 
             results = []
@@ -160,7 +182,8 @@ def main(argv: list[str] | None = None) -> int:
 
         counts = summary.counts()
         print(
-            f"\n{counts['PASS']} PASS, {counts['FAIL']} FAIL, {counts['BLOCKED']} BLOCKED, "
+            f"\n{counts['PASS']} PASS, {counts['FAIL']} FAIL, "
+            f"{counts['BLOCKED']} BLOCKED, "
             f"{counts['DEFERRED']} DEFERRED, {counts['SKIPPED']} SKIPPED"
         )
         print(f"JSON summary: {json_path}")

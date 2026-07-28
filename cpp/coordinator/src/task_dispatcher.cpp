@@ -116,7 +116,7 @@ std::vector<std::string> TaskDispatcher::sweep_expired_leases(double now_unix_s)
 }
 
 std::optional<std::string> TaskDispatcher::cancel_lease_for_worker(const std::string& worker_id,
-                                                                    double now_unix_s) {
+                                                                   double now_unix_s) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto active_it = worker_active_task_.find(worker_id);
     if (active_it == worker_active_task_.end()) {

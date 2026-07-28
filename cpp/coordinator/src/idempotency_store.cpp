@@ -39,8 +39,8 @@ std::string encode_record(const IdempotentMutationRecord& record) {
     std::ostringstream out;
     out << record.rpc_name << "\t" << record.idempotency_key << "\t"
         << (record.accepted ? "1" : "0") << "\t" << record.rejection_code << "\t"
-        << record.result_key_id << "\t" << record.previous_key_id << "\t"
-        << std::setprecision(17) << record.recorded_at_unix_s;
+        << record.result_key_id << "\t" << record.previous_key_id << "\t" << std::setprecision(17)
+        << record.recorded_at_unix_s;
     return out.str();
 }
 
@@ -89,7 +89,8 @@ IdempotencyStore::IdempotencyStore(std::string persistence_path)
     const std::string body = payload.substr(0, marker + 1);
     std::string checksum_line = payload.substr(marker + 1);
     const auto equals = checksum_line.find('=');
-    std::string checksum_value = equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
+    std::string checksum_value =
+        equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
     while (!checksum_value.empty() &&
            (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
         checksum_value.pop_back();
@@ -153,7 +154,8 @@ void IdempotencyStore::persist() const {
         file << out.str();
         file.flush();
         if (!file) {
-            throw IdempotencyStoreError("failed to write idempotency store temp file: " + temp_path);
+            throw IdempotencyStoreError("failed to write idempotency store temp file: " +
+                                        temp_path);
         }
     }
     std::error_code error_code;
@@ -183,7 +185,8 @@ void IdempotencyStore::record(const IdempotentMutationRecord& record) {
     const Key key{record.rpc_name, record.idempotency_key};
     if (records_.find(key) != records_.end()) {
         throw IdempotencyStoreError("an idempotency record already exists for rpc_name='" +
-                                    record.rpc_name + "' idempotency_key='" + record.idempotency_key +
+                                    record.rpc_name + "' idempotency_key='" +
+                                    record.idempotency_key +
                                     "' -- caller must check find() before record()");
     }
     records_.emplace(key, record);

@@ -136,6 +136,20 @@ message AdaptiveClippingConfig {
   double epsilon_budget = 9;
 }
 
+// Secure Adaptive Clipping with Private Indicator Aggregation slice:
+// exactly one indicator definition is selected and active
+// (OVER_THRESHOLD, reused unchanged from the existing cleartext
+// AdaptiveClipController -- see
+// docs/secure-adaptive-clipping-runtime-audit.md's "Existing indicator
+// definition" section). Declared here (fl.privacy.v1), not in
+// coordinator.proto, because both coordinator.proto and worker.proto
+// need it and worker.proto cannot import coordinator.proto (the
+// import runs the other way).
+enum SecureAdaptiveClippingIndicatorDefinition {
+  SECURE_ADAPTIVE_CLIPPING_INDICATOR_DEFINITION_UNSPECIFIED = 0;
+  SECURE_ADAPTIVE_CLIPPING_INDICATOR_DEFINITION_OVER_THRESHOLD = 1;
+}
+
 message PrivacyConfig {
   PrivacyMode mode = 1;
   SampleLevelDPConfig sample_level = 2;

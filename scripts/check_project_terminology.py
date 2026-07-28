@@ -22,7 +22,6 @@ Design notes on avoiding false positives (see the two regexes below):
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -147,6 +146,11 @@ def scan_file(path: Path) -> list[str]:
     findings = []
     relative = path.relative_to(ROOT)
     for line_number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        # JSX/SVG path commands like `d="M4 12..."` are vector coordinates,
+        # not roadmap aliases. The checker should not fail on icon path data.
+        if "<path" in stripped and ' d="' in stripped:
+            continue
         for pattern, label in (
             (MILESTONE_WORD_PATTERN, "milestone"),
             (NUMBERED_ALIAS_PATTERN, "numbered alias"),

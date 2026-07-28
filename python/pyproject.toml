@@ -13,6 +13,12 @@ dev = [
     "pytest>=8.2,<9",
     "ruff>=0.6,<1",
     "mypy>=1.11,<2",
+    # Worker-entrypoint wiring and gRPC compatibility tests import grpc
+    # directly, so the dev extra must provide the runtime client package.
+    "grpcio>=1.76,<2",
+    # Generated *_pb2.py modules import google.protobuf directly and the
+    # checked-in gencode currently targets protobuf 7.35.1.
+    "protobuf>=7.35.1,<8",
 ]
 # Secure Transport and Worker Identity Hardening slice
 # (docs/cryptographic-primitives.md): PyNaCl for Ed25519 signing/X25519

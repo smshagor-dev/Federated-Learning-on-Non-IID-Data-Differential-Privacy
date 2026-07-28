@@ -106,6 +106,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/api/v1/models/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleModelRoutes)))
 	mux.Handle("/api/v1/datasets", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleDatasets)))
 	mux.Handle("/api/v1/datasets/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleDatasetRoutes)))
+	mux.Handle("/api/v1/research/experiments", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleResearchExperiments)))
+	mux.Handle("/api/v1/research/experiments/", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleResearchRoutes)))
+	mux.Handle("/api/v1/research/runtime/health", s.withAuth(auth.RoleViewer, auth.RoleResearcher, auth.RoleAdmin, auth.RoleService)(http.HandlerFunc(s.handleResearchRuntimeHealth)))
 
 	// Security Operations and Administration slice (docs/security-api.md):
 	// every route below authenticates via the same broad role set —
@@ -638,6 +641,25 @@ func sessionFromContext(ctx context.Context) application.AuthSession {
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return false
+	}
+	return true
+}
+
+func decodeStrictJSON(w http.ResponseWriter, r *http.Request, target any, maxBytes int64) bool {
+	defer r.Body.Close()
+	reader := r.Body
+	if maxBytes > 0 {
+		reader = http.MaxBytesReader(w, r.Body, maxBytes)
+	}
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return false
+	}
+	if decoder.More() {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return false
 	}

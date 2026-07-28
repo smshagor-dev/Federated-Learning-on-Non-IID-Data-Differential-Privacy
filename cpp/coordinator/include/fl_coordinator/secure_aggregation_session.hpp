@@ -122,7 +122,8 @@ class CohortStateMachine {
     // session is already terminal (an already-completed/aborted/failed
     // session cannot be aborted again -- this is itself a caller
     // error, surfaced as an exception rather than silently ignored).
-    void abort(SecureAggregationAbortReason reason, double timestamp_unix_s,
+    void abort(SecureAggregationAbortReason reason,
+               double timestamp_unix_s,
                const std::string& detail = "");
 
     // Any state -> Failed, for an unexpected internal error (Work
@@ -172,7 +173,8 @@ struct SecureAggregationSessionConfig {
     // added without an incompatible schema change.
     std::string domain_profile = "ring_mod_2_64";
 
-    double scale_factor = 0.0;  // mirrors fixed_point_profile.scale_factor, kept explicit per Work Package C
+    double scale_factor =
+        0.0;  // mirrors fixed_point_profile.scale_factor, kept explicit per Work Package C
     double max_absolute_update_bound = 0.0;
     std::uint64_t max_client_weight = 0;
     std::uint64_t max_aggregate_bound = 0;
@@ -204,6 +206,7 @@ struct SecureAggregationSessionConfig {
 // uses -- see docs/secure-aggregation-protocol-foundation.md's module
 // layout for why hashing lives in the gRPC-gated module while the
 // struct definition itself does not.
-[[nodiscard]] std::string compute_session_configuration_hash(const SecureAggregationSessionConfig& config);
+[[nodiscard]] std::string compute_session_configuration_hash(
+    const SecureAggregationSessionConfig& config);
 
 }  // namespace fl::coordinator

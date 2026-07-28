@@ -1,0 +1,30 @@
+# Secure Adaptive Clipping with Private Indicator Aggregation slice: a
+# thin override on top of docker-compose.secure-cohort-handshake.yml
+# that only changes FL_WORKER_RUN_ID, so this slice's live validation
+# (scripts/validate_secure_adaptive_clipping.py) targets its own run
+# and its worker log output is never confused with the prior slices'
+# validations. Every other setting (mTLS, signing, trust-bundle
+# volume, secure aggregation windows) is unchanged -- see that file's
+# own header comment for the full rationale.
+#
+# Usage:
+#   docker compose -f infra/compose/docker-compose.dev.yml \
+#                   -f infra/compose/docker-compose.security.yml \
+#                   -f infra/compose/docker-compose.secure-cohort-handshake.yml \
+#                   -f infra/compose/docker-compose.secure-adaptive-clipping.yml \
+#                   up -d --build postgres redis coordinator api worker-1 worker-2 worker-3
+#
+# See scripts/validate_secure_adaptive_clipping.py for the automated,
+# scripted form of exactly this flow.
+services:
+  python-worker:
+    environment:
+      FL_WORKER_RUN_ID: secure-adaptive-clipping-validation
+
+  worker-2:
+    environment:
+      FL_WORKER_RUN_ID: secure-adaptive-clipping-validation
+
+  worker-3:
+    environment:
+      FL_WORKER_RUN_ID: secure-adaptive-clipping-validation

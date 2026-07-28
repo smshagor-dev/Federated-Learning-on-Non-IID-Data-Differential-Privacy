@@ -39,6 +39,9 @@ from fl_platform.privacy import (
 )
 from fl_platform.privacy.budget_enforcement import SampleBudgetDecision
 from fl_platform.privacy.secure_random import opacus_secure_mode_available
+from fl_platform.secure_aggregation.adaptive_clipping_binding import (
+    build_signed_adaptive_clipping_binding,
+)
 from fl_platform.secure_aggregation.key_advertisement import (
     FrozenCohortRosterLike,
     build_signed_key_advertisement,
@@ -185,6 +188,10 @@ class ClientTrainingTask:
     # here rather than recomputed a third time when building the
     # signed attestation).
     secure_user_level_dp_configuration_hash: str = ""
+    # Secure Adaptive Clipping with Private Indicator Aggregation
+    # slice -- same reuse convention as
+    # secure_user_level_dp_configuration_hash immediately above.
+    secure_adaptive_clipping_configuration_hash: str = ""
 
 
 @dataclass(slots=True)
@@ -1294,6 +1301,10 @@ class GrpcCoordinatorClient:
         # task -- but this default keeps ClientTrainingTask construction
         # below well-defined regardless).
         secure_user_level_dp_configuration_hash = ""
+        # Secure Adaptive Clipping with Private Indicator Aggregation
+        # slice -- same reuse convention as
+        # secure_user_level_dp_configuration_hash immediately above.
+        secure_adaptive_clipping_configuration_hash = ""
 
         # Coordinator-Signed Tasks slice (docs/signed-coordinator-tasks.md):
         # every check below runs before this method returns a task to its
@@ -1321,6 +1332,9 @@ class GrpcCoordinatorClient:
             signed = response.signed_task
             secure_user_level_dp_configuration_hash = (
                 signed.secure_user_level_dp_configuration_hash
+            )
+            secure_adaptive_clipping_configuration_hash = (
+                signed.secure_adaptive_clipping_configuration_hash
             )
             aggregation_fields = AggregationManifestFields(
                 shared_parameter_names=tuple(
@@ -1418,6 +1432,33 @@ class GrpcCoordinatorClient:
                     secure_user_level_sampling_assumption=(
                         response.secure_aggregation.secure_user_level_sampling_assumption
                     ),
+                    secure_adaptive_clipping_active=(
+                        response.secure_aggregation.secure_adaptive_clipping_active
+                    ),
+                    secure_adaptive_clipping_indicator_definition=(
+                        response.secure_aggregation.secure_adaptive_clipping_indicator_definition
+                    ),
+                    secure_adaptive_clipping_current_bound=(
+                        response.secure_aggregation.secure_adaptive_clipping_current_bound
+                    ),
+                    secure_adaptive_clipping_min_bound=(
+                        response.secure_aggregation.secure_adaptive_clipping_min_bound
+                    ),
+                    secure_adaptive_clipping_max_bound=(
+                        response.secure_aggregation.secure_adaptive_clipping_max_bound
+                    ),
+                    secure_adaptive_clipping_target_quantile=(
+                        response.secure_aggregation.secure_adaptive_clipping_target_quantile
+                    ),
+                    secure_adaptive_clipping_learning_rate=(
+                        response.secure_aggregation.secure_adaptive_clipping_learning_rate
+                    ),
+                    secure_adaptive_clipping_indicator_noise_multiplier=(
+                        response.secure_aggregation.secure_adaptive_clipping_indicator_noise_multiplier
+                    ),
+                    secure_adaptive_clipping_clip_state_step_count=(
+                        response.secure_aggregation.secure_adaptive_clipping_clip_state_step_count
+                    ),
                 ),
             )
             signed_fields = SignedCoordinatorTaskFields(
@@ -1439,6 +1480,9 @@ class GrpcCoordinatorClient:
                 secure_aggregation_configuration_hash=signed.secure_aggregation_configuration_hash,
                 secure_user_level_dp_configuration_hash=(
                     signed.secure_user_level_dp_configuration_hash
+                ),
+                secure_adaptive_clipping_configuration_hash=(
+                    signed.secure_adaptive_clipping_configuration_hash
                 ),
                 schema_version=signed.schema_version,
             )
@@ -1549,9 +1593,37 @@ class GrpcCoordinatorClient:
                 secure_user_level_sampling_assumption=(
                     response.secure_aggregation.secure_user_level_sampling_assumption
                 ),
+                secure_adaptive_clipping_active=(
+                    response.secure_aggregation.secure_adaptive_clipping_active
+                ),
+                secure_adaptive_clipping_indicator_definition=(
+                    response.secure_aggregation.secure_adaptive_clipping_indicator_definition
+                ),
+                secure_adaptive_clipping_current_bound=(
+                    response.secure_aggregation.secure_adaptive_clipping_current_bound
+                ),
+                secure_adaptive_clipping_min_bound=(
+                    response.secure_aggregation.secure_adaptive_clipping_min_bound
+                ),
+                secure_adaptive_clipping_max_bound=(
+                    response.secure_aggregation.secure_adaptive_clipping_max_bound
+                ),
+                secure_adaptive_clipping_target_quantile=(
+                    response.secure_aggregation.secure_adaptive_clipping_target_quantile
+                ),
+                secure_adaptive_clipping_learning_rate=(
+                    response.secure_aggregation.secure_adaptive_clipping_learning_rate
+                ),
+                secure_adaptive_clipping_indicator_noise_multiplier=(
+                    response.secure_aggregation.secure_adaptive_clipping_indicator_noise_multiplier
+                ),
+                secure_adaptive_clipping_clip_state_step_count=(
+                    response.secure_aggregation.secure_adaptive_clipping_clip_state_step_count
+                ),
             ),
             attempt=response.attempt,
             secure_user_level_dp_configuration_hash=secure_user_level_dp_configuration_hash,
+            secure_adaptive_clipping_configuration_hash=secure_adaptive_clipping_configuration_hash,
         )
 
     def submit_result(
@@ -2229,6 +2301,11 @@ class GrpcCoordinatorClient:
         effective_sensitivity: float = 0.0,
         sample_level_privacy: SampleLevelLedgerEntry | None = None,
         sample_privacy_decision: SampleBudgetDecision | None = None,
+        secure_adaptive_clipping_active: bool = False,
+        masked_clipping_indicator: int = 0,
+        masked_clipping_indicator_checksum: str = "",
+        adaptive_configuration_hash: str = "",
+        clip_state_step_count: int = 0,
     ) -> MaskedUpdateSubmissionOutcome:
         """Masked Update Runtime and No-Dropout Secure FedAvg
         Finalization slice, Work Areas K/L/M/N: builds and sends this
@@ -2268,7 +2345,21 @@ class GrpcCoordinatorClient:
         where this field was always transmitted empty (see
         docs/secure-hybrid-dp-runtime-audit.md). is_hybrid is derived
         from secure_user_level_dp_active (the worker's own genuine
-        signal that both mechanisms are active for this task)."""
+        signal that both mechanisms are active for this task).
+
+        Secure Adaptive Clipping with Private Indicator Aggregation
+        slice: when `secure_adaptive_clipping_active`,
+        `masked_clipping_indicator`/`masked_clipping_indicator_checksum`
+        (already masked by the caller -- WorkerService._encode_and_mask_local_update,
+        the same convention masked_tensors/masked_weight already use;
+        this method never masks anything itself) are attached to the
+        wire message, and a real SignedAdaptiveClippingBinding is built
+        and signed with the SAME signing_identity as the outer envelope.
+        Deliberately takes no clear indicator value as input -- this
+        method cannot leak what it is never given. Reuses `clip_norm`
+        (already a parameter for the user-level attestation) as the
+        binding's own `current_clip_bound` -- the same signed bound this
+        round's clipping and indicator computation both used."""
         if self._signing_identity is None or self._sequence_store is None:
             raise SignedEnvelopeError(
                 "cannot submit a masked update without a signing_identity configured"
@@ -2284,7 +2375,10 @@ class GrpcCoordinatorClient:
                     "DP active"
                 )
             sample_privacy_payload = self._build_signed_sample_privacy_record_payload(
-                worker_id, task, sample_level_privacy, sample_privacy_decision,
+                worker_id,
+                task,
+                sample_level_privacy,
+                sample_privacy_decision,
                 is_hybrid=secure_user_level_dp_active,
             )
             sample_privacy_envelope = self._build_signed_sample_privacy_record_envelope(
@@ -2308,6 +2402,8 @@ class GrpcCoordinatorClient:
             signing_identity=self._signing_identity,
             sequence_number=sequence_number,
             nonce=make_nonce(),
+            masked_clipping_indicator=masked_clipping_indicator,
+            masked_clipping_indicator_checksum=masked_clipping_indicator_checksum,
         )
         envelope_fields = signed_envelope.fields
         envelope = self._worker_pb2.SignedWorkerEnvelope(
@@ -2364,6 +2460,8 @@ class GrpcCoordinatorClient:
             sample_privacy_record_hash=update_fields.sample_privacy_record_hash,
             issued_at=update_fields.issued_at,
             expires_at=update_fields.expires_at,
+            masked_clipping_indicator=update_fields.masked_clipping_indicator,
+            masked_clipping_indicator_checksum=update_fields.masked_clipping_indicator_checksum,
         )
         if secure_user_level_dp_active:
             attestation_fields = build_signed_user_level_privacy_attestation(
@@ -2417,6 +2515,44 @@ class GrpcCoordinatorClient:
                     signing_key_id=attestation_fields.signing_key_id,
                     payload_hash=attestation_fields.payload_hash,
                     signature=attestation_fields.signature,
+                )
+            )
+        if secure_adaptive_clipping_active:
+            binding_fields = build_signed_adaptive_clipping_binding(
+                worker_id=worker_id,
+                client_id=task.client_id,
+                run_id=roster.run_id,  # type: ignore[attr-defined]
+                round_id=roster.round_id,  # type: ignore[attr-defined]
+                task_id=task.task_id,
+                session_id=roster.session_id,  # type: ignore[attr-defined]
+                model_version=roster.model_version,  # type: ignore[attr-defined]
+                adaptive_configuration_hash=adaptive_configuration_hash,
+                clip_state_step_count=clip_state_step_count,
+                current_clip_bound=clip_norm,
+                provider=roster.provider,  # type: ignore[attr-defined]
+                operation_completed=True,
+                signing_identity=self._signing_identity,
+            )
+            masked_update.adaptive_clipping_binding.CopyFrom(
+                self._worker_pb2.SignedAdaptiveClippingBinding(
+                    schema_version=binding_fields.schema_version,
+                    worker_id=binding_fields.worker_id,
+                    client_id=binding_fields.client_id,
+                    run_id=binding_fields.run_id,
+                    round_id=binding_fields.round_id,
+                    task_id=binding_fields.task_id,
+                    session_id=binding_fields.session_id,
+                    model_version=binding_fields.model_version,
+                    adaptive_configuration_hash=binding_fields.adaptive_configuration_hash,
+                    clip_state_step_count=binding_fields.clip_state_step_count,
+                    current_clip_bound=binding_fields.current_clip_bound,
+                    provider=binding_fields.provider,
+                    operation_completed=binding_fields.operation_completed,
+                    issued_at=binding_fields.issued_at,
+                    expires_at=binding_fields.expires_at,
+                    signing_key_id=binding_fields.signing_key_id,
+                    payload_hash=binding_fields.payload_hash,
+                    signature=binding_fields.signature,
                 )
             )
         request = self._pb2.SubmitMaskedClientUpdateRequest(

@@ -175,7 +175,7 @@ class TaskDispatcher {
     // Returns the client_id of the canceled task, or std::nullopt if
     // this worker held no active lease at all.
     std::optional<std::string> cancel_lease_for_worker(const std::string& worker_id,
-                                                        double now_unix_s);
+                                                       double now_unix_s);
 
     [[nodiscard]] std::vector<ClientResultSubmission> completed_results() const;
     [[nodiscard]] std::size_t pending_count() const;

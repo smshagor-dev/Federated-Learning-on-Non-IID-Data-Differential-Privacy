@@ -40,6 +40,7 @@ class SignedWorkerSecurityEventBatch;
 class SecureAggregationKeyAdvertisement;
 class MaskedClientUpdate;
 class SignedUserLevelPrivacyAttestation;
+class SignedAdaptiveClippingBinding;
 }  // namespace fl::worker::v1
 
 namespace fl::coordinator::v1 {
@@ -81,7 +82,8 @@ struct EnvelopeVerificationResult {
 // docs/canonical-security-serialization.md's previously-flagged gap,
 // closed by this function) followed by canonical_envelope_metadata_json's
 // output.
-[[nodiscard]] std::string envelope_signing_bytes(const fl::worker::v1::SignedWorkerEnvelope& envelope);
+[[nodiscard]] std::string envelope_signing_bytes(
+    const fl::worker::v1::SignedWorkerEnvelope& envelope);
 
 // Heartbeat payload hash input (docs/payload-hashing.md's "Heartbeat
 // Hash"): binds to exactly the fields WorkerHeartbeatRequest carries on
@@ -94,7 +96,8 @@ struct EnvelopeVerificationResult {
 // heartbeat would need new proto fields nothing else uses yet, and is
 // left to a follow-on pass rather than invented here).
 [[nodiscard]] std::string heartbeat_payload_hash_input(
-    const fl::worker::v1::WorkerHeartbeatRequest& request, const fl::worker::v1::SignedWorkerEnvelope& envelope);
+    const fl::worker::v1::WorkerHeartbeatRequest& request,
+    const fl::worker::v1::SignedWorkerEnvelope& envelope);
 
 // Client result payload hash input (docs/payload-hashing.md's "Client
 // Result Hash"): binds to schema_version, run_id, round_id, task_id
@@ -157,9 +160,12 @@ struct PrivacyRecordPayloadHashResult {
 // (defends against a clock-skewed or malicious future-dated envelope
 // being accepted just because it hasn't technically expired yet).
 [[nodiscard]] EnvelopeVerificationResult verify_signed_envelope(
-    const fl::worker::v1::SignedWorkerEnvelope& envelope, int expected_message_type,
-    const std::string& payload_hash_input, const std::string& signing_public_key_hex,
-    double now_unix_s, double future_issued_tolerance_seconds);
+    const fl::worker::v1::SignedWorkerEnvelope& envelope,
+    int expected_message_type,
+    const std::string& payload_hash_input,
+    const std::string& signing_public_key_hex,
+    double now_unix_s,
+    double future_issued_tolerance_seconds);
 
 // SHA-256 hex digest of the raw bytes a hex-encoded Ed25519 public key
 // decodes to. Used by SigningKeyRegistry callers to compute
@@ -250,7 +256,8 @@ struct UserLevelPrivacyAttestationPayloadHashResult {
     std::string hash_input;  // valid only when ok == true
     std::string reason;      // set only when ok == false
 };
-[[nodiscard]] UserLevelPrivacyAttestationPayloadHashResult user_level_privacy_attestation_payload_hash_input(
+[[nodiscard]] UserLevelPrivacyAttestationPayloadHashResult
+user_level_privacy_attestation_payload_hash_input(
     const fl::worker::v1::SignedUserLevelPrivacyAttestation& attestation);
 
 // Mirrors coordinator_task_signing.cpp's coordinator_task_signing_bytes
@@ -281,6 +288,31 @@ struct UserLevelPrivacyAttestationPayloadHashResult {
 // bound to.
 [[nodiscard]] EnvelopeVerificationResult verify_user_level_privacy_attestation(
     const fl::worker::v1::SignedUserLevelPrivacyAttestation& attestation,
-    const std::string& signing_public_key_hex, double now_unix_s);
+    const std::string& signing_public_key_hex,
+    double now_unix_s);
+
+// Secure Adaptive Clipping with Private Indicator Aggregation slice.
+// Identical shape/discipline to the three UserLevelPrivacyAttestation
+// functions immediately above, for fl.worker.v1.SignedAdaptiveClippingBinding
+// instead -- see docs/secure-adaptive-clipping-semantics.md section 15.
+struct AdaptiveClippingBindingPayloadHashResult {
+    bool ok = false;
+    std::string hash_input;  // valid only when ok == true
+    std::string reason;      // set only when ok == false
+};
+[[nodiscard]] AdaptiveClippingBindingPayloadHashResult adaptive_clipping_binding_payload_hash_input(
+    const fl::worker::v1::SignedAdaptiveClippingBinding& binding);
+
+[[nodiscard]] std::string adaptive_clipping_binding_signing_bytes(
+    const fl::worker::v1::SignedAdaptiveClippingBinding& binding);
+
+// Same caller responsibilities as verify_user_level_privacy_attestation
+// above (this only proves the binding's own bytes are authentic and
+// unexpired -- the caller checks the signing key matches the outer
+// envelope's and every structural field binds to the same submission).
+[[nodiscard]] EnvelopeVerificationResult verify_adaptive_clipping_binding(
+    const fl::worker::v1::SignedAdaptiveClippingBinding& binding,
+    const std::string& signing_public_key_hex,
+    double now_unix_s);
 
 }  // namespace fl::coordinator

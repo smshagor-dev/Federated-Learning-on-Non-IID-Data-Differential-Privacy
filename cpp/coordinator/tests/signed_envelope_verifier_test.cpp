@@ -59,8 +59,11 @@ std::string sign_hex(EVP_PKEY* pkey, const std::string& message) {
     EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, pkey);
     unsigned char signature[64];
     std::size_t signature_len = sizeof(signature);
-    EVP_DigestSign(ctx, signature, &signature_len,
-                   reinterpret_cast<const unsigned char*>(message.data()), message.size());
+    EVP_DigestSign(ctx,
+                   signature,
+                   &signature_len,
+                   reinterpret_cast<const unsigned char*>(message.data()),
+                   message.size());
     EVP_MD_CTX_free(ctx);
     return hex_encode(signature, signature_len);
 }
@@ -133,16 +136,23 @@ int main() {
         envelope.set_signature(sign_hex(keypair.pkey, envelope_signing_bytes(envelope)));
 
         const auto result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
-            hash_input, keypair.public_key_hex, /*now_unix_s=*/1000.5,
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
+            hash_input,
+            keypair.public_key_hex,
+            /*now_unix_s=*/1000.5,
             /*future_issued_tolerance_seconds=*/5.0);
         check(result.valid, "a correctly signed, non-expired heartbeat envelope verifies");
         check(result.rejection_code.empty(), "a valid result carries no rejection_code");
 
         // Wrong message_type.
         const auto wrong_type_result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_CLIENT_RESULT),
-            hash_input, keypair.public_key_hex, 1000.5, 5.0);
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_CLIENT_RESULT),
+            hash_input,
+            keypair.public_key_hex,
+            1000.5,
+            5.0);
         check(!wrong_type_result.valid, "a mismatched expected message_type is rejected");
         check(wrong_type_result.rejection_code == "wrong_message_type",
               "message_type mismatch is reported with the stable code wrong_message_type");
@@ -153,8 +163,12 @@ int main() {
         tampered_request.set_current_task_id("task-99");
         const auto tampered_hash_input = heartbeat_payload_hash_input(tampered_request, envelope);
         const auto tampered_result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
-            tampered_hash_input, keypair.public_key_hex, 1000.5, 5.0);
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
+            tampered_hash_input,
+            keypair.public_key_hex,
+            1000.5,
+            5.0);
         check(!tampered_result.valid, "a tampered domain payload is rejected");
         check(tampered_result.rejection_code == "payload_hash_mismatch",
               "a tampered payload is reported as payload_hash_mismatch");
@@ -168,7 +182,10 @@ int main() {
         const auto envelope_tamper_result = verify_signed_envelope(
             tampered_envelope,
             static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
-            hash_input, keypair.public_key_hex, 1000.5, 5.0);
+            hash_input,
+            keypair.public_key_hex,
+            1000.5,
+            5.0);
         check(!envelope_tamper_result.valid,
               "tampering with envelope metadata after signing is rejected");
         check(envelope_tamper_result.rejection_code == "invalid_signature",
@@ -176,15 +193,23 @@ int main() {
 
         // Expired.
         const auto expired_result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
-            hash_input, keypair.public_key_hex, /*now_unix_s=*/1100.0, 5.0);
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
+            hash_input,
+            keypair.public_key_hex,
+            /*now_unix_s=*/1100.0,
+            5.0);
         check(!expired_result.valid, "an expired envelope is rejected");
-        check(expired_result.rejection_code == "expired", "expiry is reported with the code expired");
+        check(expired_result.rejection_code == "expired",
+              "expiry is reported with the code expired");
 
         // Future-issued beyond tolerance.
         const auto future_result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
-            hash_input, keypair.public_key_hex, /*now_unix_s=*/990.0,
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
+            hash_input,
+            keypair.public_key_hex,
+            /*now_unix_s=*/990.0,
             /*future_issued_tolerance_seconds=*/5.0);
         check(!future_result.valid,
               "an envelope issued further in the future than the tolerance is rejected");
@@ -195,8 +220,11 @@ int main() {
         // tolerance=5.0 -- issued_at is only 1s ahead of now, inside
         // tolerance, so this must still verify.
         const auto within_tolerance_result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
-            hash_input, keypair.public_key_hex, /*now_unix_s=*/999.0,
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
+            hash_input,
+            keypair.public_key_hex,
+            /*now_unix_s=*/999.0,
             /*future_issued_tolerance_seconds=*/5.0);
         check(within_tolerance_result.valid,
               "an envelope issued only slightly ahead of now, within tolerance, still verifies");
@@ -204,8 +232,12 @@ int main() {
         // Wrong key.
         auto wrong_keypair = generate_ed25519_keypair();
         const auto wrong_key_result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
-            hash_input, wrong_keypair.public_key_hex, 1000.5, 5.0);
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
+            hash_input,
+            wrong_keypair.public_key_hex,
+            1000.5,
+            5.0);
         check(!wrong_key_result.valid, "verifying against the wrong public key is rejected");
         check(wrong_key_result.rejection_code == "invalid_signature",
               "wrong-key rejection is reported as invalid_signature");
@@ -355,7 +387,8 @@ int main() {
         envelope.set_task_id("task-1");
         envelope.set_client_id("client-a");
         envelope.set_model_version("v2");
-        envelope.set_message_stream(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_STREAM_CLIENT_RESULT);
+        envelope.set_message_stream(
+            fl::worker::v1::SignedWorkerEnvelope::MESSAGE_STREAM_CLIENT_RESULT);
         envelope.set_sequence_number(1);
         envelope.set_issued_at(2000.0);
         envelope.set_expires_at(2060.0);
@@ -365,15 +398,23 @@ int main() {
         envelope.set_signature(sign_hex(keypair.pkey, envelope_signing_bytes(envelope)));
 
         const auto verify_result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_CLIENT_RESULT),
-            hash_result.hash_input, keypair.public_key_hex, /*now_unix_s=*/2000.5, 5.0);
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_CLIENT_RESULT),
+            hash_result.hash_input,
+            keypair.public_key_hex,
+            /*now_unix_s=*/2000.5,
+            5.0);
         check(verify_result.valid, "a correctly signed client-result envelope verifies");
 
         // A tampered result (different canonical hash input) must fail
         // payload_hash verification against the original signature.
         const auto tampered_verify_result = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_CLIENT_RESULT),
-            tampered_hash.hash_input, keypair.public_key_hex, 2000.5, 5.0);
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_CLIENT_RESULT),
+            tampered_hash.hash_input,
+            keypair.public_key_hex,
+            2000.5,
+            5.0);
         check(!tampered_verify_result.valid,
               "verifying a tampered result's hash input against the original envelope fails");
         check(tampered_verify_result.rejection_code == "payload_hash_mismatch",
@@ -470,9 +511,9 @@ int main() {
         {
             auto hybrid_record = make_record();
             hybrid_record.set_privacy_mode(fl::privacy::v1::PRIVACY_MODE_HYBRID_DP);
-            const auto hybrid_hash_result =
-                sample_privacy_record_payload_hash_input(hybrid_record);
-            check(hybrid_hash_result.ok, "a well-formed hybrid-mode privacy record hashes successfully");
+            const auto hybrid_hash_result = sample_privacy_record_payload_hash_input(hybrid_record);
+            check(hybrid_hash_result.ok,
+                  "a well-formed hybrid-mode privacy record hashes successfully");
             const std::string kGoldenHybridPrivacyRecordJson =
                 "{\"accountant_state_hash\":\"state-hash-def\",\"accountant_step\":42,"
                 "\"accountant_type\":1,\"algorithm\":\"fedavg\",\"budget_decision\":\"allowed\","
@@ -498,7 +539,8 @@ int main() {
         // Tamper: changing epsilon must change the hash input.
         auto tampered_epsilon = make_record();
         tampered_epsilon.set_epsilon(0.9);
-        const auto tampered_epsilon_hash = sample_privacy_record_payload_hash_input(tampered_epsilon);
+        const auto tampered_epsilon_hash =
+            sample_privacy_record_payload_hash_input(tampered_epsilon);
         check(tampered_epsilon_hash.hash_input != privacy_hash_result.hash_input,
               "changing epsilon changes the canonical privacy-record hash input");
 
@@ -541,18 +583,27 @@ int main() {
         privacy_envelope.set_nonce("privacy-envelope-nonce-1");
         privacy_envelope.set_signing_key_id("key-1");
         privacy_envelope.set_payload_hash(sha256_hex_for_test(privacy_hash_result.hash_input));
-        privacy_envelope.set_signature(sign_hex(keypair.pkey, envelope_signing_bytes(privacy_envelope)));
+        privacy_envelope.set_signature(
+            sign_hex(keypair.pkey, envelope_signing_bytes(privacy_envelope)));
 
         const auto privacy_verify_result = verify_signed_envelope(
             privacy_envelope,
-            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD),
-            privacy_hash_result.hash_input, keypair.public_key_hex, /*now_unix_s=*/2000.5, 5.0);
+            static_cast<int>(
+                fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD),
+            privacy_hash_result.hash_input,
+            keypair.public_key_hex,
+            /*now_unix_s=*/2000.5,
+            5.0);
         check(privacy_verify_result.valid, "a correctly signed privacy record envelope verifies");
 
         const auto tampered_privacy_verify = verify_signed_envelope(
             privacy_envelope,
-            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD),
-            tampered_epsilon_hash.hash_input, keypair.public_key_hex, 2000.5, 5.0);
+            static_cast<int>(
+                fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD),
+            tampered_epsilon_hash.hash_input,
+            keypair.public_key_hex,
+            2000.5,
+            5.0);
         check(!tampered_privacy_verify.valid,
               "a tampered privacy record's hash input fails verification against the original "
               "envelope");
@@ -594,7 +645,8 @@ int main() {
 
         request.mutable_privacy_record_envelope()->set_payload_hash("deadbeef");
         const auto with_envelope_hash = client_result_payload_hash_input(request);
-        check(with_envelope_hash.ok, "a client result with a privacy_record_envelope hashes successfully");
+        check(with_envelope_hash.ok,
+              "a client result with a privacy_record_envelope hashes successfully");
         check(with_envelope_hash.hash_input.find("\"privacy_record_payload_hash\":\"deadbeef\"") !=
                   std::string::npos,
               "the outer client-result hash binds to the privacy record envelope's payload_hash");
@@ -675,14 +727,22 @@ int main() {
 
         const auto verify_result = verify_signed_envelope(
             rotation_envelope,
-            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_KEY_ROTATION_REQUEST),
-            hash_result.hash_input, keypair.public_key_hex, /*now_unix_s=*/3000.5, 5.0);
+            static_cast<int>(
+                fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_KEY_ROTATION_REQUEST),
+            hash_result.hash_input,
+            keypair.public_key_hex,
+            /*now_unix_s=*/3000.5,
+            5.0);
         check(verify_result.valid, "a correctly signed rotation request envelope verifies");
 
         const auto tampered_verify = verify_signed_envelope(
             rotation_envelope,
-            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_KEY_ROTATION_REQUEST),
-            tampered_hash.hash_input, keypair.public_key_hex, 3000.5, 5.0);
+            static_cast<int>(
+                fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_KEY_ROTATION_REQUEST),
+            tampered_hash.hash_input,
+            keypair.public_key_hex,
+            3000.5,
+            5.0);
         check(!tampered_verify.valid,
               "a tampered rotation request's hash input fails verification against the "
               "original envelope");
@@ -728,7 +788,8 @@ int main() {
         // (signed_envelope.py) for the identical logical batch built by
         // make_batch() above.
         const std::string kGoldenBatchJson =
-            "{\"events\":[{\"actor_type\":\"WORKER\",\"event_type\":\"WORKER_KEY_ROTATION_ACCEPTED\","
+            "{\"events\":[{\"actor_type\":\"WORKER\",\"event_type\":\"WORKER_KEY_ROTATION_"
+            "ACCEPTED\","
             "\"outcome\":\"ACCEPTED\",\"reason_code\":\"\",\"request_id\":\"\",\"round_id\":0,"
             "\"run_id\":\"\",\"safe_actor_id\":\"worker-1\",\"safe_details\":{\"previous_key\":"
             "\"key-1\"},\"safe_signing_key_id\":\"key-2\",\"safe_subject_id\":\"key-2\","
@@ -786,18 +847,27 @@ int main() {
         batch_envelope.set_nonce("batch-envelope-nonce-1");
         batch_envelope.set_signing_key_id("key-1");
         batch_envelope.set_payload_hash(sha256_hex_for_test(hash_result.hash_input));
-        batch_envelope.set_signature(sign_hex(keypair.pkey, envelope_signing_bytes(batch_envelope)));
+        batch_envelope.set_signature(
+            sign_hex(keypair.pkey, envelope_signing_bytes(batch_envelope)));
 
         const auto verify_result = verify_signed_envelope(
             batch_envelope,
-            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURITY_EVENT_BATCH),
-            hash_result.hash_input, keypair.public_key_hex, /*now_unix_s=*/4000.5, 5.0);
+            static_cast<int>(
+                fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURITY_EVENT_BATCH),
+            hash_result.hash_input,
+            keypair.public_key_hex,
+            /*now_unix_s=*/4000.5,
+            5.0);
         check(verify_result.valid, "a correctly signed security-event batch envelope verifies");
 
         const auto tampered_verify = verify_signed_envelope(
             batch_envelope,
-            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURITY_EVENT_BATCH),
-            tampered_hash.hash_input, keypair.public_key_hex, 4000.5, 5.0);
+            static_cast<int>(
+                fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURITY_EVENT_BATCH),
+            tampered_hash.hash_input,
+            keypair.public_key_hex,
+            4000.5,
+            5.0);
         check(!tampered_verify.valid,
               "a tampered security-event batch's hash input fails verification against the "
               "original envelope");
@@ -834,21 +904,25 @@ int main() {
             attestation.set_fixed_weight(1);
             attestation.set_fixed_point_profile_hash("fp-profile-hash");
             attestation.set_tensor_manifest_hash("tensor-manifest-hash");
-            attestation.set_provider(fl::worker::v1::SECURE_AGGREGATION_PROVIDER_SECAGG_NO_DROPOUT_EXPERIMENTAL);
+            attestation.set_provider(
+                fl::worker::v1::SECURE_AGGREGATION_PROVIDER_SECAGG_NO_DROPOUT_EXPERIMENTAL);
             attestation.set_operation_completed(true);
             attestation.set_issued_at(1000.0);
             attestation.set_expires_at(1300.0);
             attestation.set_signing_key_id("worker-key-1");
             const auto hash_result = user_level_privacy_attestation_payload_hash_input(attestation);
             attestation.set_payload_hash(sha256_hex_for_test(hash_result.hash_input));
-            attestation.set_signature(sign_hex(pkey, user_level_privacy_attestation_signing_bytes(attestation)));
+            attestation.set_signature(
+                sign_hex(pkey, user_level_privacy_attestation_signing_bytes(attestation)));
             return attestation;
         };
 
         auto keypair = generate_ed25519_keypair();
         const auto valid = build_attestation(keypair.pkey);
-        const auto valid_result = verify_user_level_privacy_attestation(valid, keypair.public_key_hex, 1100.0);
-        check(valid_result.valid, "a genuinely signed user-level privacy attestation verifies successfully");
+        const auto valid_result =
+            verify_user_level_privacy_attestation(valid, keypair.public_key_hex, 1100.0);
+        check(valid_result.valid,
+              "a genuinely signed user-level privacy attestation verifies successfully");
 
         // Work Area AC: a cross-language golden fixture -- these exact
         // hex digests are independently hardcoded a second time in
@@ -862,16 +936,18 @@ int main() {
         // json.dumps(sort_keys=True) silently self-corrected a
         // dict-literal ordering mistake that this file's hand-written
         // (non-self-sorting) JSON construction did not.
-        check(valid.payload_hash() == "dccb624cb56e6743ec4823e5bab7c71da234635b7fe9d3056a6878e59309b4c1",
+        check(valid.payload_hash() ==
+                  "dccb624cb56e6743ec4823e5bab7c71da234635b7fe9d3056a6878e59309b4c1",
               "golden fixture: payload_hash matches the independently-computed Python value");
         check(sha256_hex_for_test(user_level_privacy_attestation_signing_bytes(valid)) ==
                   "4fcab078d846cfce70d72a59046c9e0d0f385a8ca7961af2c87de56dbd6d9c1d",
-              "golden fixture: sha256(signing_bytes) matches the independently-computed Python value");
+              "golden fixture: sha256(signing_bytes) matches the independently-computed Python "
+              "value");
 
         auto tampered_clip_norm = valid;
         tampered_clip_norm.set_clip_norm(999.0);
-        const auto tampered_result =
-            verify_user_level_privacy_attestation(tampered_clip_norm, keypair.public_key_hex, 1100.0);
+        const auto tampered_result = verify_user_level_privacy_attestation(
+            tampered_clip_norm, keypair.public_key_hex, 1100.0);
         check(!tampered_result.valid && tampered_result.rejection_code == "payload_hash_mismatch",
               "tampering with clip_norm after signing is rejected as payload_hash_mismatch");
 
@@ -881,9 +957,91 @@ int main() {
         check(!wrong_key_result.valid && wrong_key_result.rejection_code == "invalid_signature",
               "verifying against the wrong public key is rejected as invalid_signature");
 
-        const auto expired_result = verify_user_level_privacy_attestation(valid, keypair.public_key_hex, 1400.0);
+        const auto expired_result =
+            verify_user_level_privacy_attestation(valid, keypair.public_key_hex, 1400.0);
         check(!expired_result.valid && expired_result.rejection_code == "expired",
               "an attestation past its expires_at is rejected as expired");
+
+        EVP_PKEY_free(keypair.pkey);
+        EVP_PKEY_free(wrong_keypair.pkey);
+    }
+
+    // -- Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: adaptive_clipping_binding_payload_hash_input /
+    // verify_adaptive_clipping_binding ----------------------------------
+    {
+        using fl::coordinator::adaptive_clipping_binding_payload_hash_input;
+        using fl::coordinator::adaptive_clipping_binding_signing_bytes;
+        using fl::coordinator::verify_adaptive_clipping_binding;
+        using fl::worker::v1::SignedAdaptiveClippingBinding;
+
+        auto build_binding = [](EVP_PKEY* pkey) {
+            SignedAdaptiveClippingBinding binding;
+            binding.set_schema_version(1);
+            binding.set_worker_id("worker-1");
+            binding.set_client_id("client-1");
+            binding.set_run_id("run-1");
+            binding.set_round_id(7);
+            binding.set_task_id("task-1");
+            binding.set_session_id("session-1");
+            binding.set_model_version("v1");
+            binding.set_adaptive_configuration_hash("adaptive-config-hash-abc");
+            binding.set_clip_state_step_count(3);
+            binding.set_current_clip_bound(4.5);
+            binding.set_provider(
+                fl::worker::v1::SECURE_AGGREGATION_PROVIDER_SECAGG_NO_DROPOUT_EXPERIMENTAL);
+            binding.set_operation_completed(true);
+            binding.set_issued_at(1000.0);
+            binding.set_expires_at(1300.0);
+            binding.set_signing_key_id("worker-key-1");
+            const auto hash_result = adaptive_clipping_binding_payload_hash_input(binding);
+            binding.set_payload_hash(sha256_hex_for_test(hash_result.hash_input));
+            binding.set_signature(sign_hex(pkey, adaptive_clipping_binding_signing_bytes(binding)));
+            return binding;
+        };
+
+        auto keypair = generate_ed25519_keypair();
+        const auto valid = build_binding(keypair.pkey);
+        const auto valid_result =
+            verify_adaptive_clipping_binding(valid, keypair.public_key_hex, 1100.0);
+        check(valid_result.valid,
+              "a genuinely signed adaptive clipping binding verifies successfully");
+
+        // Cross-language golden fixture -- these exact hex digests are
+        // independently hardcoded a second time in
+        // python/tests/test_adaptive_clipping_binding.py's
+        // CrossLanguageGoldenFixtureTests, computed there from the
+        // identical field values, without either side reading the
+        // other's source (the same discipline
+        // user_level_privacy_attestation's own golden fixture above
+        // uses, which caught a real cross-language ordering bug in a
+        // prior slice).
+        check(valid.payload_hash() ==
+                  "e7146528bf87842d8dae057e40df1da3ab940f793d009be80dc3a0986fabeb7b",
+              "golden fixture: payload_hash matches the independently-computed Python value");
+        check(sha256_hex_for_test(adaptive_clipping_binding_signing_bytes(valid)) ==
+                  "55dabb7cfca8ff06dace9fdb7b09e79ed65fe40874f6be7ccb0a7feab492b7d8",
+              "golden fixture: sha256(signing_bytes) matches the independently-computed Python "
+              "value");
+
+        auto tampered_bound = valid;
+        tampered_bound.set_current_clip_bound(999.0);
+        const auto tampered_result =
+            verify_adaptive_clipping_binding(tampered_bound, keypair.public_key_hex, 1100.0);
+        check(
+            !tampered_result.valid && tampered_result.rejection_code == "payload_hash_mismatch",
+            "tampering with current_clip_bound after signing is rejected as payload_hash_mismatch");
+
+        auto wrong_keypair = generate_ed25519_keypair();
+        const auto wrong_key_result =
+            verify_adaptive_clipping_binding(valid, wrong_keypair.public_key_hex, 1100.0);
+        check(!wrong_key_result.valid && wrong_key_result.rejection_code == "invalid_signature",
+              "verifying against the wrong public key is rejected as invalid_signature");
+
+        const auto expired_result =
+            verify_adaptive_clipping_binding(valid, keypair.public_key_hex, 1400.0);
+        check(!expired_result.valid && expired_result.rejection_code == "expired",
+              "a binding past its expires_at is rejected as expired");
 
         EVP_PKEY_free(keypair.pkey);
         EVP_PKEY_free(wrong_keypair.pkey);

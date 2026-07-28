@@ -233,8 +233,8 @@ class SecureNoiseProvider final : public NoiseProvider {
 // function has no opinion on sum-vs-average, weighting, or the
 // contribution cap; it only adds noise of the std it's given).
 [[nodiscard]] TensorCollection add_central_gaussian_noise(const TensorCollection& aggregated_delta,
-                                                           double noise_std,
-                                                           NoiseProvider& noise_provider);
+                                                          double noise_std,
+                                                          NoiseProvider& noise_provider);
 
 // ---------------------------------------------------------------------
 // Dedicated user-level (client-level) RDP accountant. Deliberately not
@@ -328,7 +328,7 @@ class AdaptiveClipController {
     // Throws std::invalid_argument if cohort_size <= 0 or
     // over_threshold_count is not in [0, cohort_size].
     [[nodiscard]] AdaptiveClipStepResult step(std::uint64_t over_threshold_count,
-                                               std::uint64_t cohort_size);
+                                              std::uint64_t cohort_size);
 
     [[nodiscard]] double clip_value() const { return clip_value_; }
     [[nodiscard]] double epsilon() const { return accountant_.get_epsilon(); }

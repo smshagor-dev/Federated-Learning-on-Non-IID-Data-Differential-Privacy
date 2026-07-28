@@ -7,7 +7,7 @@ export function RunDashboard({ data }: { data: RunDashboardData | undefined }) {
       <article className="card">
         <h2 className="card-title">Run not found</h2>
         <p className="card-copy">
-          The requested run is unavailable from both the live API and the built-in demo dataset.
+          The requested run is unavailable from the live backend right now.
         </p>
       </article>
     );

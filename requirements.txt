@@ -13,6 +13,12 @@ PyYAML>=6.0
 # section.
 opacus>=1.5.0
 prometheus_client>=0.20.0
+# Secure worker/coordinator gRPC path: tests and the optional real
+# GrpcCoordinatorClient runtime import grpc directly.
+grpcio>=1.76,<2
+# Generated Python protobuf bindings import google.protobuf directly and
+# currently target protobuf 7.35.1.
+protobuf>=7.35.1,<8
 # Secure Transport and Worker Identity Hardening slice: pynacl backs
 # Ed25519 worker signing identities and capability-statement signing
 # (fl_platform.security); cryptography backs X.509 certificate loading

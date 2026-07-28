@@ -512,7 +512,8 @@ class GrpcCoordinatorClientSubmitMaskedUpdateTests(GrpcCoordinatorClientTestCase
             update = request.masked_update  # type: ignore[attr-defined]
             self.assertTrue(request.HasField("sample_privacy_record_payload"))  # type: ignore[attr-defined]
             self.assertEqual(
-                request.sample_privacy_record_payload.privacy_mode, 2  # type: ignore[attr-defined]
+                request.sample_privacy_record_payload.privacy_mode,
+                2,  # type: ignore[attr-defined]
             )  # PRIVACY_MODE_SAMPLE_LEVEL_DP, not HYBRID_DP
             self.assertFalse(update.HasField("user_level_attestation"))
 

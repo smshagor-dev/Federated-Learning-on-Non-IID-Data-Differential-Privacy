@@ -27,18 +27,16 @@ void check(bool condition, const std::string& label) {
 }  // namespace
 
 int main() {
-    using fl::coordinator::PeerIdentity;
     using fl::coordinator::has_service_identity;
     using fl::coordinator::has_worker_identity;
+    using fl::coordinator::PeerIdentity;
 
     {
         PeerIdentity identity;
         identity.authenticated = true;
         identity.uri_sans = {"spiffe://federated-platform/worker/worker-1"};
-        check(has_worker_identity(identity, "worker-1"),
-              "matching worker URI SAN is recognized");
-        check(!has_worker_identity(identity, "worker-2"),
-              "non-matching worker id is rejected");
+        check(has_worker_identity(identity, "worker-1"), "matching worker URI SAN is recognized");
+        check(!has_worker_identity(identity, "worker-2"), "non-matching worker id is rejected");
         check(!has_service_identity(identity, "coordinator"),
               "a worker identity is never mistaken for a service identity");
     }
@@ -49,8 +47,7 @@ int main() {
         identity.uri_sans = {"spiffe://federated-platform/service/coordinator"};
         check(has_service_identity(identity, "coordinator"),
               "matching service URI SAN is recognized");
-        check(!has_service_identity(identity, "go-api"),
-              "non-matching service name is rejected");
+        check(!has_service_identity(identity, "go-api"), "non-matching service name is rejected");
         check(!has_worker_identity(identity, "coordinator"),
               "a service identity is never mistaken for a worker identity");
     }

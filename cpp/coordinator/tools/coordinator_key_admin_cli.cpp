@@ -58,7 +58,8 @@ std::map<std::string, std::string> parse_flags(int argc, char** argv, int start)
     return flags;
 }
 
-std::string flag(const std::map<std::string, std::string>& flags, const std::string& name,
+std::string flag(const std::map<std::string, std::string>& flags,
+                 const std::string& name,
                  const std::string& default_value = "") {
     const auto it = flags.find(name);
     return it != flags.end() ? it->second : default_value;
@@ -72,8 +73,8 @@ void print_key_record(const fl::coordinator::CoordinatorSigningKeyRecord& record
               << " expires_at=" << record.expires_at_unix_s
               << " grace_period_end=" << record.grace_period_end_unix_s;
     if (record.status == fl::coordinator::CoordinatorSigningKeyStatus::kRevoked) {
-        std::cout << " revoked_at=" << record.revoked_at_unix_s
-                  << " revocation_reason=\"" << record.revocation_reason << "\"";
+        std::cout << " revoked_at=" << record.revoked_at_unix_s << " revocation_reason=\""
+                  << record.revocation_reason << "\"";
     }
     std::cout << "\n";
 }
@@ -90,8 +91,8 @@ int run_show(const std::map<std::string, std::string>& flags) {
         }
         const auto active = registry.active_key(now);
         std::cout << (active.has_value() ? "ACTIVE key present: " + active->signing_key_id
-                                        : std::string("no ACTIVE key -- production task issuance "
-                                                      "is currently stopped"))
+                                         : std::string("no ACTIVE key -- production task issuance "
+                                                       "is currently stopped"))
                   << "\n";
         return 0;
     } catch (const std::exception& error) {
@@ -144,7 +145,7 @@ int run_rotate(const std::map<std::string, std::string>& flags) {
             registry.find(current_key_id, now)->status !=
                 fl::coordinator::CoordinatorSigningKeyStatus::kActive) {
             std::cerr << "no ACTIVE current key found -- registering the new key as a fresh "
-                        "initial key (recovery path), not a rotation\n";
+                         "initial key (recovery path), not a rotation\n";
             (void)fl::coordinator::save_keyed_coordinator_signing_identity(new_identity, key_dir);
             fl::coordinator::InitialCoordinatorSigningKeyRegistration registration;
             registration.signing_key_id = new_identity.key_id;
@@ -164,15 +165,16 @@ int run_rotate(const std::map<std::string, std::string>& flags) {
             }
             (void)fl::coordinator::save_keyed_coordinator_signing_identity(new_identity, key_dir);
             const auto committed = registry.commit_rotation(rotation);
-            std::cout << "rotated coordinator signing key: " << committed.previous_key.signing_key_id
-                      << " (now " << to_string(committed.previous_key.status) << ") -> "
+            std::cout << "rotated coordinator signing key: "
+                      << committed.previous_key.signing_key_id << " (now "
+                      << to_string(committed.previous_key.status) << ") -> "
                       << committed.new_key.signing_key_id << " (ACTIVE)\n"
                       << "reason: " << reason << "\n";
         }
 
         if (!bundle_path.empty()) {
-            const auto bundle_result =
-                fl::coordinator::write_trusted_key_bundle(registry, bundle_path, identity_label, now);
+            const auto bundle_result = fl::coordinator::write_trusted_key_bundle(
+                registry, bundle_path, identity_label, now);
             if (!bundle_result.ok) {
                 std::cerr << "warning: trusted-key bundle regeneration failed: "
                           << bundle_result.reason << "\n";
@@ -182,7 +184,7 @@ int run_rotate(const std::map<std::string, std::string>& flags) {
                       << ") at " << bundle_path << "\n";
         } else {
             std::cout << "no --bundle-path given -- trusted-key bundle was NOT regenerated; "
-                        "workers will not see the new key until it is\n";
+                         "workers will not see the new key until it is\n";
         }
         return 0;
     } catch (const std::exception& error) {
@@ -209,11 +211,11 @@ int run_revoke(const std::map<std::string, std::string>& flags) {
         std::cout << "revoked coordinator signing key: " << record.signing_key_id << "\n";
         if (!registry.active_key(now).has_value()) {
             std::cout << "WARNING: no ACTIVE key remains -- production task issuance is now "
-                        "stopped until a new key is rotated in (see the 'rotate' subcommand)\n";
+                         "stopped until a new key is rotated in (see the 'rotate' subcommand)\n";
         }
         if (!bundle_path.empty()) {
-            const auto bundle_result =
-                fl::coordinator::write_trusted_key_bundle(registry, bundle_path, identity_label, now);
+            const auto bundle_result = fl::coordinator::write_trusted_key_bundle(
+                registry, bundle_path, identity_label, now);
             if (!bundle_result.ok) {
                 std::cerr << "warning: trusted-key bundle regeneration failed: "
                           << bundle_result.reason << "\n";
@@ -239,9 +241,8 @@ int run_regenerate_bundle(const std::map<std::string, std::string>& flags) {
     }
     try {
         fl::coordinator::CoordinatorSigningKeyRegistry registry(registry_path);
-        const auto result =
-            fl::coordinator::write_trusted_key_bundle(registry, bundle_path, identity_label,
-                                                       now_unix_s());
+        const auto result = fl::coordinator::write_trusted_key_bundle(
+            registry, bundle_path, identity_label, now_unix_s());
         if (!result.ok) {
             std::cerr << "error: " << result.reason << "\n";
             return 1;
@@ -257,14 +258,14 @@ int run_regenerate_bundle(const std::map<std::string, std::string>& flags) {
 
 void print_usage() {
     std::cout << "usage: coordinator_key_admin_cli <command> [--flag value ...]\n"
-                "commands:\n"
-                "  show               --registry-path <path>\n"
-                "  rotate             --registry-path <path> --key-dir <dir> "
-                "[--bundle-path <path>] [--expected-current-key-id <id>] "
-                "[--grace-period-seconds <n>] [--expires-in-seconds <n>] [--reason <text>]\n"
-                "  revoke             --registry-path <path> --key-id <id> "
-                "[--bundle-path <path>] [--reason <text>]\n"
-                "  regenerate-bundle  --registry-path <path> --bundle-path <path>\n";
+                 "commands:\n"
+                 "  show               --registry-path <path>\n"
+                 "  rotate             --registry-path <path> --key-dir <dir> "
+                 "[--bundle-path <path>] [--expected-current-key-id <id>] "
+                 "[--grace-period-seconds <n>] [--expires-in-seconds <n>] [--reason <text>]\n"
+                 "  revoke             --registry-path <path> --key-id <id> "
+                 "[--bundle-path <path>] [--reason <text>]\n"
+                 "  regenerate-bundle  --registry-path <path> --bundle-path <path>\n";
 }
 
 }  // namespace
@@ -277,10 +278,14 @@ int main(int argc, char** argv) {
     const std::string command = argv[1];
     const auto flags = parse_flags(argc, argv, 2);
 
-    if (command == "show") return run_show(flags);
-    if (command == "rotate") return run_rotate(flags);
-    if (command == "revoke") return run_revoke(flags);
-    if (command == "regenerate-bundle") return run_regenerate_bundle(flags);
+    if (command == "show")
+        return run_show(flags);
+    if (command == "rotate")
+        return run_rotate(flags);
+    if (command == "revoke")
+        return run_revoke(flags);
+    if (command == "regenerate-bundle")
+        return run_regenerate_bundle(flags);
 
     std::cerr << "unknown command: " << command << "\n";
     print_usage();

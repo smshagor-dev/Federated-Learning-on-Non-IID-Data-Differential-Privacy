@@ -65,7 +65,8 @@ class SecureAggregationSessionStore {
     // identical "mutate then persist synchronously" convention).
     void record_transition(const SecureAggregationSessionRecord& record);
 
-    [[nodiscard]] std::optional<SecureAggregationSessionRecord> find(const std::string& session_id) const;
+    [[nodiscard]] std::optional<SecureAggregationSessionRecord> find(
+        const std::string& session_id) const;
     [[nodiscard]] std::vector<SecureAggregationSessionRecord> all() const;
 
     // Work item 16 (restart abort): scans every persisted record; any

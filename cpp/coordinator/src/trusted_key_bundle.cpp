@@ -111,7 +111,8 @@ TrustedKeyBundleWriteResult write_trusted_key_bundle(const CoordinatorSigningKey
     body << "\"active_signing_key_id\":" << json_escape(active_signing_key_id) << ",";
     body << "\"keys\":[";
     for (std::size_t i = 0; i < trusted_keys.size(); ++i) {
-        if (i > 0) body << ",";
+        if (i > 0)
+            body << ",";
         const auto& key = trusted_keys[i];
         body << "{";
         body << "\"signing_key_id\":" << json_escape(key.signing_key_id) << ",";
@@ -157,8 +158,10 @@ TrustedKeyBundleWriteResult write_trusted_key_bundle(const CoordinatorSigningKey
         std::filesystem::remove(target, error_code);
         std::filesystem::rename(temp_path, target, error_code);
         if (error_code) {
-            return {false, 0,
-                   "failed to atomically move trusted-key bundle into place: " + error_code.message()};
+            return {
+                false,
+                0,
+                "failed to atomically move trusted-key bundle into place: " + error_code.message()};
         }
     }
     return {true, new_version, "ok"};

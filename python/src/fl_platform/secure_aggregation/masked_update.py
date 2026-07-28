@@ -24,6 +24,7 @@ import torch
 # different name, per this slice's "do not rename existing approved
 # responsibility-based components" instruction.
 from fl_platform.secure_aggregation.crypto import (  # noqa: E402 -- grouped with the other purpose-label import for clarity
+    HKDF_PURPOSE_CLIPPING_INDICATOR_MASK_STREAM,
     HKDF_PURPOSE_TENSOR_MASK_STREAM,
     HKDF_PURPOSE_WEIGHT_MASK_STREAM,
     compute_masked_values_checksum,
@@ -450,6 +451,58 @@ def mask_weighted_delta(
     return masked_tensors, masked_weight
 
 
+def mask_clipping_indicator(
+    indicator: int,
+    *,
+    self_worker_id: str,
+    self_private_key_raw: bytes,
+    roster: RosterContext,
+) -> tuple[int, str]:
+    """Secure Adaptive Clipping with Private Indicator Aggregation
+    slice: pairwise-masks a single scalar indicator (0 or 1, cast
+    directly into the ring -- never fixed-point scaled, see
+    docs/secure-adaptive-clipping-semantics.md section 14), under a
+    THIRD HKDF purpose label domain-separated from both
+    HKDF_PURPOSE_TENSOR_MASK_STREAM and HKDF_PURPOSE_WEIGHT_MASK_STREAM.
+    Structurally identical to mask_weighted_delta's own weight-masking
+    loop -- kept as a separate function (re-deriving shared secrets per
+    peer, rather than folded into mask_weighted_delta's existing loop)
+    so that function's own tested signature/behavior stays completely
+    unchanged; the extra shared-secret derivation cost is negligible
+    for a real cohort. Returns (masked_indicator, checksum). Raises
+    SecureCohortHandshakeMaskingError (via derive_x25519_shared_secret's
+    own existing rejection) on an all-zero/invalid peer public key.
+    Callers must validate `indicator` is exactly 0 or 1 BEFORE calling
+    this -- masking does not itself validate the input value."""
+    signed_masks: list[SignedMask] = []
+    for peer_worker_id, peer_public_key in sorted(roster.peer_public_keys.items()):
+        if peer_worker_id == self_worker_id:
+            continue
+        shared_secret = derive_x25519_shared_secret(
+            self_private_key_raw, peer_public_key
+        )
+        sign = resolve_pairwise_mask_sign(self_worker_id, peer_worker_id)
+        context = canonical_mask_context(
+            provider=roster.provider,
+            protocol_version=roster.protocol_version,
+            session_id=roster.session_id,
+            run_id=roster.run_id,
+            round_id=roster.round_id,
+            model_version=roster.model_version,
+            cohort_commitment=roster.cohort_commitment,
+            self_participant_id=self_worker_id,
+            peer_participant_id=peer_worker_id,
+            tensor_name="",
+        )
+        indicator_mask = derive_weight_mask(
+            shared_secret, HKDF_PURPOSE_CLIPPING_INDICATOR_MASK_STREAM, context
+        )
+        signed_masks.append(SignedMask(mask=indicator_mask, sign=sign))
+    masked_indicator = mask_encoded_value(indicator, signed_masks)
+    checksum = compute_masked_values_checksum([masked_indicator])
+    return masked_indicator, checksum
+
+
 def build_signed_masked_update(
     *,
     masked_tensors: dict[str, list[int]],
@@ -467,6 +520,8 @@ def build_signed_masked_update(
     nonce: str,
     issued_at: float | None = None,
     expires_at_seconds_from_now: float = 300.0,
+    masked_clipping_indicator: int = 0,
+    masked_clipping_indicator_checksum: str = "",
 ) -> tuple[MaskedClientUpdateFields, SignedEnvelope]:
     """Work Areas K/L/M: builds a real MaskedClientUpdate payload (every
     field checksummed/hashed for real, never a clear tensor value
@@ -519,6 +574,8 @@ def build_signed_masked_update(
         sample_privacy_record_hash=sample_privacy_record_hash,
         issued_at=now,
         expires_at=expires_at,
+        masked_clipping_indicator=masked_clipping_indicator,
+        masked_clipping_indicator_checksum=masked_clipping_indicator_checksum,
     )
     payload_hash = envelope_sha256_hex(
         masked_client_update_payload_hash_input(update_fields).encode("utf-8")
@@ -551,6 +608,7 @@ __all__ = [
     "build_signed_masked_update",
     "canonical_mask_context",
     "encode_weighted_delta",
+    "mask_clipping_indicator",
     "mask_weighted_delta",
     "validate_client_weight",
     "validate_local_delta",

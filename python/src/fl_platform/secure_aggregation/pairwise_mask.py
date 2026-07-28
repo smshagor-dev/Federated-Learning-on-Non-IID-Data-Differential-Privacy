@@ -36,7 +36,9 @@ def participant_sorts_before(a: str, b: str) -> bool:
     return a < b
 
 
-def resolve_pairwise_mask_sign(self_participant_id: str, peer_participant_id: str) -> str:
+def resolve_pairwise_mask_sign(
+    self_participant_id: str, peer_participant_id: str
+) -> str:
     if self_participant_id == peer_participant_id:
         raise ValueError(
             "resolve_pairwise_mask_sign: a participant cannot derive a pairwise mask "
@@ -63,7 +65,9 @@ class SignedMask:
     sign: str = MASK_SIGN_ADD
 
 
-def mask_encoded_value(base_encoded_value: int, pairwise_masks: list[SignedMask]) -> int:
+def mask_encoded_value(
+    base_encoded_value: int, pairwise_masks: list[SignedMask]
+) -> int:
     """``base_encoded_value`` is the *signed* quantized integer produced
     by ``fixed_point_encoding.encode_value`` (in ``[INT64_MIN,
     INT64_MAX]``). ``& UINT64_MASK`` performs the same two's-complement
@@ -74,7 +78,9 @@ def mask_encoded_value(base_encoded_value: int, pairwise_masks: list[SignedMask]
     """
     accumulator = base_encoded_value & UINT64_MASK
     for signed_mask in pairwise_masks:
-        accumulator = apply_pairwise_mask(accumulator, signed_mask.mask, signed_mask.sign)
+        accumulator = apply_pairwise_mask(
+            accumulator, signed_mask.mask, signed_mask.sign
+        )
     return accumulator
 
 

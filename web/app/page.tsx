@@ -13,20 +13,25 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const data = await getOverviewData();
+  const latestRunId = data?.runs[0]?.id;
 
   return (
     <AppShell
-      eyebrow="Platform overview"
-      title="Federated learning control room"
-      description="Overview of projects, experiments, and runs with a design language that is ready for future auth, live events, and privacy telemetry."
+      eyebrow="Research operations"
+      title="Research Evaluation Dashboard"
+      description="Monitor experiments, privacy posture, and reproducibility signals across the federated learning platform with live control-plane data and explicit degraded states when services are unavailable."
       actions={
         <>
           <Link className="button-primary" href="/experiments/new">
             New experiment
           </Link>
-          <Link className="button-secondary" href="/runs/run-demo-1">
-            Open live run view
-          </Link>
+          {latestRunId ? (
+            <Link className="button-secondary" href={`/runs/${latestRunId}`}>
+              Open latest run
+            </Link>
+          ) : (
+            <span className="button-secondary button-disabled">No live run loaded</span>
+          )}
         </>
       }
     >

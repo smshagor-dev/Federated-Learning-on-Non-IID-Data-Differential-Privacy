@@ -40,9 +40,12 @@ std::vector<std::uint8_t> hex_decode(const std::string& hex, bool& ok) {
     std::vector<std::uint8_t> bytes;
     bytes.reserve(hex.size() / 2);
     auto nibble = [&](char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F')
+            return c - 'A' + 10;
         return -1;
     };
     for (std::size_t i = 0; i < hex.size(); i += 2) {
@@ -62,9 +65,11 @@ CoordinatorSigningIdentity identity_from_seed(const std::string& seed_raw) {
         throw CoordinatorSigningIdentityError(
             "coordinator signing-key file does not contain a 32-byte Ed25519 seed");
     }
-    EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
-        EVP_PKEY_ED25519, nullptr, reinterpret_cast<const unsigned char*>(seed_raw.data()),
-        seed_raw.size());
+    EVP_PKEY* pkey =
+        EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519,
+                                     nullptr,
+                                     reinterpret_cast<const unsigned char*>(seed_raw.data()),
+                                     seed_raw.size());
     if (pkey == nullptr) {
         throw CoordinatorSigningIdentityError(
             "failed to reconstruct the coordinator's Ed25519 key from its persisted seed");
@@ -101,7 +106,8 @@ std::string coordinator_key_id_for(const std::string& public_key_hex) {
 CoordinatorSigningIdentity generate_coordinator_signing_identity() {
     EVP_PKEY_CTX* pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, nullptr);
     if (pctx == nullptr || EVP_PKEY_keygen_init(pctx) != 1) {
-        if (pctx != nullptr) EVP_PKEY_CTX_free(pctx);
+        if (pctx != nullptr)
+            EVP_PKEY_CTX_free(pctx);
         throw CoordinatorSigningIdentityError("failed to initialize Ed25519 key generation");
     }
     EVP_PKEY* pkey = nullptr;
@@ -116,7 +122,8 @@ CoordinatorSigningIdentity generate_coordinator_signing_identity() {
     std::array<unsigned char, kEd25519PublicKeyLength> public_key{};
     std::size_t public_key_len = public_key.size();
     const bool got_private = EVP_PKEY_get_raw_private_key(pkey, seed.data(), &seed_len) == 1;
-    const bool got_public = EVP_PKEY_get_raw_public_key(pkey, public_key.data(), &public_key_len) == 1;
+    const bool got_public =
+        EVP_PKEY_get_raw_public_key(pkey, public_key.data(), &public_key_len) == 1;
     EVP_PKEY_free(pkey);
     if (!got_private || !got_public) {
         throw CoordinatorSigningIdentityError(
@@ -156,7 +163,7 @@ CoordinatorSigningIdentity load_or_create_coordinator_signing_identity(
                 private_key_path);
         }
         file.write(identity.private_key_raw.data(),
-                  static_cast<std::streamsize>(identity.private_key_raw.size()));
+                   static_cast<std::streamsize>(identity.private_key_raw.size()));
     }
     // Best-effort restrictive permissions -- on Windows this call does
     // not exist and is simply skipped (advisory only, exactly the same
@@ -175,7 +182,8 @@ std::string sign_with_coordinator_identity(const CoordinatorSigningIdentity& ide
             "cannot sign: this CoordinatorSigningIdentity has no valid private key material");
     }
     EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
-        EVP_PKEY_ED25519, nullptr,
+        EVP_PKEY_ED25519,
+        nullptr,
         reinterpret_cast<const unsigned char*>(identity.private_key_raw.data()),
         identity.private_key_raw.size());
     if (pkey == nullptr) {
@@ -187,7 +195,9 @@ std::string sign_with_coordinator_identity(const CoordinatorSigningIdentity& ide
     std::size_t signature_len = signature.size();
     bool ok = false;
     if (EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, pkey) == 1) {
-        ok = EVP_DigestSign(ctx, signature.data(), &signature_len,
+        ok = EVP_DigestSign(ctx,
+                            signature.data(),
+                            &signature_len,
                             reinterpret_cast<const unsigned char*>(message.data()),
                             message.size()) == 1;
     }
@@ -200,18 +210,19 @@ std::string sign_with_coordinator_identity(const CoordinatorSigningIdentity& ide
 }
 
 std::string save_keyed_coordinator_signing_identity(const CoordinatorSigningIdentity& identity,
-                                                     const std::string& directory) {
+                                                    const std::string& directory) {
     const std::filesystem::path dir_path(directory);
     std::filesystem::create_directories(dir_path);
-    const std::filesystem::path target = dir_path / ("coordinator." + identity.key_id + ".signing-key.pem");
+    const std::filesystem::path target =
+        dir_path / ("coordinator." + identity.key_id + ".signing-key.pem");
     {
         std::ofstream file(target, std::ios::binary | std::ios::trunc);
         if (!file) {
-            throw CoordinatorSigningIdentityError(
-                "failed to write coordinator signing-key file: " + target.string());
+            throw CoordinatorSigningIdentityError("failed to write coordinator signing-key file: " +
+                                                  target.string());
         }
         file.write(identity.private_key_raw.data(),
-                  static_cast<std::streamsize>(identity.private_key_raw.size()));
+                   static_cast<std::streamsize>(identity.private_key_raw.size()));
     }
 #ifndef _WIN32
     chmod(target.string().c_str(), S_IRUSR | S_IWUSR);
@@ -236,10 +247,10 @@ CoordinatorSigningIdentity load_keyed_coordinator_signing_identity(const std::st
     buffer << file.rdbuf();
     const auto identity = identity_from_seed(buffer.str());
     if (identity.key_id != key_id) {
-        throw CoordinatorSigningIdentityError(
-            "coordinator signing-key file at " + target.string() +
-            " does not match the requested key_id '" + key_id + "' (derived '" + identity.key_id +
-            "') -- refusing to use a mismatched key");
+        throw CoordinatorSigningIdentityError("coordinator signing-key file at " + target.string() +
+                                              " does not match the requested key_id '" + key_id +
+                                              "' (derived '" + identity.key_id +
+                                              "') -- refusing to use a mismatched key");
     }
     return identity;
 }

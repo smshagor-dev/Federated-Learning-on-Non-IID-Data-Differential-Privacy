@@ -66,7 +66,8 @@ class IdempotencyStore {
         std::string rpc_name;
         std::string idempotency_key;
         bool operator<(const Key& other) const {
-            if (rpc_name != other.rpc_name) return rpc_name < other.rpc_name;
+            if (rpc_name != other.rpc_name)
+                return rpc_name < other.rpc_name;
             return idempotency_key < other.idempotency_key;
         }
     };

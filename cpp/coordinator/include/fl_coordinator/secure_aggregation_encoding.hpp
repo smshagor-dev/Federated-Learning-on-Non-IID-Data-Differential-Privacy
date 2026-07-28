@@ -58,9 +58,9 @@ std::string to_string(RoundingRule rule);
 // typed value, never a silently-clamped or silently-wrapped result.
 enum class EncodingRejectionReason {
     kNone,
-    kNonFiniteInput,       // NaN or +/-Infinity
-    kMagnitudeOverflow,    // |value| exceeds the profile's configured max_input_magnitude
-    kEncodedValueOverflow, // the quantized value does not fit in the signed decode range
+    kNonFiniteInput,        // NaN or +/-Infinity
+    kMagnitudeOverflow,     // |value| exceeds the profile's configured max_input_magnitude
+    kEncodedValueOverflow,  // the quantized value does not fit in the signed decode range
 };
 
 std::string to_string(EncodingRejectionReason reason);
@@ -192,6 +192,7 @@ struct EncodeResult {
 // bounds re-proof of its own, since by the time a real aggregate sum
 // reaches this function the proof already happened once, at
 // session-configuration time, for the whole run, not per decode call.
-[[nodiscard]] double decode_value(std::int64_t ring_value, const FixedPointEncodingProfile& profile);
+[[nodiscard]] double decode_value(std::int64_t ring_value,
+                                  const FixedPointEncodingProfile& profile);
 
 }  // namespace fl::coordinator

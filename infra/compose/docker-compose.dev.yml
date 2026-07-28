@@ -1,4 +1,23 @@
 services:
+  research-writer:
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-research-command.Dockerfile
+    environment:
+      FL_RESEARCH_ROOT: /var/control-plane/research
+      FL_RESEARCH_COMMAND_HOST: 0.0.0.0
+      FL_RESEARCH_COMMAND_PORT: 8090
+      FL_RESEARCH_COMMAND_SECRET: research-command-dev-secret
+      FL_RESEARCH_COMMAND_SERVICE_IDENTITY: go-control-plane
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - control-plane-data:/var/control-plane
+
   postgres:
     image: postgres:16
     environment:
@@ -13,7 +32,7 @@ services:
     volumes:
       - ../postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "5432:5432"
+      - "${FL_POSTGRES_HOST_PORT:-5432}:5432"
 
   redis:
     image: redis:7
@@ -23,7 +42,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "6379:6379"
+      - "${FL_REDIS_HOST_PORT:-6379}:6379"
 
   minio:
     image: minio/minio:latest
@@ -37,8 +56,8 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${FL_MINIO_API_HOST_PORT:-9000}:9000"
+      - "${FL_MINIO_CONSOLE_HOST_PORT:-9001}:9001"
 
   mlflow:
     build:
@@ -51,7 +70,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "5000:5000"
+      - "${FL_MLFLOW_HOST_PORT:-5000}:5000"
 
   # the Coordinator Runtime phase: the real gRPC coordinator server (cpp/coordinator/main.cpp),
   # built here with apt-installed gRPC/Protobuf since that combination is
@@ -64,6 +83,8 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/cpp-coordinator.Dockerfile
+    environment:
+      FL_ALLOW_INSECURE_DEVELOPMENT_TRANSPORT: "true"
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/50051' || exit 1"]
       interval: 15s
@@ -84,8 +105,15 @@ services:
         condition: service_healthy
       coordinator:
         condition: service_healthy
+      research-writer:
+        condition: service_healthy
     environment:
+      FL_ALLOW_INSECURE_DEVELOPMENT_TRANSPORT: "true"
       FL_COORDINATOR_ADDRESS: coordinator:50051
+      FL_CONTROL_PLANE_DATA_DIR: /var/control-plane
+      FL_RESEARCH_COMMAND_URL: http://research-writer:8090
+      FL_RESEARCH_COMMAND_SECRET: research-command-dev-secret
+      FL_RESEARCH_COMMAND_SERVICE_IDENTITY: go-control-plane
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 30s
@@ -93,7 +121,9 @@ services:
       retries: 3
       start_period: 10s
     ports:
-      - "8080:8080"
+      - "${FL_API_HOST_PORT:-8080}:8080"
+    volumes:
+      - control-plane-data:/var/control-plane
 
   web:
     build:
@@ -105,7 +135,7 @@ services:
     environment:
       FL_API_BASE_URL: http://api:8080
     ports:
-      - "3000:3000"
+      - "${FL_WEB_HOST_PORT:-3000}:3000"
 
   python-worker:
     build:
@@ -123,7 +153,7 @@ services:
     volumes:
       - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      - "${FL_PROMETHEUS_HOST_PORT:-9090}:9090"
 
   grafana:
     image: grafana/grafana:11.1.4
@@ -136,7 +166,7 @@ services:
       - ../grafana/dashboard-provisioning.yml:/etc/grafana/provisioning/dashboards/dashboard-provisioning.yml:ro
       - ../grafana/dashboards:/etc/grafana/provisioning/dashboards/security:ro
     ports:
-      - "3001:3000"
+      - "${FL_GRAFANA_HOST_PORT:-3001}:3000"
 
   otel-collector:
     image: otel/opentelemetry-collector:0.106.1
@@ -144,5 +174,8 @@ services:
     volumes:
       - ../otel/otel-collector.yaml:/etc/otelcol/config.yaml:ro
     ports:
-      - "4317:4317"
-      - "4318:4318"
+      - "${FL_OTEL_GRPC_HOST_PORT:-4317}:4317"
+      - "${FL_OTEL_HTTP_HOST_PORT:-4318}:4318"
+
+volumes:
+  control-plane-data:

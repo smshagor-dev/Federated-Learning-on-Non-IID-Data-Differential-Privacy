@@ -506,9 +506,7 @@ class KeyAdvertisementHashTests(unittest.TestCase):
         hash_input = secure_aggregation_key_advertisement_payload_hash_input(
             _key_advertisement_fields()
         )
-        self.assertLess(
-            hash_input.find('"client_id"'), hash_input.find('"worker_id"')
-        )
+        self.assertLess(hash_input.find('"client_id"'), hash_input.find('"worker_id"'))
 
     def test_determinism(self) -> None:
         a = secure_aggregation_key_advertisement_payload_hash_input(

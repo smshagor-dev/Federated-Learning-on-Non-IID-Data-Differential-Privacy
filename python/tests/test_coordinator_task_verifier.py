@@ -21,6 +21,7 @@ from fl_platform.security.coordinator_task_signing import (
     model_configuration_hash,
     personalization_configuration_hash,
     privacy_configuration_hash,
+    secure_adaptive_clipping_configuration_hash,
     secure_aggregation_configuration_hash,
     secure_user_level_dp_configuration_hash,
     task_payload_hash,
@@ -113,6 +114,9 @@ class _Harness:
                 self.task_fields
             ),
             secure_user_level_dp_configuration_hash=secure_user_level_dp_configuration_hash(
+                self.task_fields
+            ),
+            secure_adaptive_clipping_configuration_hash=secure_adaptive_clipping_configuration_hash(
                 self.task_fields
             ),
             task_payload_hash=task_payload_hash(self.task_fields),

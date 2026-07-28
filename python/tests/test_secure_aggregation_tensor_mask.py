@@ -19,7 +19,11 @@ from fl_platform.secure_aggregation.crypto import (
     derive_x25519_shared_secret,
     generate_x25519_keypair,
 )
-from fl_platform.secure_aggregation.fixed_point_encoding import FixedPointEncodingProfile, decode_value, encode_value
+from fl_platform.secure_aggregation.fixed_point_encoding import (
+    FixedPointEncodingProfile,
+    decode_value,
+    encode_value,
+)
 from fl_platform.secure_aggregation.pairwise_mask import (
     SignedMask,
     mask_encoded_value,
@@ -43,12 +47,18 @@ class MaskStreamDerivationTests(unittest.TestCase):
     def test_uniqueness_and_key_sensitivity(self) -> None:
         secret_a = b"shared-secret-a-32-bytes-long!!"
         secret_b = b"shared-secret-b-32-bytes-long!!"
-        stream_a = derive_tensor_mask_stream(secret_a, HKDF_PURPOSE_TENSOR_MASK_STREAM, "ctx", 8)
-        stream_b = derive_tensor_mask_stream(secret_b, HKDF_PURPOSE_TENSOR_MASK_STREAM, "ctx", 8)
+        stream_a = derive_tensor_mask_stream(
+            secret_a, HKDF_PURPOSE_TENSOR_MASK_STREAM, "ctx", 8
+        )
+        stream_b = derive_tensor_mask_stream(
+            secret_b, HKDF_PURPOSE_TENSOR_MASK_STREAM, "ctx", 8
+        )
         self.assertEqual(len(stream_a), 8)
         self.assertNotEqual(stream_a, stream_b)
 
-        stream_a_again = derive_tensor_mask_stream(secret_a, HKDF_PURPOSE_TENSOR_MASK_STREAM, "ctx", 8)
+        stream_a_again = derive_tensor_mask_stream(
+            secret_a, HKDF_PURPOSE_TENSOR_MASK_STREAM, "ctx", 8
+        )
         self.assertEqual(stream_a, stream_a_again)
 
         stream_a_different_context = derive_tensor_mask_stream(
@@ -59,16 +69,22 @@ class MaskStreamDerivationTests(unittest.TestCase):
         self.assertEqual(len(set(stream_a)), len(stream_a))
 
     def test_matches_the_frozen_golden_fixture(self) -> None:
-        with (FIXTURES_DIR / "tensor_mask_stream_golden.json").open(encoding="utf-8") as handle:
+        with (FIXTURES_DIR / "tensor_mask_stream_golden.json").open(
+            encoding="utf-8"
+        ) as handle:
             fixture = json.load(handle)
         i = fixture["input"]
         actual = derive_tensor_mask_stream(
-            bytes.fromhex(i["shared_secret_hex"]), i["purpose_label"], i["canonical_context"], i["element_count"]
+            bytes.fromhex(i["shared_secret_hex"]),
+            i["purpose_label"],
+            i["canonical_context"],
+            i["element_count"],
         )
         self.assertEqual(
             actual,
             fixture["expected_mask_values"],
-            "Python derive_tensor_mask_stream must match the same frozen reference value the C++ "
+            "Python derive_tensor_mask_stream must match the same frozen "
+            "reference value the C++ "
             "implementation is checked against",
         )
 
@@ -104,11 +120,17 @@ class SumMaskedTensorsTests(unittest.TestCase):
 class WeightMaskTests(unittest.TestCase):
     def test_matches_element_count_one_tensor_mask(self) -> None:
         secret = b"shared-secret-for-weight-32byte"
-        weight_mask1 = derive_weight_mask(secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, "ctx")
-        weight_mask2 = derive_weight_mask(secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, "ctx")
+        weight_mask1 = derive_weight_mask(
+            secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, "ctx"
+        )
+        weight_mask2 = derive_weight_mask(
+            secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, "ctx"
+        )
         self.assertEqual(weight_mask1, weight_mask2)
 
-        tensor_mask_same_inputs = derive_tensor_mask_stream(secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, "ctx", 1)
+        tensor_mask_same_inputs = derive_tensor_mask_stream(
+            secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, "ctx", 1
+        )
         self.assertEqual(weight_mask1, tensor_mask_same_inputs[0])
 
 
@@ -121,7 +143,9 @@ class CapstoneCancellationTests(unittest.TestCase):
     cancellation.
     """
 
-    def test_complete_cohort_recovers_exact_aggregate_and_dropout_breaks_it(self) -> None:
+    def test_complete_cohort_recovers_exact_aggregate_and_dropout_breaks_it(
+        self,
+    ) -> None:
         participants = ["worker-1", "worker-2", "worker-3", "worker-4"]
         true_values = [1.5, -2.25, 3.75, -1.0]
         profile = FixedPointEncodingProfile()
@@ -140,7 +164,11 @@ class CapstoneCancellationTests(unittest.TestCase):
                 shared_secrets[(a, b)] = secret_ab
 
         def lookup_shared_secret(a: str, b: str) -> bytes:
-            return shared_secrets[(a, b)] if participant_sorts_before(a, b) else shared_secrets[(b, a)]
+            return (
+                shared_secrets[(a, b)]
+                if participant_sorts_before(a, b)
+                else shared_secrets[(b, a)]
+            )
 
         session_id = "capstone-session-1"
         round_id = 7
@@ -157,34 +185,48 @@ class CapstoneCancellationTests(unittest.TestCase):
                 sign = resolve_pairwise_mask_sign(self_id, peer_id)
                 secret = lookup_shared_secret(self_id, peer_id)
                 ordered_pair = (
-                    f"{self_id}|{peer_id}" if participant_sorts_before(self_id, peer_id) else f"{peer_id}|{self_id}"
+                    f"{self_id}|{peer_id}"
+                    if participant_sorts_before(self_id, peer_id)
+                    else f"{peer_id}|{self_id}"
                 )
                 context = f"{session_id}|{round_id}|scalar|{ordered_pair}"
-                mask_value = derive_weight_mask(secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, context)
+                mask_value = derive_weight_mask(
+                    secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, context
+                )
                 pairwise_masks.append(SignedMask(mask_value, sign))
-            masked_contributions.append(mask_encoded_value(encoded.encoded, pairwise_masks))
+            masked_contributions.append(
+                mask_encoded_value(encoded.encoded, pairwise_masks)
+            )
 
         complete_sum = sum_masked_values(masked_contributions)
         # Reinterpret the ring value as signed 64-bit before decoding,
         # matching the C++ side's static_cast<int64_t>(uint64_t).
-        signed_sum = complete_sum if complete_sum < (1 << 63) else complete_sum - (1 << 64)
+        signed_sum = (
+            complete_sum if complete_sum < (1 << 63) else complete_sum - (1 << 64)
+        )
         decoded_complete = decode_value(signed_sum, profile)
         self.assertAlmostEqual(
             decoded_complete,
             sum(true_values),
             places=5,
-            msg="a complete, honest 4-participant cohort's real masked-sum must decode to the exact true aggregate",
+            msg=(
+                "a complete, honest 4-participant cohort's real masked-sum "
+                "must decode to the exact true aggregate"
+            ),
         )
 
         partial = masked_contributions[:3]
         partial_sum = sum_masked_values(partial)
-        signed_partial_sum = partial_sum if partial_sum < (1 << 63) else partial_sum - (1 << 64)
+        signed_partial_sum = (
+            partial_sum if partial_sum < (1 << 63) else partial_sum - (1 << 64)
+        )
         decoded_partial = decode_value(signed_partial_sum, profile)
         true_partial_sum = sum(true_values[:3])
         self.assertGreater(
             abs(decoded_partial - true_partial_sum),
             1e-3,
-            "an incomplete cohort's masked-sum must NOT recover the true partial aggregate -- this is the "
+            "an incomplete cohort's masked-sum must NOT recover the true "
+            "partial aggregate -- this is the "
             "concrete reason a post-freeze dropout must abort the session",
         )
 

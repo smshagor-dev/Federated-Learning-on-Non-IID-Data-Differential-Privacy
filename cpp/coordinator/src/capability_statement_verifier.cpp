@@ -142,8 +142,7 @@ std::string json_double(double value) {
     return text;
 }
 
-std::string json_string_array(
-    const google::protobuf::RepeatedPtrField<std::string>& values) {
+std::string json_string_array(const google::protobuf::RepeatedPtrField<std::string>& values) {
     std::string out = "[";
     for (int i = 0; i < values.size(); ++i) {
         if (i > 0) {
@@ -155,7 +154,9 @@ std::string json_string_array(
     return out;
 }
 
-std::string json_bool(bool value) { return value ? "true" : "false"; }
+std::string json_bool(bool value) {
+    return value ? "true" : "false";
+}
 
 std::vector<std::uint8_t> hex_decode(const std::string& hex, bool& ok) {
     ok = true;
@@ -166,9 +167,12 @@ std::vector<std::uint8_t> hex_decode(const std::string& hex, bool& ok) {
     std::vector<std::uint8_t> bytes;
     bytes.reserve(hex.size() / 2);
     auto nibble = [&](char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F')
+            return c - 'A' + 10;
         return -1;
     };
     for (std::size_t i = 0; i < hex.size(); i += 2) {
@@ -211,15 +215,17 @@ bool ed25519_verify(const std::vector<std::uint8_t>& public_key,
     if (public_key.size() != 32 || signature.size() != 64) {
         return false;
     }
-    EVP_PKEY* pkey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, public_key.data(),
-                                                 public_key.size());
+    EVP_PKEY* pkey = EVP_PKEY_new_raw_public_key(
+        EVP_PKEY_ED25519, nullptr, public_key.data(), public_key.size());
     if (pkey == nullptr) {
         return false;
     }
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     bool ok = false;
     if (EVP_DigestVerifyInit(ctx, nullptr, nullptr, nullptr, pkey) == 1) {
-        ok = EVP_DigestVerify(ctx, signature.data(), signature.size(),
+        ok = EVP_DigestVerify(ctx,
+                              signature.data(),
+                              signature.size(),
                               reinterpret_cast<const unsigned char*>(message.data()),
                               message.size()) == 1;
     }
@@ -249,8 +255,7 @@ std::string canonical_capability_payload_json(
     out << "\"nonce\":" << json_escape_string(statement.nonce()) << ",";
     out << "\"opacus_version\":" << json_escape_string(statement.opacus_version()) << ",";
     out << "\"schema_version\":" << statement.schema_version() << ",";
-    out << "\"secure_random_available\":" << json_bool(statement.secure_random_available())
-        << ",";
+    out << "\"secure_random_available\":" << json_bool(statement.secure_random_available()) << ",";
     out << "\"signing_key_id\":" << json_escape_string(statement.signing_key_id()) << ",";
     out << "\"software_version\":" << json_escape_string(statement.software_version()) << ",";
     out << "\"supported_accountants\":" << json_string_array(statement.supported_accountants())
@@ -262,8 +267,8 @@ std::string canonical_capability_payload_json(
     out << "\"supported_model_schema_hashes\":"
         << json_string_array(statement.supported_model_schema_hashes()) << ",";
     out << "\"supported_models\":" << json_string_array(statement.supported_models()) << ",";
-    out << "\"supported_privacy_modes\":"
-        << json_string_array(statement.supported_privacy_modes()) << ",";
+    out << "\"supported_privacy_modes\":" << json_string_array(statement.supported_privacy_modes())
+        << ",";
     out << "\"worker_id\":" << json_escape_string(statement.worker_id());
     out << "}";
     return out.str();

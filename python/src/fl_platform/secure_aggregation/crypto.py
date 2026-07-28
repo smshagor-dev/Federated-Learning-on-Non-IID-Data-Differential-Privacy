@@ -41,6 +41,11 @@ HKDF_DOMAIN_SALT = b"FL_PLATFORM_SECURE_AGGREGATION_HKDF_SALT_V1"
 
 HKDF_PURPOSE_TENSOR_MASK_STREAM = "tensor_mask_stream"
 HKDF_PURPOSE_WEIGHT_MASK_STREAM = "weight_mask_stream"
+# Secure Adaptive Clipping with Private Indicator Aggregation slice: a
+# third sibling label, domain-separating the masked clipping-indicator
+# scalar from both tensor and weight masks -- see
+# docs/secure-adaptive-clipping-semantics.md section 14.
+HKDF_PURPOSE_CLIPPING_INDICATOR_MASK_STREAM = "clipping_indicator_mask_stream"
 
 _COHORT_COMMITMENT_PREFIX = b"FL_PLATFORM_SECAGG_COHORT_COMMITMENT_V1\x00"
 _SESSION_CONFIG_HASH_PREFIX = b"FL_PLATFORM_SECAGG_SESSION_CONFIG_V1\x00"

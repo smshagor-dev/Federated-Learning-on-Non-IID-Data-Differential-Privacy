@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/bootstrap"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/research"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/transport/httpapi"
 )
 
@@ -105,6 +107,19 @@ func securityJournalPathFromEnv(envVar, dataDir, defaultName string) string {
 	return filepath.Join(dataDir, defaultName)
 }
 
+func newResearchCommandClient() research.CommandClient {
+	url := os.Getenv("FL_RESEARCH_COMMAND_URL")
+	secret := os.Getenv("FL_RESEARCH_COMMAND_SECRET")
+	if url == "" || secret == "" {
+		return nil
+	}
+	serviceIdentity := os.Getenv("FL_RESEARCH_COMMAND_SERVICE_IDENTITY")
+	if serviceIdentity == "" {
+		serviceIdentity = "go-control-plane"
+	}
+	return research.NewHTTPCommandClient(url, secret, serviceIdentity, 10*time.Second)
+}
+
 func main() {
 	dataDir := os.Getenv("FL_CONTROL_PLANE_DATA_DIR")
 	if dataDir == "" {
@@ -115,6 +130,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap persistent services: %v", err)
 	}
+	services.Research.SetWriter(newResearchCommandClient())
 	server := httpapi.NewServerWithSecurityJournalPaths(services,
 		securityJournalPathFromEnv("FL_GO_SECURITY_EVENT_JOURNAL_PATH", dataDir, "security-events.jsonl"),
 		securityJournalPathFromEnv("FL_GO_SECURITY_AUDIT_JOURNAL_PATH", dataDir, "security-audit.jsonl"))

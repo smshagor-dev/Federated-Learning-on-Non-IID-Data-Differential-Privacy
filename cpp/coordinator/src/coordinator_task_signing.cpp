@@ -9,8 +9,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <sstream>
 #include <vector>
@@ -41,10 +41,17 @@ constexpr char kPersonalizationConfigPrefix[] = "FL_PLATFORM_PERSONALIZATION_CON
 constexpr std::size_t kPersonalizationConfigPrefixLength = sizeof(kPersonalizationConfigPrefix) - 1;
 constexpr char kTaskPayloadPrefix[] = "FL_PLATFORM_COORDINATOR_TASK_PAYLOAD_V1\x00";
 constexpr std::size_t kTaskPayloadPrefixLength = sizeof(kTaskPayloadPrefix) - 1;
-constexpr char kSecureAggregationConfigPrefix[] = "FL_PLATFORM_SECURE_AGGREGATION_TASK_BINDING_V1\x00";
-constexpr std::size_t kSecureAggregationConfigPrefixLength = sizeof(kSecureAggregationConfigPrefix) - 1;
+constexpr char kSecureAggregationConfigPrefix[] =
+    "FL_PLATFORM_SECURE_AGGREGATION_TASK_BINDING_V1\x00";
+constexpr std::size_t kSecureAggregationConfigPrefixLength =
+    sizeof(kSecureAggregationConfigPrefix) - 1;
 constexpr char kSecureUserLevelDpConfigPrefix[] = "FL_PLATFORM_SECURE_USER_LEVEL_DP_CONFIG_V1\x00";
-constexpr std::size_t kSecureUserLevelDpConfigPrefixLength = sizeof(kSecureUserLevelDpConfigPrefix) - 1;
+constexpr std::size_t kSecureUserLevelDpConfigPrefixLength =
+    sizeof(kSecureUserLevelDpConfigPrefix) - 1;
+constexpr char kSecureAdaptiveClippingConfigPrefix[] =
+    "FL_PLATFORM_SECURE_ADAPTIVE_CLIPPING_CONFIG_V1\x00";
+constexpr std::size_t kSecureAdaptiveClippingConfigPrefixLength =
+    sizeof(kSecureAdaptiveClippingConfigPrefix) - 1;
 
 // -- JSON/hash helpers -- deliberately a local copy, matching this
 // codebase's established convention (see signed_envelope_verifier.cpp's
@@ -193,9 +200,12 @@ std::vector<std::uint8_t> hex_decode(const std::string& hex, bool& ok) {
     std::vector<std::uint8_t> bytes;
     bytes.reserve(hex.size() / 2);
     auto nibble = [&](char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F')
+            return c - 'A' + 10;
         return -1;
     };
     for (std::size_t i = 0; i < hex.size(); i += 2) {
@@ -222,19 +232,22 @@ std::string sha256_hex(const std::string& message) {
 }
 
 bool ed25519_verify(const std::vector<std::uint8_t>& public_key,
-                    const std::vector<std::uint8_t>& signature, const std::string& message) {
+                    const std::vector<std::uint8_t>& signature,
+                    const std::string& message) {
     if (public_key.size() != 32 || signature.size() != 64) {
         return false;
     }
-    EVP_PKEY* pkey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, public_key.data(),
-                                                 public_key.size());
+    EVP_PKEY* pkey = EVP_PKEY_new_raw_public_key(
+        EVP_PKEY_ED25519, nullptr, public_key.data(), public_key.size());
     if (pkey == nullptr) {
         return false;
     }
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     bool ok = false;
     if (EVP_DigestVerifyInit(ctx, nullptr, nullptr, nullptr, pkey) == 1) {
-        ok = EVP_DigestVerify(ctx, signature.data(), signature.size(),
+        ok = EVP_DigestVerify(ctx,
+                              signature.data(),
+                              signature.size(),
                               reinterpret_cast<const unsigned char*>(message.data()),
                               message.size()) == 1;
     }
@@ -244,14 +257,15 @@ bool ed25519_verify(const std::vector<std::uint8_t>& public_key,
 }
 
 bool all_finite(std::initializer_list<double> values) {
-    return std::all_of(values.begin(), values.end(),
-                       [](double value) { return std::isfinite(value); });
+    return std::all_of(
+        values.begin(), values.end(), [](double value) { return std::isfinite(value); });
 }
 
 std::string json_shape_array(const google::protobuf::RepeatedField<std::uint64_t>& shape) {
     std::string out = "[";
     for (int i = 0; i < shape.size(); ++i) {
-        if (i > 0) out += ",";
+        if (i > 0)
+            out += ",";
         out += std::to_string(shape.Get(i));
     }
     out += "]";
@@ -261,7 +275,8 @@ std::string json_shape_array(const google::protobuf::RepeatedField<std::uint64_t
 std::string json_string_array(const google::protobuf::RepeatedPtrField<std::string>& values) {
     std::string out = "[";
     for (int i = 0; i < values.size(); ++i) {
-        if (i > 0) out += ",";
+        if (i > 0)
+            out += ",";
         out += json_escape_string(values.Get(i));
     }
     out += "]";
@@ -298,8 +313,8 @@ TaskHashResult make_error(std::string reason) {
 }  // namespace
 
 TaskHashResult training_configuration_hash(const fl::coordinator::v1::ClientTrainingTask& task) {
-    if (!all_finite({task.learning_rate(), task.momentum(), task.weight_decay(),
-                     task.fedprox_mu()})) {
+    if (!all_finite(
+            {task.learning_rate(), task.momentum(), task.weight_decay(), task.fedprox_mu()})) {
         return make_error("a NaN or infinite value cannot be hashed (training configuration)");
     }
     std::string prefix(kTrainingConfigPrefix, kTrainingConfigPrefixLength);
@@ -321,7 +336,8 @@ TaskHashResult model_configuration_hash(const fl::coordinator::v1::ClientTrainin
     std::ostringstream tensors;
     tensors << "[";
     for (int i = 0; i < task.task().model_manifest_size(); ++i) {
-        if (i > 0) tensors << ",";
+        if (i > 0)
+            tensors << ",";
         tensors << json_tensor_descriptor(task.task().model_manifest(i));
     }
     tensors << "]";
@@ -365,7 +381,9 @@ TaskHashResult privacy_configuration_hash(const fl::coordinator::v1::ClientTrain
         return make_result(prefix + "{\"sample_level_dp_active\":false}");
     }
     const auto& privacy = task.sample_level_privacy();
-    if (!all_finite({privacy.noise_multiplier(), privacy.max_grad_norm(), privacy.target_delta(),
+    if (!all_finite({privacy.noise_multiplier(),
+                     privacy.max_grad_norm(),
+                     privacy.target_delta(),
                      privacy.epsilon_budget()})) {
         return make_error("a NaN or infinite value cannot be hashed (privacy configuration)");
     }
@@ -397,7 +415,8 @@ TaskHashResult personalization_configuration_hash(
     return make_result(prefix + out.str());
 }
 
-TaskHashResult secure_aggregation_configuration_hash(const fl::coordinator::v1::ClientTrainingTask& task) {
+TaskHashResult secure_aggregation_configuration_hash(
+    const fl::coordinator::v1::ClientTrainingTask& task) {
     std::string prefix(kSecureAggregationConfigPrefix, kSecureAggregationConfigPrefixLength);
     // Alphabetical key order, matching privacy_configuration_hash's
     // identical convention -- secure_aggregation_active is not first
@@ -407,26 +426,33 @@ TaskHashResult secure_aggregation_configuration_hash(const fl::coordinator::v1::
         return make_result(prefix + "{\"secure_aggregation_active\":false}");
     }
     const auto& binding = task.secure_aggregation();
-    if (!all_finite({binding.key_advertisement_deadline_unix_s(), binding.masked_update_deadline_unix_s(),
-                     binding.session_expiry_unix_s(), binding.max_absolute_update_bound()})) {
-        return make_error("a NaN or infinite value cannot be hashed (secure aggregation task binding)");
+    if (!all_finite({binding.key_advertisement_deadline_unix_s(),
+                     binding.masked_update_deadline_unix_s(),
+                     binding.session_expiry_unix_s(),
+                     binding.max_absolute_update_bound()})) {
+        return make_error(
+            "a NaN or infinite value cannot be hashed (secure aggregation task binding)");
     }
     std::ostringstream out;
     out << "{";
-    out << "\"key_advertisement_deadline_unix_s\":" << json_double(binding.key_advertisement_deadline_unix_s())
+    out << "\"key_advertisement_deadline_unix_s\":"
+        << json_double(binding.key_advertisement_deadline_unix_s()) << ",";
+    out << "\"masked_update_deadline_unix_s\":"
+        << json_double(binding.masked_update_deadline_unix_s()) << ",";
+    out << "\"max_absolute_update_bound\":" << json_double(binding.max_absolute_update_bound())
         << ",";
-    out << "\"masked_update_deadline_unix_s\":" << json_double(binding.masked_update_deadline_unix_s()) << ",";
-    out << "\"max_absolute_update_bound\":" << json_double(binding.max_absolute_update_bound()) << ",";
     out << "\"max_aggregate_bound\":" << binding.max_aggregate_bound() << ",";
     out << "\"max_client_weight\":" << binding.max_client_weight() << ",";
     out << "\"minimum_cohort_size\":" << binding.minimum_cohort_size() << ",";
     out << "\"privacy_incompatibility_reason\":"
         << json_escape_string(binding.privacy_incompatibility_reason()) << ",";
-    out << "\"privacy_mode_compatible\":" << (binding.privacy_mode_compatible() ? "true" : "false") << ",";
+    out << "\"privacy_mode_compatible\":" << (binding.privacy_mode_compatible() ? "true" : "false")
+        << ",";
     out << "\"protocol_version\":" << binding.protocol_version() << ",";
     out << "\"provider\":" << static_cast<int>(binding.provider()) << ",";
     out << "\"secure_aggregation_active\":true,";
-    out << "\"session_configuration_hash\":" << json_escape_string(binding.session_configuration_hash()) << ",";
+    out << "\"session_configuration_hash\":"
+        << json_escape_string(binding.session_configuration_hash()) << ",";
     out << "\"session_expiry_unix_s\":" << json_double(binding.session_expiry_unix_s()) << ",";
     out << "\"session_id\":" << json_escape_string(binding.session_id()) << ",";
     out << "\"tensor_chunk_size\":" << binding.tensor_chunk_size();
@@ -434,41 +460,95 @@ TaskHashResult secure_aggregation_configuration_hash(const fl::coordinator::v1::
     return make_result(prefix + out.str());
 }
 
-TaskHashResult secure_user_level_dp_configuration_hash(const fl::coordinator::v1::ClientTrainingTask& task) {
+TaskHashResult secure_user_level_dp_configuration_hash(
+    const fl::coordinator::v1::ClientTrainingTask& task) {
     std::string prefix(kSecureUserLevelDpConfigPrefix, kSecureUserLevelDpConfigPrefixLength);
-    if (!task.has_secure_aggregation() || !task.secure_aggregation().secure_user_level_dp_active()) {
+    if (!task.has_secure_aggregation() ||
+        !task.secure_aggregation().secure_user_level_dp_active()) {
         return make_result(prefix + "{\"secure_user_level_dp_active\":false}");
     }
     const auto& binding = task.secure_aggregation();
-    if (!all_finite({binding.secure_user_level_clip_norm(), binding.secure_user_level_quantization_margin(),
-                     binding.secure_user_level_effective_sensitivity(), binding.secure_user_level_noise_multiplier(),
-                     binding.secure_user_level_target_delta(), binding.secure_user_level_max_epsilon()})) {
-        return make_error("a NaN or infinite value cannot be hashed (secure user-level DP configuration)");
+    if (!all_finite({binding.secure_user_level_clip_norm(),
+                     binding.secure_user_level_quantization_margin(),
+                     binding.secure_user_level_effective_sensitivity(),
+                     binding.secure_user_level_noise_multiplier(),
+                     binding.secure_user_level_target_delta(),
+                     binding.secure_user_level_max_epsilon()})) {
+        return make_error(
+            "a NaN or infinite value cannot be hashed (secure user-level DP configuration)");
     }
     std::ostringstream out;
     out << "{";
-    out << "\"secure_user_level_adjacency_model\":" << static_cast<int>(binding.secure_user_level_adjacency_model())
+    out << "\"secure_user_level_adjacency_model\":"
+        << static_cast<int>(binding.secure_user_level_adjacency_model()) << ",";
+    out << "\"secure_user_level_clip_norm\":" << json_double(binding.secure_user_level_clip_norm())
         << ",";
-    out << "\"secure_user_level_clip_norm\":" << json_double(binding.secure_user_level_clip_norm()) << ",";
     out << "\"secure_user_level_dp_active\":true,";
     out << "\"secure_user_level_effective_sensitivity\":"
         << json_double(binding.secure_user_level_effective_sensitivity()) << ",";
     out << "\"secure_user_level_fixed_weight\":" << binding.secure_user_level_fixed_weight() << ",";
-    out << "\"secure_user_level_max_epsilon\":" << json_double(binding.secure_user_level_max_epsilon()) << ",";
-    out << "\"secure_user_level_noise_multiplier\":" << json_double(binding.secure_user_level_noise_multiplier())
-        << ",";
+    out << "\"secure_user_level_max_epsilon\":"
+        << json_double(binding.secure_user_level_max_epsilon()) << ",";
+    out << "\"secure_user_level_noise_multiplier\":"
+        << json_double(binding.secure_user_level_noise_multiplier()) << ",";
     out << "\"secure_user_level_quantization_margin\":"
         << json_double(binding.secure_user_level_quantization_margin()) << ",";
     out << "\"secure_user_level_sampling_assumption\":"
         << static_cast<int>(binding.secure_user_level_sampling_assumption()) << ",";
-    out << "\"secure_user_level_target_delta\":" << json_double(binding.secure_user_level_target_delta());
+    out << "\"secure_user_level_target_delta\":"
+        << json_double(binding.secure_user_level_target_delta());
+    out << "}";
+    return make_result(prefix + out.str());
+}
+
+// Secure Adaptive Clipping with Private Indicator Aggregation slice.
+// A third sibling hash, identical structure/discipline to
+// secure_user_level_dp_configuration_hash above -- see
+// docs/secure-adaptive-clipping-semantics.md section 12.
+TaskHashResult secure_adaptive_clipping_configuration_hash(
+    const fl::coordinator::v1::ClientTrainingTask& task) {
+    std::string prefix(kSecureAdaptiveClippingConfigPrefix,
+                       kSecureAdaptiveClippingConfigPrefixLength);
+    if (!task.has_secure_aggregation() ||
+        !task.secure_aggregation().secure_adaptive_clipping_active()) {
+        return make_result(prefix + "{\"secure_adaptive_clipping_active\":false}");
+    }
+    const auto& binding = task.secure_aggregation();
+    if (!all_finite({binding.secure_adaptive_clipping_current_bound(),
+                     binding.secure_adaptive_clipping_min_bound(),
+                     binding.secure_adaptive_clipping_max_bound(),
+                     binding.secure_adaptive_clipping_target_quantile(),
+                     binding.secure_adaptive_clipping_learning_rate(),
+                     binding.secure_adaptive_clipping_indicator_noise_multiplier()})) {
+        return make_error(
+            "a NaN or infinite value cannot be hashed (secure adaptive clipping configuration)");
+    }
+    std::ostringstream out;
+    out << "{";
+    out << "\"secure_adaptive_clipping_active\":true,";
+    out << "\"secure_adaptive_clipping_clip_state_step_count\":"
+        << binding.secure_adaptive_clipping_clip_state_step_count() << ",";
+    out << "\"secure_adaptive_clipping_current_bound\":"
+        << json_double(binding.secure_adaptive_clipping_current_bound()) << ",";
+    out << "\"secure_adaptive_clipping_indicator_definition\":"
+        << static_cast<int>(binding.secure_adaptive_clipping_indicator_definition()) << ",";
+    out << "\"secure_adaptive_clipping_indicator_noise_multiplier\":"
+        << json_double(binding.secure_adaptive_clipping_indicator_noise_multiplier()) << ",";
+    out << "\"secure_adaptive_clipping_learning_rate\":"
+        << json_double(binding.secure_adaptive_clipping_learning_rate()) << ",";
+    out << "\"secure_adaptive_clipping_max_bound\":"
+        << json_double(binding.secure_adaptive_clipping_max_bound()) << ",";
+    out << "\"secure_adaptive_clipping_min_bound\":"
+        << json_double(binding.secure_adaptive_clipping_min_bound()) << ",";
+    out << "\"secure_adaptive_clipping_target_quantile\":"
+        << json_double(binding.secure_adaptive_clipping_target_quantile());
     out << "}";
     return make_result(prefix + out.str());
 }
 
 TaskHashResult task_payload_hash(const fl::coordinator::v1::ClientTrainingTask& task) {
-    if (!all_finite({task.learning_rate(), task.momentum(), task.weight_decay(),
-                     task.fedprox_mu()})) {
+    if (!all_finite(
+            {task.learning_rate(), task.momentum(), task.weight_decay(), task.fedprox_mu()})) {
         return make_error("a NaN or infinite value cannot be hashed (task payload)");
     }
     std::string prefix(kTaskPayloadPrefix, kTaskPayloadPrefixLength);
@@ -495,7 +575,8 @@ TaskHashResult task_payload_hash(const fl::coordinator::v1::ClientTrainingTask& 
     return make_result(prefix + out.str());
 }
 
-std::string coordinator_task_signing_bytes(const fl::coordinator::v1::SignedCoordinatorTask& signed_task) {
+std::string coordinator_task_signing_bytes(
+    const fl::coordinator::v1::SignedCoordinatorTask& signed_task) {
     std::string bytes(kDomainSeparationPrefix, kDomainSeparationPrefixLength);
     std::ostringstream out;
     out << "{";
@@ -515,6 +596,8 @@ std::string coordinator_task_signing_bytes(const fl::coordinator::v1::SignedCoor
     out << "\"privacy_configuration_hash\":"
         << json_escape_string(signed_task.privacy_configuration_hash()) << ",";
     out << "\"schema_version\":" << signed_task.schema_version() << ",";
+    out << "\"secure_adaptive_clipping_configuration_hash\":"
+        << json_escape_string(signed_task.secure_adaptive_clipping_configuration_hash()) << ",";
     out << "\"secure_aggregation_configuration_hash\":"
         << json_escape_string(signed_task.secure_aggregation_configuration_hash()) << ",";
     out << "\"secure_user_level_dp_configuration_hash\":"
@@ -544,15 +627,26 @@ SignCoordinatorTaskResult sign_coordinator_task(const fl::coordinator::v1::Clien
     const auto personalization = personalization_configuration_hash(task);
     const auto secure_aggregation = secure_aggregation_configuration_hash(task);
     const auto secure_user_level_dp = secure_user_level_dp_configuration_hash(task);
+    const auto secure_adaptive_clipping = secure_adaptive_clipping_configuration_hash(task);
     const auto payload = task_payload_hash(task);
-    if (!training.ok) return {false, training.reason};
-    if (!model.ok) return {false, model.reason};
-    if (!dataset.ok) return {false, dataset.reason};
-    if (!privacy.ok) return {false, privacy.reason};
-    if (!personalization.ok) return {false, personalization.reason};
-    if (!secure_aggregation.ok) return {false, secure_aggregation.reason};
-    if (!secure_user_level_dp.ok) return {false, secure_user_level_dp.reason};
-    if (!payload.ok) return {false, payload.reason};
+    if (!training.ok)
+        return {false, training.reason};
+    if (!model.ok)
+        return {false, model.reason};
+    if (!dataset.ok)
+        return {false, dataset.reason};
+    if (!privacy.ok)
+        return {false, privacy.reason};
+    if (!personalization.ok)
+        return {false, personalization.reason};
+    if (!secure_aggregation.ok)
+        return {false, secure_aggregation.reason};
+    if (!secure_user_level_dp.ok)
+        return {false, secure_user_level_dp.reason};
+    if (!secure_adaptive_clipping.ok)
+        return {false, secure_adaptive_clipping.reason};
+    if (!payload.ok)
+        return {false, payload.reason};
 
     out.set_schema_version(kSignedCoordinatorTaskSchemaVersion);
     out.set_coordinator_signing_key_id(identity.key_id);
@@ -571,6 +665,7 @@ SignCoordinatorTaskResult sign_coordinator_task(const fl::coordinator::v1::Clien
     out.set_personalization_configuration_hash(personalization.hash_hex);
     out.set_secure_aggregation_configuration_hash(secure_aggregation.hash_hex);
     out.set_secure_user_level_dp_configuration_hash(secure_user_level_dp.hash_hex);
+    out.set_secure_adaptive_clipping_configuration_hash(secure_adaptive_clipping.hash_hex);
     out.set_task_payload_hash(payload.hash_hex);
 
     const auto signing_bytes = coordinator_task_signing_bytes(out);
@@ -578,8 +673,9 @@ SignCoordinatorTaskResult sign_coordinator_task(const fl::coordinator::v1::Clien
     return {true, "ok"};
 }
 
-bool verify_coordinator_task_signature(const fl::coordinator::v1::SignedCoordinatorTask& signed_task,
-                                       const std::string& signing_public_key_hex) {
+bool verify_coordinator_task_signature(
+    const fl::coordinator::v1::SignedCoordinatorTask& signed_task,
+    const std::string& signing_public_key_hex) {
     bool key_ok = false;
     const auto public_key_bytes = hex_decode(signing_public_key_hex, key_ok);
     bool signature_ok = false;
@@ -587,7 +683,8 @@ bool verify_coordinator_task_signature(const fl::coordinator::v1::SignedCoordina
     if (!key_ok || !signature_ok) {
         return false;
     }
-    return ed25519_verify(public_key_bytes, signature_bytes, coordinator_task_signing_bytes(signed_task));
+    return ed25519_verify(
+        public_key_bytes, signature_bytes, coordinator_task_signing_bytes(signed_task));
 }
 
 }  // namespace fl::coordinator

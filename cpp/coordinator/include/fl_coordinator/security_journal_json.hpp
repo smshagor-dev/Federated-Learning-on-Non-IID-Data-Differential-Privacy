@@ -25,8 +25,8 @@ namespace fl::coordinator {
 
 struct JsonScalarOrMap {
     bool is_map = false;
-    std::string scalar;                          // valid when !is_map
-    std::map<std::string, std::string> nested;    // valid when is_map (string -> string only)
+    std::string scalar;                         // valid when !is_map
+    std::map<std::string, std::string> nested;  // valid when is_map (string -> string only)
 };
 
 using JsonFlatObject = std::map<std::string, JsonScalarOrMap>;
@@ -42,6 +42,6 @@ using JsonFlatObject = std::map<std::string, JsonScalarOrMap>;
 [[nodiscard]] std::uint64_t json_field_uint(const JsonFlatObject& object, const std::string& key);
 [[nodiscard]] int json_field_int(const JsonFlatObject& object, const std::string& key);
 [[nodiscard]] std::map<std::string, std::string> json_field_map(const JsonFlatObject& object,
-                                                                  const std::string& key);
+                                                                const std::string& key);
 
 }  // namespace fl::coordinator

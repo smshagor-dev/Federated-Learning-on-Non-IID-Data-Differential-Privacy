@@ -1,5 +1,15 @@
 # Docker Runtime
 
+## Threshold-Recovery Evaluation Status
+
+As of July 28, 2026, Docker/runtime validation remains intentionally
+scoped to the live no-dropout provider
+`SECAGG_NO_DROPOUT_EXPERIMENTAL`. No extra recovery service, threshold-
+share transport, or partial-cohort finalization container topology has
+been added because the dependency evaluation ended in
+`NO_ACCEPTABLE_DEPENDENCY_FOUND`. See
+[threshold-recovery-evaluation-report.md](threshold-recovery-evaluation-report.md).
+
 ## Topology
 
 ```mermaid
@@ -7,6 +17,7 @@ flowchart TB
     subgraph Compose [docker-compose.yml / infra/compose/docker-compose.dev.yml]
         coordinator["coordinator<br/>:50051"]
         api["api<br/>:8080"]
+        research-writer["research-writer<br/>:8090"]
         web["web<br/>:3000"]
         python-worker["python-worker<br/>(no published port)"]
         postgres["postgres :5432"]
@@ -18,6 +29,7 @@ flowchart TB
         otel["otel-collector :4317-4318"]
     end
     api -->|FL_COORDINATOR_ADDRESS| coordinator
+    api -->|FL_RESEARCH_COMMAND_URL| research-writer
     python-worker -->|FL_WORKER_COORDINATOR_ADDRESS| coordinator
     web -->|FL_API_BASE_URL| api
     api --> postgres
@@ -47,6 +59,33 @@ flowchart TB
   way. `CMD ["python", "-m", "fl_platform.worker"]` — see
   [python-worker.md](python-worker.md) for what that entrypoint actually
   does (a real, repeated `Health()` poll, not full training).
+
+## Research command writer
+
+The Compose dev stack now also includes:
+
+* **`research-writer`** (`infra/docker/python-research-command.Dockerfile`) â€” a
+  private Python command service that owns durable research-registry
+  mutations. It is not published on a host port. The Go API calls it
+  over the internal Compose network using `FL_RESEARCH_COMMAND_URL`,
+  authenticated with a bounded shared secret intended only for local/dev
+  validation.
+* **Shared persistence** â€” `api` and `research-writer` mount the same
+  `control-plane-data` volume at `/var/control-plane`, preserving the
+  Python-authoritative writer model while letting the Go read repository
+  see fresh mutations immediately.
+
+Fresh July 28, 2026 runtime evidence for this path:
+
+* public `POST /api/v1/research/experiments/validate` succeeds through
+  the live Compose stack
+* public `POST /api/v1/research/experiments` succeeds durably through
+  the live Compose stack
+* exact create replay returns `idempotent_replay: true`
+* `python scripts/security-validation/run.py --group research-registry --no-compose --keep-stack`
+  completed `3 PASS, 0 FAIL, 0 BLOCKED, 0 DEFERRED, 0 SKIPPED`
+* the writer persisted durable experiment files and create idempotency
+  records under `/var/control-plane/research`
 
 ## Real bugs found by actually running this
 

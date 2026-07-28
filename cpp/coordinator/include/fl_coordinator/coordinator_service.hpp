@@ -73,100 +73,101 @@ class CoordinatorServiceImpl final : public fl::coordinator::v1::CoordinatorServ
     // the pre-existing single-key comparison against
     // WorkerIdentityRegistry's own cached signing_key_id, preserving
     // every existing test's behavior unchanged.
-    explicit CoordinatorServiceImpl(RunManager& manager,
-                                    WorkerIdentityRegistry* identity_registry = nullptr,
-                                    ReplayProtectionStore* replay_store = nullptr,
-                                    bool allow_unsigned_client_results = true,
-                                    AccountantMonotonicityStore* monotonicity_store = nullptr,
-                                    bool allow_unsigned_privacy_records = true,
-                                    SigningKeyRegistry* signing_key_registry = nullptr,
-                                    // Coordinator-Signed Tasks slice
-                                    // (docs/signed-coordinator-tasks.md): all
-                                    // three optional and nullptr by default,
-                                    // same backward-compatible convention as
-                                    // every store above. AcquireTask only
-                                    // attaches a SignedCoordinatorTask when
-                                    // coordinator_signing_identity is non-null
-                                    // AND coordinator_signing_key_registry has
-                                    // an ACTIVE key -- every existing test and
-                                    // call site that constructs this service
-                                    // without these three keeps compiling and
-                                    // behaving exactly as before.
-                                    CoordinatorActiveIdentityStore* coordinator_active_identity = nullptr,
-                                    CoordinatorSigningKeyRegistry* coordinator_signing_key_registry = nullptr,
-                                    CoordinatorTaskSequenceStore* coordinator_task_sequence_store = nullptr,
-                                    // Security Administration slice
-                                    // (docs/coordinator-signing-key-rotation.md):
-                                    // all four optional/empty by default,
-                                    // same backward-compatible convention.
-                                    // RotateCoordinatorSigningKey/
-                                    // RevokeCoordinatorSigningKey both
-                                    // return UNIMPLEMENTED when
-                                    // idempotency_store is null (there is
-                                    // nothing safe to mutate without it).
-                                    IdempotencyStore* idempotency_store = nullptr,
-                                    std::string coordinator_signing_key_dir = "",
-                                    std::string trusted_key_bundle_path = "",
-                                    std::string coordinator_identity_label = "coordinator",
-                                    // Security Operations and Administration
-                                    // slice (docs/security-api.md): the
-                                    // coordinator's own configured transport
-                                    // mode, reported read-only by
-                                    // GetTransportSecurityStatus. Defaults to
-                                    // kInsecureDevelopment so every existing
-                                    // call site that does not pass this
-                                    // keeps compiling and behaving exactly
-                                    // as before -- main.cpp passes the real,
-                                    // already-resolved TransportMode.
-                                    TransportMode transport_mode = TransportMode::kInsecureDevelopment,
-                                    // Security Events, Metrics, and Durable
-                                    // Audit Journal slice
-                                    // (docs/security-events.md,
-                                    // docs/security-audit-journal.md): both
-                                    // optional/nullptr by default, same
-                                    // backward-compatible convention as
-                                    // every store above. Wired at a
-                                    // representative subset of the most
-                                    // security-sensitive mutation paths
-                                    // (worker lifecycle, worker/coordinator
-                                    // signing-key revocation, coordinator
-                                    // signing-key rotation, and the
-                                    // ADMIN_CONTROL permission-denial path
-                                    // guarding all of them) rather than
-                                    // every RPC -- see
-                                    // docs/security-observability-inventory.md
-                                    // for exactly which operations this
-                                    // covers today.
-                                    SecurityEventJournal* security_event_journal = nullptr,
-                                    SecurityAuditJournal* security_audit_journal = nullptr,
-                                    // Secure Cohort Handshake and Signed
-                                    // Roster Runtime slice
-                                    // (docs/secure-cohort-handshake-foundation.md):
-                                    // optional/nullptr/false by default,
-                                    // same backward-compatible convention.
-                                    // secure_aggregation_manager is null on
-                                    // every existing call site and test --
-                                    // AcquireTask simply skips all secure-
-                                    // aggregation logic when it is null,
-                                    // and the six secure-aggregation RPCs
-                                    // all return FAILED_PRECONDITION (not
-                                    // UNIMPLEMENTED -- the RPC itself is
-                                    // real, only this particular server
-                                    // instance lacks the manager) when
-                                    // called without one. secure_aggregation_enabled
-                                    // is main.cpp's coordinator-wide
-                                    // FL_SECURE_AGGREGATION_ENABLED opt-in
-                                    // (see that doc's "coordinator-wide,
-                                    // not yet per-run" scope decision) --
-                                    // gates only AcquireTask's automatic
-                                    // session *creation*; the five other
-                                    // secure-aggregation RPCs work
-                                    // regardless of this flag as long as a
-                                    // session already exists.
-                                    SecureAggregationSessionManager* secure_aggregation_manager = nullptr,
-                                    bool secure_aggregation_enabled = false,
-                                    double secure_aggregation_key_advertisement_window_seconds = 300.0,
-                                    double secure_aggregation_masked_update_window_seconds = 300.0);
+    explicit CoordinatorServiceImpl(
+        RunManager& manager,
+        WorkerIdentityRegistry* identity_registry = nullptr,
+        ReplayProtectionStore* replay_store = nullptr,
+        bool allow_unsigned_client_results = true,
+        AccountantMonotonicityStore* monotonicity_store = nullptr,
+        bool allow_unsigned_privacy_records = true,
+        SigningKeyRegistry* signing_key_registry = nullptr,
+        // Coordinator-Signed Tasks slice
+        // (docs/signed-coordinator-tasks.md): all
+        // three optional and nullptr by default,
+        // same backward-compatible convention as
+        // every store above. AcquireTask only
+        // attaches a SignedCoordinatorTask when
+        // coordinator_signing_identity is non-null
+        // AND coordinator_signing_key_registry has
+        // an ACTIVE key -- every existing test and
+        // call site that constructs this service
+        // without these three keeps compiling and
+        // behaving exactly as before.
+        CoordinatorActiveIdentityStore* coordinator_active_identity = nullptr,
+        CoordinatorSigningKeyRegistry* coordinator_signing_key_registry = nullptr,
+        CoordinatorTaskSequenceStore* coordinator_task_sequence_store = nullptr,
+        // Security Administration slice
+        // (docs/coordinator-signing-key-rotation.md):
+        // all four optional/empty by default,
+        // same backward-compatible convention.
+        // RotateCoordinatorSigningKey/
+        // RevokeCoordinatorSigningKey both
+        // return UNIMPLEMENTED when
+        // idempotency_store is null (there is
+        // nothing safe to mutate without it).
+        IdempotencyStore* idempotency_store = nullptr,
+        std::string coordinator_signing_key_dir = "",
+        std::string trusted_key_bundle_path = "",
+        std::string coordinator_identity_label = "coordinator",
+        // Security Operations and Administration
+        // slice (docs/security-api.md): the
+        // coordinator's own configured transport
+        // mode, reported read-only by
+        // GetTransportSecurityStatus. Defaults to
+        // kInsecureDevelopment so every existing
+        // call site that does not pass this
+        // keeps compiling and behaving exactly
+        // as before -- main.cpp passes the real,
+        // already-resolved TransportMode.
+        TransportMode transport_mode = TransportMode::kInsecureDevelopment,
+        // Security Events, Metrics, and Durable
+        // Audit Journal slice
+        // (docs/security-events.md,
+        // docs/security-audit-journal.md): both
+        // optional/nullptr by default, same
+        // backward-compatible convention as
+        // every store above. Wired at a
+        // representative subset of the most
+        // security-sensitive mutation paths
+        // (worker lifecycle, worker/coordinator
+        // signing-key revocation, coordinator
+        // signing-key rotation, and the
+        // ADMIN_CONTROL permission-denial path
+        // guarding all of them) rather than
+        // every RPC -- see
+        // docs/security-observability-inventory.md
+        // for exactly which operations this
+        // covers today.
+        SecurityEventJournal* security_event_journal = nullptr,
+        SecurityAuditJournal* security_audit_journal = nullptr,
+        // Secure Cohort Handshake and Signed
+        // Roster Runtime slice
+        // (docs/secure-cohort-handshake-foundation.md):
+        // optional/nullptr/false by default,
+        // same backward-compatible convention.
+        // secure_aggregation_manager is null on
+        // every existing call site and test --
+        // AcquireTask simply skips all secure-
+        // aggregation logic when it is null,
+        // and the six secure-aggregation RPCs
+        // all return FAILED_PRECONDITION (not
+        // UNIMPLEMENTED -- the RPC itself is
+        // real, only this particular server
+        // instance lacks the manager) when
+        // called without one. secure_aggregation_enabled
+        // is main.cpp's coordinator-wide
+        // FL_SECURE_AGGREGATION_ENABLED opt-in
+        // (see that doc's "coordinator-wide,
+        // not yet per-run" scope decision) --
+        // gates only AcquireTask's automatic
+        // session *creation*; the five other
+        // secure-aggregation RPCs work
+        // regardless of this flag as long as a
+        // session already exists.
+        SecureAggregationSessionManager* secure_aggregation_manager = nullptr,
+        bool secure_aggregation_enabled = false,
+        double secure_aggregation_key_advertisement_window_seconds = 300.0,
+        double secure_aggregation_masked_update_window_seconds = 300.0);
 
     grpc::Status CreateRun(grpc::ServerContext* context,
                            const fl::coordinator::v1::CreateRunRequest* request,
@@ -262,9 +263,10 @@ class CoordinatorServiceImpl final : public fl::coordinator::v1::CoordinatorServ
                                   const fl::coordinator::v1::GetPrivacyLedgerRequest* request,
                                   fl::coordinator::v1::GetPrivacyLedgerResponse* response) override;
 
-    grpc::Status GetPrivacyProjection(grpc::ServerContext* context,
-                                      const fl::coordinator::v1::GetPrivacyProjectionRequest* request,
-                                      fl::coordinator::v1::PrivacyProjection* response) override;
+    grpc::Status GetPrivacyProjection(
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::GetPrivacyProjectionRequest* request,
+        fl::coordinator::v1::PrivacyProjection* response) override;
 
     grpc::Status StreamRunEvents(
         grpc::ServerContext* context,
@@ -403,23 +405,28 @@ class CoordinatorServiceImpl final : public fl::coordinator::v1::CoordinatorServ
         fl::coordinator::v1::AdvertiseSecureAggregationKeyResponse* response) override;
 
     grpc::Status GetFrozenCohortRoster(
-        grpc::ServerContext* context, const fl::coordinator::v1::GetFrozenCohortRosterRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::GetFrozenCohortRosterRequest* request,
         fl::coordinator::v1::GetFrozenCohortRosterResponse* response) override;
 
     grpc::Status SubmitMaskedClientUpdate(
-        grpc::ServerContext* context, const fl::coordinator::v1::SubmitMaskedClientUpdateRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::SubmitMaskedClientUpdateRequest* request,
         fl::coordinator::v1::SubmitMaskedClientUpdateResponse* response) override;
 
     grpc::Status GetSecureAggregationSession(
-        grpc::ServerContext* context, const fl::coordinator::v1::GetSecureAggregationSessionRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::GetSecureAggregationSessionRequest* request,
         fl::coordinator::v1::GetSecureAggregationSessionResponse* response) override;
 
     grpc::Status ListSecureAggregationSessions(
-        grpc::ServerContext* context, const fl::coordinator::v1::ListSecureAggregationSessionsRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::ListSecureAggregationSessionsRequest* request,
         fl::coordinator::v1::ListSecureAggregationSessionsResponse* response) override;
 
     grpc::Status AbortSecureAggregationSession(
-        grpc::ServerContext* context, const fl::coordinator::v1::AbortSecureAggregationSessionRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::AbortSecureAggregationSessionRequest* request,
         fl::coordinator::v1::AbortSecureAggregationSessionResponse* response) override;
 
     // Secure User-Level DP Operations, Observability, and Release
@@ -429,19 +436,23 @@ class CoordinatorServiceImpl final : public fl::coordinator::v1::CoordinatorServ
     // (see run_manager.hpp's user_level_ledger()/user_level_privacy()),
     // never from the masked/decoded aggregate itself.
     grpc::Status GetSecureUserLevelPrivacyHealth(
-        grpc::ServerContext* context, const fl::coordinator::v1::GetSecureUserLevelPrivacyHealthRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::GetSecureUserLevelPrivacyHealthRequest* request,
         fl::coordinator::v1::SecureUserLevelPrivacyHealthResponse* response) override;
 
     grpc::Status GetSecureUserLevelPrivacyBudget(
-        grpc::ServerContext* context, const fl::coordinator::v1::GetSecureUserLevelPrivacyBudgetRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::GetSecureUserLevelPrivacyBudgetRequest* request,
         fl::coordinator::v1::SecureUserLevelPrivacyBudgetResponse* response) override;
 
     grpc::Status ListSecureUserLevelPrivacyRounds(
-        grpc::ServerContext* context, const fl::coordinator::v1::ListSecureUserLevelPrivacyRoundsRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::ListSecureUserLevelPrivacyRoundsRequest* request,
         fl::coordinator::v1::ListSecureUserLevelPrivacyRoundsResponse* response) override;
 
     grpc::Status GetSecureUserLevelPrivacyRound(
-        grpc::ServerContext* context, const fl::coordinator::v1::GetSecureUserLevelPrivacyRoundRequest* request,
+        grpc::ServerContext* context,
+        const fl::coordinator::v1::GetSecureUserLevelPrivacyRoundRequest* request,
         fl::coordinator::v1::GetSecureUserLevelPrivacyRoundResponse* response) override;
 
   private:

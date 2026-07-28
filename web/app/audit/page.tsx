@@ -15,7 +15,7 @@ export default async function AuditPage() {
       title="Inspect governance and operations history"
       description="A dedicated review surface for login activity, project changes, experiment updates, and run lifecycle events."
     >
-      <AuditConsole seedEvents={overview.activity_feed} />
+      <AuditConsole seedEvents={overview?.activity_feed ?? []} />
     </AppShell>
   );
 }

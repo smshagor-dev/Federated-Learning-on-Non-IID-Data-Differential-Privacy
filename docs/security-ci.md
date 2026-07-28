@@ -116,6 +116,13 @@ python scripts/security-validation/check_artifact_sanitation.py artifacts/securi
 python scripts/generate_release_evidence.py
 ```
 
+## Threshold-Recovery Status
+
+Security CI does not run live dropout-recovery scenarios because the
+repository does not enable threshold recovery. That is an intentional
+coverage boundary, not a missing test registration. See
+[threshold-recovery-dependency-decision.md](threshold-recovery-dependency-decision.md).
+
 ## Validation
 
 Live-checked this slice by running the exact commands each job runs,
@@ -127,3 +134,9 @@ found.`), and the release-evidence generator (`OK: 9 file(s) scanned,
 no prohibited material found.`) all passed. See
 [security-runtime-completion-report.md](security-runtime-completion-report.md)
 for the full fresh-evidence report.
+
+For the research-registry slice specifically, Tuesday, July 28, 2026
+local validation also included:
+
+- `python scripts/security-validation/run.py --group research-registry --no-compose --keep-stack --output-dir tmp/research-registry-runtime`
+- result: `3 PASS, 0 FAIL, 0 BLOCKED, 0 DEFERRED, 0 SKIPPED`

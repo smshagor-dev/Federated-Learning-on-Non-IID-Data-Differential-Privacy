@@ -34,16 +34,15 @@ fl::core::TensorCollection make_delta(const std::vector<double>& weight_values,
                                       const std::vector<double>* head_values = nullptr) {
     fl::core::TensorCollection collection;
     collection.insert(fl::core::TensorBuffer(
-        fl::core::TensorDescriptor{.name = "weight",
-                                   .shape = {weight_values.size()},
-                                   .dtype = fl::core::DType::kFloat32},
+        fl::core::TensorDescriptor{
+            .name = "weight", .shape = {weight_values.size()}, .dtype = fl::core::DType::kFloat32},
         weight_values));
     if (head_values != nullptr) {
-        collection.insert(fl::core::TensorBuffer(
-            fl::core::TensorDescriptor{.name = "personalized_head",
-                                       .shape = {head_values->size()},
-                                       .dtype = fl::core::DType::kFloat32},
-            *head_values));
+        collection.insert(
+            fl::core::TensorBuffer(fl::core::TensorDescriptor{.name = "personalized_head",
+                                                              .shape = {head_values->size()},
+                                                              .dtype = fl::core::DType::kFloat32},
+                                   *head_values));
     }
     return collection;
 }
@@ -57,8 +56,8 @@ double l2_norm(const std::vector<double>& values) {
 }
 
 void run_clipping_tests() {
-    using fl::core::ClippingConfig;
     using fl::core::clip_client_delta;
+    using fl::core::ClippingConfig;
 
     // norm = 5.0 > clip_bound = 1.0 -> scaled down to exactly norm 1.0.
     {
@@ -98,10 +97,12 @@ void run_clipping_tests() {
     {
         fl::core::TensorCollection delta;
         delta.insert(fl::core::TensorBuffer(
-            fl::core::TensorDescriptor{.name = "a", .shape = {1}, .dtype = fl::core::DType::kFloat32},
+            fl::core::TensorDescriptor{
+                .name = "a", .shape = {1}, .dtype = fl::core::DType::kFloat32},
             {3.0}));
         delta.insert(fl::core::TensorBuffer(
-            fl::core::TensorDescriptor{.name = "b", .shape = {1}, .dtype = fl::core::DType::kFloat32},
+            fl::core::TensorDescriptor{
+                .name = "b", .shape = {1}, .dtype = fl::core::DType::kFloat32},
             {4.0}));
         // Global norm = sqrt(3^2+4^2) = 5.0, clip_bound = 5.0 -> scale = 1 (no clip).
         auto clipped = clip_client_delta(delta, fl::core::ClippingConfig{.clip_bound = 5.0}, {});
@@ -135,14 +136,15 @@ void run_clipping_tests() {
     // Invalid config.
     expect_throw(
         [&]() {
-            (void)clip_client_delta(make_delta({1.0}), fl::core::ClippingConfig{.clip_bound = 0.0}, {});
+            (void)clip_client_delta(
+                make_delta({1.0}), fl::core::ClippingConfig{.clip_bound = 0.0}, {});
         },
         "non-positive clip_bound is rejected");
 }
 
 void run_noise_tests() {
-    using fl::core::DeterministicNoiseProvider;
     using fl::core::add_central_gaussian_noise;
+    using fl::core::DeterministicNoiseProvider;
 
     // Deterministic reproducibility: same seed -> identical noise.
     {
@@ -298,8 +300,7 @@ void run_adaptive_clipping_tests() {
 
         DeterministicNoiseProvider independent_provider(42);
         const double expected_noise = independent_provider.gaussian_sample(1.0);
-        const double expected_fraction =
-            std::clamp((5.0 + expected_noise) / 10.0, 0.0, 1.0);
+        const double expected_fraction = std::clamp((5.0 + expected_noise) / 10.0, 0.0, 1.0);
         check(std::abs(result.noisy_over_threshold_fraction - expected_fraction) < 1e-12,
               "noisy fraction matches an independently seeded prediction exactly");
     }
@@ -343,7 +344,8 @@ void run_adaptive_clipping_tests() {
         DeterministicNoiseProvider provider(1);
         expect_throw(
             [&]() {
-                (void)AdaptiveClipController(AdaptiveClippingConfig{.initial_clip = -1.0}, provider);
+                (void)AdaptiveClipController(AdaptiveClippingConfig{.initial_clip = -1.0},
+                                             provider);
             },
             "non-positive initial_clip is rejected");
         expect_throw(

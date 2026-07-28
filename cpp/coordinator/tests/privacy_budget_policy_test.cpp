@@ -84,7 +84,8 @@ void register_workers(fl::coordinator::RunManager& manager) {
 // actually produced a task (some may be silently refused by
 // kStopBeforeExceeding's pre-check, which still counts as "a round was
 // attempted" from the caller's perspective).
-std::uint32_t drive_until_terminal(fl::coordinator::RunInstance& run, double& now,
+std::uint32_t drive_until_terminal(fl::coordinator::RunInstance& run,
+                                   double& now,
                                    std::uint32_t max_rounds_to_try) {
     std::uint32_t rounds_completed = 0;
     for (std::uint32_t i = 0; i < max_rounds_to_try; ++i) {
@@ -123,12 +124,14 @@ void run_privacy_budget_policy_tests() {
     // --- kWarnOnly: budget is exceeded but the run keeps going all the
     // way to max_rounds — never stopped early. ---
     {
-        RunManager manager(coordinator_config, "privacy_budget_policy_test_scratch/checkpoints_warn",
+        RunManager manager(coordinator_config,
+                           "privacy_budget_policy_test_scratch/checkpoints_warn",
                            "privacy_budget_policy_test_scratch/scaffold_warn");
-        manager.create_run(
-            make_config("run-warn", fl::core::PrivacyBudgetPolicy::kWarnOnly, /*epsilon_budget=*/0.01,
-                       /*max_rounds=*/5),
-            0.0);
+        manager.create_run(make_config("run-warn",
+                                       fl::core::PrivacyBudgetPolicy::kWarnOnly,
+                                       /*epsilon_budget=*/0.01,
+                                       /*max_rounds=*/5),
+                           0.0);
         auto& run = manager.get("run-warn");
         register_workers(manager);
         run.start("", 0.0);
@@ -145,12 +148,13 @@ void run_privacy_budget_policy_tests() {
     // --- kStopAfterCurrentRound: run stops before reaching max_rounds,
     // in state kCompleted (graceful), once budget is crossed. ---
     {
-        RunManager manager(
-            coordinator_config, "privacy_budget_policy_test_scratch/checkpoints_stop_after",
-            "privacy_budget_policy_test_scratch/scaffold_stop_after");
+        RunManager manager(coordinator_config,
+                           "privacy_budget_policy_test_scratch/checkpoints_stop_after",
+                           "privacy_budget_policy_test_scratch/scaffold_stop_after");
         manager.create_run(make_config("run-stop-after",
                                        fl::core::PrivacyBudgetPolicy::kStopAfterCurrentRound,
-                                       /*epsilon_budget=*/0.01, /*max_rounds=*/10),
+                                       /*epsilon_budget=*/0.01,
+                                       /*max_rounds=*/10),
                            0.0);
         auto& run = manager.get("run-stop-after");
         register_workers(manager);
@@ -170,10 +174,11 @@ void run_privacy_budget_policy_tests() {
         RunManager manager(coordinator_config,
                            "privacy_budget_policy_test_scratch/checkpoints_fail",
                            "privacy_budget_policy_test_scratch/scaffold_fail");
-        manager.create_run(
-            make_config("run-fail", fl::core::PrivacyBudgetPolicy::kFailRun, /*epsilon_budget=*/0.01,
-                       /*max_rounds=*/10),
-            0.0);
+        manager.create_run(make_config("run-fail",
+                                       fl::core::PrivacyBudgetPolicy::kFailRun,
+                                       /*epsilon_budget=*/0.01,
+                                       /*max_rounds=*/10),
+                           0.0);
         auto& run = manager.get("run-fail");
         register_workers(manager);
         run.start("", 0.0);
@@ -182,7 +187,8 @@ void run_privacy_budget_policy_tests() {
         const auto rounds = drive_until_terminal(run, now, 10);
         check(rounds < 10, "kFailRun stops before max_rounds once budget is crossed");
         check(run.snapshot().state == fl::core::RunState::kFailed,
-              "kFailRun ends the run in kFailed, distinctly from kStopAfterCurrentRound's kCompleted");
+              "kFailRun ends the run in kFailed, distinctly from kStopAfterCurrentRound's "
+              "kCompleted");
     }
 
     // --- kStopBeforeExceeding: the round that WOULD cross the budget is
@@ -190,12 +196,13 @@ void run_privacy_budget_policy_tests() {
     // the ledger's last epsilon must never exceed the budget, unlike the
     // reactive policies above which may cross it by up to one round. ---
     {
-        RunManager manager(
-            coordinator_config, "privacy_budget_policy_test_scratch/checkpoints_stop_before",
-            "privacy_budget_policy_test_scratch/scaffold_stop_before");
+        RunManager manager(coordinator_config,
+                           "privacy_budget_policy_test_scratch/checkpoints_stop_before",
+                           "privacy_budget_policy_test_scratch/scaffold_stop_before");
         manager.create_run(make_config("run-stop-before",
                                        fl::core::PrivacyBudgetPolicy::kStopBeforeExceeding,
-                                       /*epsilon_budget=*/0.01, /*max_rounds=*/10),
+                                       /*epsilon_budget=*/0.01,
+                                       /*max_rounds=*/10),
                            0.0);
         auto& run = manager.get("run-stop-before");
         register_workers(manager);
@@ -220,10 +227,11 @@ void run_privacy_budget_policy_tests() {
         RunManager manager(coordinator_config,
                            "privacy_budget_policy_test_scratch/checkpoints_unset",
                            "privacy_budget_policy_test_scratch/scaffold_unset");
-        manager.create_run(
-            make_config("run-unset", fl::core::PrivacyBudgetPolicy::kFailRun, /*epsilon_budget=*/0.0,
-                       /*max_rounds=*/3),
-            0.0);
+        manager.create_run(make_config("run-unset",
+                                       fl::core::PrivacyBudgetPolicy::kFailRun,
+                                       /*epsilon_budget=*/0.0,
+                                       /*max_rounds=*/3),
+                           0.0);
         auto& run = manager.get("run-unset");
         register_workers(manager);
         run.start("", 0.0);

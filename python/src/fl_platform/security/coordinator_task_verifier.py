@@ -29,6 +29,7 @@ from fl_platform.security.coordinator_task_signing import (
     model_configuration_hash,
     personalization_configuration_hash,
     privacy_configuration_hash,
+    secure_adaptive_clipping_configuration_hash,
     secure_aggregation_configuration_hash,
     secure_user_level_dp_configuration_hash,
     task_payload_hash,
@@ -58,6 +59,9 @@ class CoordinatorTaskRejectionReason(str, Enum):
     SECURE_AGGREGATION_BINDING_MISMATCH = "secure_aggregation_binding_mismatch"
     SECURE_USER_LEVEL_DP_CONFIG_HASH_MISMATCH = (
         "secure_user_level_dp_config_hash_mismatch"
+    )
+    SECURE_ADAPTIVE_CLIPPING_CONFIG_HASH_MISMATCH = (
+        "secure_adaptive_clipping_config_hash_mismatch"
     )
     TASK_EXPIRED = "task_expired"
     TASK_ISSUED_IN_FUTURE = "task_issued_in_future"
@@ -177,6 +181,18 @@ def verify_coordinator_task(
         raise CoordinatorTaskRejectedError(
             CoordinatorTaskRejectionReason.SECURE_USER_LEVEL_DP_CONFIG_HASH_MISMATCH,
             "recomputed secure_user_level_dp_configuration_hash does not match the "
+            "signed value",
+        )
+    recomputed_secure_adaptive_clipping = secure_adaptive_clipping_configuration_hash(
+        params.task_fields
+    )
+    if (
+        recomputed_secure_adaptive_clipping
+        != signed.secure_adaptive_clipping_configuration_hash
+    ):
+        raise CoordinatorTaskRejectedError(
+            CoordinatorTaskRejectionReason.SECURE_ADAPTIVE_CLIPPING_CONFIG_HASH_MISMATCH,
+            "recomputed secure_adaptive_clipping_configuration_hash does not match the "
             "signed value",
         )
     recomputed_payload = task_payload_hash(params.task_fields)

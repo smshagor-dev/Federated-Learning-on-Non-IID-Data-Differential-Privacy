@@ -17,9 +17,14 @@ void run_accountant_monotonicity_store_tests(const std::string& scratch_dir) {
     std::filesystem::create_directories(scratch_dir);
     const std::string store_path = scratch_dir + "/monotonicity_store.dat";
 
-    auto make_candidate = [](const std::string& run_id, const std::string& client_id,
-                             const std::string& worker_id, std::uint64_t step, double epsilon,
-                             double delta, const std::string& config_hash, double now) {
+    auto make_candidate = [](const std::string& run_id,
+                             const std::string& client_id,
+                             const std::string& worker_id,
+                             std::uint64_t step,
+                             double epsilon,
+                             double delta,
+                             const std::string& config_hash,
+                             double now) {
         MonotonicityCandidate candidate;
         candidate.run_id = run_id;
         candidate.client_id = client_id;
@@ -39,12 +44,14 @@ void run_accountant_monotonicity_store_tests(const std::string& scratch_dir) {
     {
         AccountantMonotonicityStore store(store_path);
 
-        const auto first = make_candidate("run-1", "client-1", "worker-1", 1, 0.5, 1e-5, "cfg-a", 100.0);
+        const auto first =
+            make_candidate("run-1", "client-1", "worker-1", 1, 0.5, 1e-5, "cfg-a", 100.0);
         const auto first_decision = store.validate(first);
         check(first_decision.accepted, "a brand-new track accepts its first candidate");
         store.commit(first);
 
-        const auto second = make_candidate("run-1", "client-1", "worker-1", 2, 0.8, 1e-5, "cfg-a", 101.0);
+        const auto second =
+            make_candidate("run-1", "client-1", "worker-1", 2, 0.8, 1e-5, "cfg-a", 101.0);
         check(store.validate(second).accepted,
               "step 2 with non-decreasing epsilon following step 1 is accepted");
         store.commit(second);
@@ -66,7 +73,8 @@ void run_accountant_monotonicity_store_tests(const std::string& scratch_dir) {
         const auto changed_delta =
             make_candidate("run-1", "client-1", "worker-1", 3, 0.9, 2e-5, "cfg-a", 104.0);
         const auto changed_delta_decision = store.validate(changed_delta);
-        check(!changed_delta_decision.accepted, "a changed delta within the same track is rejected");
+        check(!changed_delta_decision.accepted,
+              "a changed delta within the same track is rejected");
         check(changed_delta_decision.reason == MonotonicityRejectionReason::kDeltaChanged,
               "a changed delta is reported as kDeltaChanged");
 
@@ -75,7 +83,8 @@ void run_accountant_monotonicity_store_tests(const std::string& scratch_dir) {
         const auto changed_config_decision = store.validate(changed_config);
         check(!changed_config_decision.accepted,
               "a changed configuration_hash within the same track is rejected");
-        check(changed_config_decision.reason == MonotonicityRejectionReason::kConfigurationHashChanged,
+        check(changed_config_decision.reason ==
+                  MonotonicityRejectionReason::kConfigurationHashChanged,
               "a changed configuration_hash is reported as kConfigurationHashChanged");
 
         // A different client_id/worker_id/accountant_type starts its own
@@ -98,7 +107,8 @@ void run_accountant_monotonicity_store_tests(const std::string& scratch_dir) {
         const auto after_restart =
             make_candidate("run-1", "client-1", "worker-1", 2, 1.0, 1e-5, "cfg-a", 200.0);
         const auto decision = store.validate(after_restart);
-        check(!decision.accepted, "a non-increasing step is still rejected after reopening from disk");
+        check(!decision.accepted,
+              "a non-increasing step is still rejected after reopening from disk");
         check(decision.reason == MonotonicityRejectionReason::kStepNotIncreasing,
               "restart-persisted state still enforces step monotonicity");
 

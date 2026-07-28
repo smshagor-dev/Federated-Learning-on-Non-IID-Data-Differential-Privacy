@@ -27,8 +27,12 @@ class PairwiseMaskTests(unittest.TestCase):
         self.assertFalse(participant_sorts_before("worker-1", "worker-1"))
 
     def test_sign_resolution(self) -> None:
-        self.assertEqual(resolve_pairwise_mask_sign("worker-1", "worker-2"), MASK_SIGN_ADD)
-        self.assertEqual(resolve_pairwise_mask_sign("worker-2", "worker-1"), MASK_SIGN_SUBTRACT)
+        self.assertEqual(
+            resolve_pairwise_mask_sign("worker-1", "worker-2"), MASK_SIGN_ADD
+        )
+        self.assertEqual(
+            resolve_pairwise_mask_sign("worker-2", "worker-1"), MASK_SIGN_SUBTRACT
+        )
         with self.assertRaises(ValueError):
             resolve_pairwise_mask_sign("worker-1", "worker-1")
 

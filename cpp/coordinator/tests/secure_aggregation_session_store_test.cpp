@@ -7,17 +7,18 @@
 namespace fl::coordinator::testing {
 
 void run_secure_aggregation_session_store_tests(const std::string& scratch_dir) {
+    using fl::coordinator::is_terminal_session_state;
     using fl::coordinator::SecureAggregationSessionRecord;
     using fl::coordinator::SecureAggregationSessionStore;
     using fl::coordinator::SecureAggregationSessionStoreError;
-    using fl::coordinator::is_terminal_session_state;
 
     std::filesystem::remove_all(scratch_dir);
     std::filesystem::create_directories(scratch_dir);
     const std::string store_path = scratch_dir + "/secure_aggregation_sessions.dat";
 
     check(!is_terminal_session_state("COHORT_FORMING"), "COHORT_FORMING is not a terminal state");
-    check(!is_terminal_session_state("KEY_ADVERTISEMENT"), "KEY_ADVERTISEMENT is not a terminal state");
+    check(!is_terminal_session_state("KEY_ADVERTISEMENT"),
+          "KEY_ADVERTISEMENT is not a terminal state");
     check(is_terminal_session_state("COMPLETED"), "COMPLETED is terminal");
     check(is_terminal_session_state("ABORTED"), "ABORTED is terminal");
     check(is_terminal_session_state("FAILED"), "FAILED is terminal");
@@ -41,7 +42,8 @@ void run_secure_aggregation_session_store_tests(const std::string& scratch_dir) 
 
         const auto found = store.find("session-1");
         check(found.has_value(), "session-1 is found after recording transitions");
-        check(found->state == "KEY_ADVERTISEMENT", "the latest transition's state is what is stored, not the first");
+        check(found->state == "KEY_ADVERTISEMENT",
+              "the latest transition's state is what is stored, not the first");
         check(found->run_id == "run-1", "run_id is preserved");
         check(found->round_id == 3, "round_id is preserved");
     }
@@ -53,7 +55,8 @@ void run_secure_aggregation_session_store_tests(const std::string& scratch_dir) 
         SecureAggregationSessionStore store(store_path);
         const auto found = store.find("session-1");
         check(found.has_value(), "session-1 survives a reload from disk");
-        check(found->state == "KEY_ADVERTISEMENT", "reloaded record preserves its latest recorded state");
+        check(found->state == "KEY_ADVERTISEMENT",
+              "reloaded record preserves its latest recorded state");
 
         SecureAggregationSessionRecord completed;
         completed.session_id = "session-2";
@@ -77,7 +80,8 @@ void run_secure_aggregation_session_store_tests(const std::string& scratch_dir) 
         SecureAggregationSessionStore store(store_path);
         const auto reconciled = store.reconcile_after_restart(/*now=*/300.0);
         check(reconciled.size() == 1, "exactly one non-terminal session is reconciled");
-        check(reconciled.front() == "session-1", "the reconciled session is the non-terminal one (session-1)");
+        check(reconciled.front() == "session-1",
+              "the reconciled session is the non-terminal one (session-1)");
 
         const auto session1 = store.find("session-1");
         check(session1.has_value() && session1->state == "ABORTED",
@@ -115,7 +119,8 @@ void run_secure_aggregation_session_store_tests(const std::string& scratch_dir) 
             file << "checksum=0000000000000000\n";
         }
         expect_throw([&]() { SecureAggregationSessionStore store(corrupt_path); },
-                     "a corrupt secure aggregation session store file is rejected, never silently treated as empty");
+                     "a corrupt secure aggregation session store file is rejected, never silently "
+                     "treated as empty");
     }
 }
 

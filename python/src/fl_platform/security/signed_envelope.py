@@ -599,6 +599,13 @@ class MaskedClientUpdateFields:
     issued_at: float = 0.0
     expires_at: float = 0.0
     schema_version: int = SCHEMA_VERSION
+    # Secure Adaptive Clipping with Private Indicator Aggregation slice:
+    # a single ring value (0 or 1 cast directly, never fixed-point
+    # scaled) plus its own checksum, mirroring masked_weight/
+    # masked_weight_checksum's exact shape. Zero-valued/empty on every
+    # non-adaptive-clipping submission.
+    masked_clipping_indicator: int = 0
+    masked_clipping_indicator_checksum: str = ""
 
 
 def masked_client_update_payload_hash_input(fields: MaskedClientUpdateFields) -> str:
@@ -640,6 +647,8 @@ def masked_client_update_payload_hash_input(fields: MaskedClientUpdateFields) ->
         "frozen_roster_payload_hash": fields.frozen_roster_payload_hash,
         "issued_at": fields.issued_at,
         "lease_id": fields.lease_id,
+        "masked_clipping_indicator": fields.masked_clipping_indicator,
+        "masked_clipping_indicator_checksum": fields.masked_clipping_indicator_checksum,
         "masked_tensors": [
             {
                 "checksum": tensor.checksum,

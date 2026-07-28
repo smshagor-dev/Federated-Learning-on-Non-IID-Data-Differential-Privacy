@@ -86,7 +86,8 @@ fl::coordinator::ClientResultSubmission make_result(const fl::coordinator::Dispa
     entry.steps = 4;
     entry.accountant = "rdp";
     entry.recorded_at = "2026-01-01T00:00:00Z";
-    entry.entry_id = "entry-" + task.descriptor.client_id + "-" + std::to_string(task.descriptor.round_id);
+    entry.entry_id =
+        "entry-" + task.descriptor.client_id + "-" + std::to_string(task.descriptor.round_id);
     submission.sample_level_privacy = std::move(entry);
 
     return submission;
@@ -126,7 +127,8 @@ void run_privacy_recovery_tests(const std::string& scratch_dir) {
     double pre_restart_clip_epsilon = 0.0;
     std::size_t pre_restart_sample_ledger_size = 0;
     {
-        RunManager manager(coordinator_config, scratch_dir + "/checkpoints", scratch_dir + "/scaffold");
+        RunManager manager(
+            coordinator_config, scratch_dir + "/checkpoints", scratch_dir + "/scaffold");
         manager.create_run(config, 0.0);
         auto& run = manager.get("run-privacy-recovery");
         register_workers(manager);
@@ -141,8 +143,9 @@ void run_privacy_recovery_tests(const std::string& scratch_dir) {
 
         check(run.user_level_ledger().size() == 2, "two user-level entries before restart");
         check(run.adaptive_clipping_ledger().size() == 2, "two clipping entries before restart");
-        check(pre_restart_sample_ledger_size == 4, "four sample-level entries before restart (2 "
-                                                    "clients x 2 rounds)");
+        check(pre_restart_sample_ledger_size == 4,
+              "four sample-level entries before restart (2 "
+              "clients x 2 rounds)");
     }
     // RunManager (and its RunInstance) is now destroyed — simulating a
     // full process restart. Everything below reconstructs purely from
@@ -150,7 +153,8 @@ void run_privacy_recovery_tests(const std::string& scratch_dir) {
 
     // ---- Phase 2: "restart" via a fresh RunManager + restore ---- //
     {
-        RunManager manager(coordinator_config, scratch_dir + "/checkpoints", scratch_dir + "/scaffold");
+        RunManager manager(
+            coordinator_config, scratch_dir + "/checkpoints", scratch_dir + "/scaffold");
         manager.create_run(config, 0.0);
         auto& run = manager.get("run-privacy-recovery");
         run.restore_from_checkpoint();
@@ -174,7 +178,8 @@ void run_privacy_recovery_tests(const std::string& scratch_dir) {
         // regression that would understate real cumulative epsilon)?
         run_one_round(run, now, 3.0, -3.0);
 
-        check(run.user_level_ledger().size() == 3, "a post-restart round adds a third user-level entry");
+        check(run.user_level_ledger().size() == 3,
+              "a post-restart round adds a third user-level entry");
         check(run.user_level_ledger().back().epsilon > pre_restart_user_epsilon,
               "user-level epsilon continues growing from its pre-restart value, not from zero");
 
@@ -188,7 +193,8 @@ void run_privacy_recovery_tests(const std::string& scratch_dir) {
         // consistently over-threshold in this test, so the bound rises
         // every round) — not reset back down to initial_clip=1.0, which
         // is what a broken restore would silently produce instead.
-        check(run.adaptive_clipping_ledger()[2].clip_value > run.adaptive_clipping_ledger()[1].clip_value,
+        check(run.adaptive_clipping_ledger()[2].clip_value >
+                  run.adaptive_clipping_ledger()[1].clip_value,
               "adaptive clip bound continues rising post-restart, not reset to initial_clip");
     }
 }

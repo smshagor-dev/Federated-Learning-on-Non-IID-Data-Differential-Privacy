@@ -98,7 +98,8 @@ std::optional<SecurityEvent> parse_event_line(const std::string& line) {
     event.safe_details = json_field_map(fields, "safe_details");
     event.payload_checksum = json_field_string(fields, "payload_checksum");
 
-    if (!security_event_type_from_string(json_field_string(fields, "event_type"), event.event_type)) {
+    if (!security_event_type_from_string(json_field_string(fields, "event_type"),
+                                         event.event_type)) {
         return std::nullopt;
     }
     if (!security_severity_from_string(json_field_string(fields, "severity"), event.severity)) {
@@ -107,7 +108,8 @@ std::optional<SecurityEvent> parse_event_line(const std::string& line) {
     if (!security_outcome_from_string(json_field_string(fields, "outcome"), event.outcome)) {
         return std::nullopt;
     }
-    if (!security_actor_type_from_string(json_field_string(fields, "actor_type"), event.actor_type)) {
+    if (!security_actor_type_from_string(json_field_string(fields, "actor_type"),
+                                         event.actor_type)) {
         return std::nullopt;
     }
     if (!security_subject_type_from_string(json_field_string(fields, "subject_type"),
@@ -224,8 +226,8 @@ void SecurityEventJournal::maybe_rotate() {
     // max_retained_files is dropped, then the active file becomes .1.
     for (std::size_t generation = options_.max_retained_files; generation >= 1; --generation) {
         const std::string from = generation == 1
-                                      ? persistence_path_
-                                      : persistence_path_ + "." + std::to_string(generation - 1);
+                                     ? persistence_path_
+                                     : persistence_path_ + "." + std::to_string(generation - 1);
         const std::string to = persistence_path_ + "." + std::to_string(generation);
         if (generation == options_.max_retained_files && std::filesystem::exists(to)) {
             std::filesystem::remove(to, error_code);

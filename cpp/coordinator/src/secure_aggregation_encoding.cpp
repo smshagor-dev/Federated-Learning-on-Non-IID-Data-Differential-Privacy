@@ -40,7 +40,9 @@ namespace {
 // Release, since every operation is a single std:: call, not a chain
 // of inline arithmetic a compiler might keep in an 80-bit register
 // only in one build configuration.
-double round_half_away_from_zero(double value) { return std::round(value); }
+double round_half_away_from_zero(double value) {
+    return std::round(value);
+}
 
 }  // namespace
 
@@ -54,7 +56,8 @@ DomainBoundsProof prove_domain_bounds(const FixedPointEncodingProfile& profile) 
     const double worst_case_single_encoded_d =
         std::ceil(profile.max_input_magnitude * profile.scale_factor + 0.5);
     if (!std::isfinite(worst_case_single_encoded_d) || worst_case_single_encoded_d < 0.0 ||
-        worst_case_single_encoded_d > static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
+        worst_case_single_encoded_d >
+            static_cast<double>(std::numeric_limits<std::uint64_t>::max())) {
         proof.safe = false;
         proof.computation_overflowed = true;
         proof.explanation =
@@ -70,20 +73,24 @@ DomainBoundsProof prove_domain_bounds(const FixedPointEncodingProfile& profile) 
     // prevent).
     std::uint64_t weighted = 0;
     if (worst_case_single_encoded != 0 &&
-        profile.max_client_weight > std::numeric_limits<std::uint64_t>::max() / worst_case_single_encoded) {
+        profile.max_client_weight >
+            std::numeric_limits<std::uint64_t>::max() / worst_case_single_encoded) {
         proof.safe = false;
         proof.computation_overflowed = true;
-        proof.explanation = "worst_case_single_encoded * max_client_weight overflows a 64-bit accumulator";
+        proof.explanation =
+            "worst_case_single_encoded * max_client_weight overflows a 64-bit accumulator";
         return proof;
     }
     weighted = worst_case_single_encoded * profile.max_client_weight;
 
     // aggregate = weighted * max_cohort_size, same overflow discipline.
     std::uint64_t aggregate = 0;
-    if (weighted != 0 && profile.max_cohort_size > std::numeric_limits<std::uint64_t>::max() / weighted) {
+    if (weighted != 0 &&
+        profile.max_cohort_size > std::numeric_limits<std::uint64_t>::max() / weighted) {
         proof.safe = false;
         proof.computation_overflowed = true;
-        proof.explanation = "weighted_max_magnitude * max_cohort_size overflows a 64-bit accumulator";
+        proof.explanation =
+            "weighted_max_magnitude * max_cohort_size overflows a 64-bit accumulator";
         return proof;
     }
     aggregate = weighted * profile.max_cohort_size;
@@ -92,7 +99,8 @@ DomainBoundsProof prove_domain_bounds(const FixedPointEncodingProfile& profile) 
     if (aggregate > std::numeric_limits<std::uint64_t>::max() - profile.safety_margin) {
         proof.safe = false;
         proof.computation_overflowed = true;
-        proof.explanation = "worst_case_aggregate_magnitude + safety_margin overflows a 64-bit accumulator";
+        proof.explanation =
+            "worst_case_aggregate_magnitude + safety_margin overflows a 64-bit accumulator";
         return proof;
     }
     const std::uint64_t aggregate_with_margin = aggregate + profile.safety_margin;
@@ -103,13 +111,15 @@ DomainBoundsProof prove_domain_bounds(const FixedPointEncodingProfile& profile) 
     // Work Package G's required inequality:
     //   max encoded magnitude * max client weight * max cohort size
     //     + safety margin < signed decoding boundary
-    const auto boundary = static_cast<std::uint64_t>(FixedPointEncodingProfile::kSignedDecodingBoundary);
+    const auto boundary =
+        static_cast<std::uint64_t>(FixedPointEncodingProfile::kSignedDecodingBoundary);
     if (aggregate_with_margin >= boundary) {
         proof.safe = false;
         proof.explanation =
             "proven worst-case aggregate magnitude (" + std::to_string(aggregate) +
             ") plus safety margin (" + std::to_string(profile.safety_margin) +
-            ") is not strictly less than the signed decoding boundary (" + std::to_string(boundary) +
+            ") is not strictly less than the signed decoding boundary (" +
+            std::to_string(boundary) +
             ") -- this profile's scale_factor/max_input_magnitude/max_client_weight/"
             "max_cohort_size combination is rejected, not silently permitted to risk "
             "wrapping a legitimate aggregate into an incorrect decoded value";
@@ -118,8 +128,8 @@ DomainBoundsProof prove_domain_bounds(const FixedPointEncodingProfile& profile) 
 
     proof.safe = true;
     proof.explanation = "worst-case aggregate magnitude " + std::to_string(aggregate) +
-                         " + safety margin " + std::to_string(profile.safety_margin) +
-                         " < signed decoding boundary " + std::to_string(boundary);
+                        " + safety margin " + std::to_string(profile.safety_margin) +
+                        " < signed decoding boundary " + std::to_string(boundary);
     return proof;
 }
 

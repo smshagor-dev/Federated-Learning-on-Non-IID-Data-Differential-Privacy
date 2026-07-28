@@ -76,8 +76,11 @@ std::string sign_hex_for_test(EVP_PKEY* pkey, const std::string& message) {
     EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, pkey);
     unsigned char signature[64];
     std::size_t signature_len = sizeof(signature);
-    EVP_DigestSign(ctx, signature, &signature_len,
-                   reinterpret_cast<const unsigned char*>(message.data()), message.size());
+    EVP_DigestSign(ctx,
+                   signature,
+                   &signature_len,
+                   reinterpret_cast<const unsigned char*>(message.data()),
+                   message.size());
     EVP_MD_CTX_free(ctx);
     return hex_encode_bytes(signature, signature_len);
 }
@@ -87,8 +90,13 @@ std::string sign_hex_for_test(EVP_PKEY* pkey, const std::string& message) {
 // syntactically-valid events plus any extras appended by the caller via
 // `augment`.
 fl::coordinator::v1::SubmitWorkerSecurityEventsRequest make_security_event_batch_request(
-    const std::string& worker_id, const std::string& signing_key_id, TestKeypair& keypair,
-    int event_count, double issued_at, std::uint64_t sequence_number, const std::string& nonce) {
+    const std::string& worker_id,
+    const std::string& signing_key_id,
+    TestKeypair& keypair,
+    int event_count,
+    double issued_at,
+    std::uint64_t sequence_number,
+    const std::string& nonce) {
     fl::worker::v1::SignedWorkerSecurityEventBatch batch;
     batch.set_schema_version(1);
     batch.set_worker_id(worker_id);
@@ -108,9 +116,11 @@ fl::coordinator::v1::SubmitWorkerSecurityEventsRequest make_security_event_batch
     const auto hash_result = security_event_batch_payload_hash_input(batch);
     fl::worker::v1::SignedWorkerEnvelope envelope;
     envelope.set_schema_version(1);
-    envelope.set_message_type(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURITY_EVENT_BATCH);
+    envelope.set_message_type(
+        fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURITY_EVENT_BATCH);
     envelope.set_worker_id(worker_id);
-    envelope.set_message_stream(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_STREAM_SECURITY_EVENTS);
+    envelope.set_message_stream(
+        fl::worker::v1::SignedWorkerEnvelope::MESSAGE_STREAM_SECURITY_EVENTS);
     envelope.set_sequence_number(sequence_number);
     envelope.set_issued_at(issued_at);
     envelope.set_expires_at(issued_at + 60.0);
@@ -369,13 +379,15 @@ void run_coordinator_service_tests() {
         // refuses to hand them a task from this hybrid-DP run.
         fl::worker::v1::RegisterWorkerRequest register_request_a;
         register_request_a.set_worker_id("worker-hybrid-a");
-        register_request_a.mutable_capability()->mutable_privacy()->set_supports_sample_level_dp(true);
+        register_request_a.mutable_capability()->mutable_privacy()->set_supports_sample_level_dp(
+            true);
         fl::worker::v1::RegisterWorkerResponse register_response_a;
         check(service.RegisterWorker(nullptr, &register_request_a, &register_response_a).ok(),
               "RegisterWorker succeeds (worker-hybrid-a)");
         fl::worker::v1::RegisterWorkerRequest register_request_b;
         register_request_b.set_worker_id("worker-hybrid-b");
-        register_request_b.mutable_capability()->mutable_privacy()->set_supports_sample_level_dp(true);
+        register_request_b.mutable_capability()->mutable_privacy()->set_supports_sample_level_dp(
+            true);
         fl::worker::v1::RegisterWorkerResponse register_response_b;
         check(service.RegisterWorker(nullptr, &register_request_b, &register_response_b).ok(),
               "RegisterWorker succeeds (worker-hybrid-b)");
@@ -437,8 +449,9 @@ void run_coordinator_service_tests() {
             fl::coordinator::v1::SubmitClientResultResponse submit_response;
             check(service.SubmitClientResult(nullptr, &submit_request, &submit_response).ok(),
                   "SubmitClientResult RPC succeeds (" + worker_id + ")");
-            check(submit_response.accepted(),
-                  "the client's result (with sample_level_privacy) is accepted (" + worker_id + ")");
+            check(
+                submit_response.accepted(),
+                "the client's result (with sample_level_privacy) is accepted (" + worker_id + ")");
         };
         submit_for("worker-hybrid-a", task_response_a, /*sample_epsilon=*/1.5);
         submit_for("worker-hybrid-b", task_response_b, /*sample_epsilon=*/1.3);
@@ -561,7 +574,8 @@ void run_coordinator_service_tests() {
 
         fl::worker::v1::RegisterWorkerRequest register_request;
         register_request.set_worker_id("worker-mismatch");
-        register_request.mutable_capability()->mutable_privacy()->set_supports_sample_level_dp(true);
+        register_request.mutable_capability()->mutable_privacy()->set_supports_sample_level_dp(
+            true);
         fl::worker::v1::RegisterWorkerResponse register_response;
         check(service.RegisterWorker(nullptr, &register_request, &register_response).ok(),
               "RegisterWorker succeeds");
@@ -636,9 +650,16 @@ void run_coordinator_service_tests() {
 
         const double sec_test_now = real_now_unix_s();
         auto keypair = generate_test_keypair();
-        identity_registry.register_identity(
-            "worker-sec-1", "cert-identity", "cert-serial", "fp-1", keypair.public_key_hex,
-            "key-1", "1.0.0", "build-1", /*now_unix_s=*/sec_test_now, /*expires_at_unix_s=*/0.0);
+        identity_registry.register_identity("worker-sec-1",
+                                            "cert-identity",
+                                            "cert-serial",
+                                            "fp-1",
+                                            keypair.public_key_hex,
+                                            "key-1",
+                                            "1.0.0",
+                                            "build-1",
+                                            /*now_unix_s=*/sec_test_now,
+                                            /*expires_at_unix_s=*/0.0);
         InitialSigningKeyRegistration initial_key;
         initial_key.worker_id = "worker-sec-1";
         initial_key.signing_key_id = "key-1";
@@ -649,24 +670,39 @@ void run_coordinator_service_tests() {
         initial_key.registration_source = "registration";
         signing_key_registry.register_initial_key(initial_key);
 
-        CoordinatorServiceImpl sec_service(
-            sec_manager, &identity_registry, &replay_store,
-            /*allow_unsigned_client_results=*/true, nullptr,
-            /*allow_unsigned_privacy_records=*/true, &signing_key_registry, nullptr, nullptr,
-            nullptr, nullptr, "", "", "coordinator", TransportMode::kInsecureDevelopment,
-            &event_journal, nullptr);
+        CoordinatorServiceImpl sec_service(sec_manager,
+                                           &identity_registry,
+                                           &replay_store,
+                                           /*allow_unsigned_client_results=*/true,
+                                           nullptr,
+                                           /*allow_unsigned_privacy_records=*/true,
+                                           &signing_key_registry,
+                                           nullptr,
+                                           nullptr,
+                                           nullptr,
+                                           nullptr,
+                                           "",
+                                           "",
+                                           "coordinator",
+                                           TransportMode::kInsecureDevelopment,
+                                           &event_journal,
+                                           nullptr);
 
         // Accepted batch.
-        auto accepted_request = make_security_event_batch_request(
-            "worker-sec-1", "key-1", keypair, /*event_count=*/2, /*issued_at=*/sec_test_now,
-            /*sequence_number=*/1, "nonce-batch-1");
+        auto accepted_request = make_security_event_batch_request("worker-sec-1",
+                                                                  "key-1",
+                                                                  keypair,
+                                                                  /*event_count=*/2,
+                                                                  /*issued_at=*/sec_test_now,
+                                                                  /*sequence_number=*/1,
+                                                                  "nonce-batch-1");
         fl::coordinator::v1::SubmitWorkerSecurityEventsResponse accepted_response;
         const auto accepted_status =
             sec_service.SubmitWorkerSecurityEvents(nullptr, &accepted_request, &accepted_response);
         check(accepted_status.ok(),
               "SubmitWorkerSecurityEvents RPC succeeds for a validly signed batch (got: " +
-                  accepted_status.error_message() + " / rejection_code=" +
-                  accepted_response.rejection_code() + ")");
+                  accepted_status.error_message() +
+                  " / rejection_code=" + accepted_response.rejection_code() + ")");
         check(accepted_response.accepted(), "a validly signed, non-replayed batch is accepted");
         check(accepted_response.accepted_event_count() == 2,
               "both syntactically-valid events in the batch are accepted");
@@ -690,13 +726,18 @@ void run_coordinator_service_tests() {
 
         // Unknown worker.
         auto unknown_worker_keypair = generate_test_keypair();
-        auto unknown_worker_request = make_security_event_batch_request(
-            "worker-that-never-registered", "key-1", unknown_worker_keypair, 1, sec_test_now, 1,
-            "nonce-unknown");
+        auto unknown_worker_request =
+            make_security_event_batch_request("worker-that-never-registered",
+                                              "key-1",
+                                              unknown_worker_keypair,
+                                              1,
+                                              sec_test_now,
+                                              1,
+                                              "nonce-unknown");
         fl::coordinator::v1::SubmitWorkerSecurityEventsResponse unknown_worker_response;
         check(!sec_service
-                   .SubmitWorkerSecurityEvents(nullptr, &unknown_worker_request,
-                                               &unknown_worker_response)
+                   .SubmitWorkerSecurityEvents(
+                       nullptr, &unknown_worker_request, &unknown_worker_response)
                    .ok(),
               "a batch from an unregistered worker_id is rejected");
         check(unknown_worker_response.rejection_code() == "unknown_worker",
@@ -705,9 +746,13 @@ void run_coordinator_service_tests() {
 
         // Oversized batch (kMaxSecurityEventBatchSize == 200): must be
         // rejected wholesale, not truncated.
-        auto oversized_request = make_security_event_batch_request(
-            "worker-sec-1", "key-1", keypair, /*event_count=*/201, /*issued_at=*/sec_test_now,
-            /*sequence_number=*/2, "nonce-oversized");
+        auto oversized_request = make_security_event_batch_request("worker-sec-1",
+                                                                   "key-1",
+                                                                   keypair,
+                                                                   /*event_count=*/201,
+                                                                   /*issued_at=*/sec_test_now,
+                                                                   /*sequence_number=*/2,
+                                                                   "nonce-oversized");
         fl::coordinator::v1::SubmitWorkerSecurityEventsResponse oversized_response;
         check(!sec_service
                    .SubmitWorkerSecurityEvents(nullptr, &oversized_request, &oversized_response)
@@ -756,11 +801,13 @@ void run_coordinator_service_tests() {
             unsigned int digest_len = 0;
             EVP_MD_CTX* digest_ctx = EVP_MD_CTX_new();
             EVP_DigestInit_ex(digest_ctx, EVP_sha256(), nullptr);
-            EVP_DigestUpdate(digest_ctx, hash_result.hash_input.data(), hash_result.hash_input.size());
+            EVP_DigestUpdate(
+                digest_ctx, hash_result.hash_input.data(), hash_result.hash_input.size());
             EVP_DigestFinal_ex(digest_ctx, digest, &digest_len);
             EVP_MD_CTX_free(digest_ctx);
             envelope.set_payload_hash(hex_encode_bytes(digest, digest_len));
-            envelope.set_signature(sign_hex_for_test(keypair.pkey, envelope_signing_bytes(envelope)));
+            envelope.set_signature(
+                sign_hex_for_test(keypair.pkey, envelope_signing_bytes(envelope)));
 
             fl::coordinator::v1::SubmitWorkerSecurityEventsRequest mixed_request;
             mixed_request.set_worker_id("worker-sec-1");

@@ -125,7 +125,7 @@ std::string to_string(SigningKeyRotationRejectionReason reason);
 struct SigningKeyRotationResult {
     bool accepted = false;
     SigningKeyRotationRejectionReason reason = SigningKeyRotationRejectionReason::kNone;
-    std::string detail;  // human-readable; always set, even when accepted ("ok")
+    std::string detail;             // human-readable; always set, even when accepted ("ok")
     SigningKeyRecord new_key;       // valid only when accepted
     SigningKeyRecord previous_key;  // valid only when accepted
 };
@@ -178,8 +178,10 @@ class SigningKeyRegistry {
     // is unknown -- revocation itself never fails once a key exists,
     // matching WorkerIdentityRegistry::revoke's identical
     // "unconditional emergency action" convention.
-    SigningKeyRecord revoke_key(const std::string& worker_id, const std::string& signing_key_id,
-                               const std::string& reason, double now_unix_s);
+    SigningKeyRecord revoke_key(const std::string& worker_id,
+                                const std::string& signing_key_id,
+                                const std::string& reason,
+                                double now_unix_s);
 
     // Read-only, lazily evaluates expiry relative to now_unix_s without
     // requiring sweep_expired() to have run first (Work Package I:
@@ -216,7 +218,7 @@ class SigningKeyRegistry {
   private:
     void persist() const;  // caller must hold mutex_
     [[nodiscard]] SigningKeyRecord effective_record(const SigningKeyRecord& record,
-                                                     double now_unix_s) const;
+                                                    double now_unix_s) const;
 
     mutable std::mutex mutex_;
     std::string persistence_path_;
@@ -226,7 +228,8 @@ class SigningKeyRegistry {
         std::string worker_id;
         std::string signing_key_id;
         bool operator<(const Key& other) const {
-            if (worker_id != other.worker_id) return worker_id < other.worker_id;
+            if (worker_id != other.worker_id)
+                return worker_id < other.worker_id;
             return signing_key_id < other.signing_key_id;
         }
     };

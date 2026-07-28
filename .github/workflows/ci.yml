@@ -328,7 +328,7 @@ jobs:
         run: docker compose config
       - name: docker compose build
         continue-on-error: true  # optional: base-image pulls can be flaky/slow in CI
-        run: docker compose build
+        run: docker compose build api coordinator python-worker research-writer
 
   # ------------------------------------------------------------------ #
   # Security runtime validation (PR subset) -- Security Runtime
@@ -368,11 +368,11 @@ jobs:
       - name: Build the Compose images
         run: |
           docker compose -f infra/compose/docker-compose.dev.yml -f infra/compose/docker-compose.security.yml \
-            build coordinator api python-worker
+            build coordinator api python-worker research-writer
       - name: Run the required security-runtime-validation subset
         run: |
           python scripts/security-validation/run.py \
-            --group transport,security-api,metrics,event-journal,audit-journal,secure-aggregation-user-level-dp,regression \
+            --group transport,security-api,metrics,event-journal,audit-journal,secure-aggregation-user-level-dp,research-registry,regression \
             --output-dir artifacts/security-runtime-validation
       - name: Check the harness's own output for prohibited material
         if: always()

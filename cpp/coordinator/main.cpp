@@ -53,9 +53,9 @@ int main(int argc, char** argv) {
     // (see WorkerIdentityRegistry's constructor) rather than silently
     // starting from an empty, no-longer-revoked-anyone registry.
     const char* identity_registry_path_env = std::getenv("FL_WORKER_IDENTITY_REGISTRY_PATH");
-    const std::string identity_registry_path =
-        identity_registry_path_env != nullptr ? identity_registry_path_env
-                                              : "worker_identity_registry.dat";
+    const std::string identity_registry_path = identity_registry_path_env != nullptr
+                                                   ? identity_registry_path_env
+                                                   : "worker_identity_registry.dat";
     std::unique_ptr<fl::coordinator::WorkerIdentityRegistry> identity_registry;
     try {
         identity_registry =
@@ -100,8 +100,8 @@ int main(int argc, char** argv) {
     // replay_store above.
     const char* monotonicity_store_path_env = std::getenv("FL_ACCOUNTANT_MONOTONICITY_STORE_PATH");
     const std::string monotonicity_store_path = monotonicity_store_path_env != nullptr
-                                                     ? monotonicity_store_path_env
-                                                     : "accountant_monotonicity_store.dat";
+                                                    ? monotonicity_store_path_env
+                                                    : "accountant_monotonicity_store.dat";
     std::unique_ptr<fl::coordinator::AccountantMonotonicityStore> monotonicity_store;
     try {
         monotonicity_store =
@@ -123,9 +123,9 @@ int main(int argc, char** argv) {
     // same env-var-with-sensible-default persistence convention as the
     // other stores above.
     const char* signing_key_registry_path_env = std::getenv("FL_SIGNING_KEY_REGISTRY_PATH");
-    const std::string signing_key_registry_path =
-        signing_key_registry_path_env != nullptr ? signing_key_registry_path_env
-                                                 : "signing_key_registry.dat";
+    const std::string signing_key_registry_path = signing_key_registry_path_env != nullptr
+                                                      ? signing_key_registry_path_env
+                                                      : "signing_key_registry.dat";
     std::unique_ptr<fl::coordinator::SigningKeyRegistry> signing_key_registry;
     try {
         signing_key_registry =
@@ -187,13 +187,13 @@ int main(int argc, char** argv) {
     // malformed identity file fails the process at startup, same
     // fail-closed convention as every other persistence class above.
     const char* signing_identity_path_env = std::getenv("FL_COORDINATOR_SIGNING_KEY_PATH");
-    const std::string signing_identity_path =
-        signing_identity_path_env != nullptr ? signing_identity_path_env
-                                             : "coordinator_signing_key.pem";
+    const std::string signing_identity_path = signing_identity_path_env != nullptr
+                                                  ? signing_identity_path_env
+                                                  : "coordinator_signing_key.pem";
     fl::coordinator::CoordinatorSigningIdentity genesis_identity;
     try {
-        genesis_identity = fl::coordinator::load_or_create_coordinator_signing_identity(
-            signing_identity_path);
+        genesis_identity =
+            fl::coordinator::load_or_create_coordinator_signing_identity(signing_identity_path);
     } catch (const fl::coordinator::CoordinatorSigningIdentityError& error) {
         std::cerr << "coordinator signing-identity error: " << error.what() << "\n";
         return 1;
@@ -205,10 +205,12 @@ int main(int argc, char** argv) {
         coordinator_signing_key_registry_path_env != nullptr
             ? coordinator_signing_key_registry_path_env
             : "coordinator_signing_key_registry.dat";
-    std::unique_ptr<fl::coordinator::CoordinatorSigningKeyRegistry> coordinator_signing_key_registry;
+    std::unique_ptr<fl::coordinator::CoordinatorSigningKeyRegistry>
+        coordinator_signing_key_registry;
     try {
-        coordinator_signing_key_registry = std::make_unique<fl::coordinator::CoordinatorSigningKeyRegistry>(
-            coordinator_signing_key_registry_path);
+        coordinator_signing_key_registry =
+            std::make_unique<fl::coordinator::CoordinatorSigningKeyRegistry>(
+                coordinator_signing_key_registry_path);
     } catch (const fl::coordinator::CoordinatorSigningKeyRegistryError& error) {
         std::cerr << "coordinator signing-key registry error: " << error.what() << "\n";
         return 1;
@@ -261,8 +263,8 @@ int main(int argc, char** argv) {
 
     const char* idempotency_store_path_env = std::getenv("FL_COORDINATOR_IDEMPOTENCY_STORE_PATH");
     const std::string idempotency_store_path = idempotency_store_path_env != nullptr
-                                                    ? idempotency_store_path_env
-                                                    : "coordinator_idempotency_store.dat";
+                                                   ? idempotency_store_path_env
+                                                   : "coordinator_idempotency_store.dat";
     std::unique_ptr<fl::coordinator::IdempotencyStore> idempotency_store;
     try {
         idempotency_store =
@@ -280,8 +282,9 @@ int main(int argc, char** argv) {
             : "coordinator_task_sequence_store.dat";
     std::unique_ptr<fl::coordinator::CoordinatorTaskSequenceStore> coordinator_task_sequence_store;
     try {
-        coordinator_task_sequence_store = std::make_unique<fl::coordinator::CoordinatorTaskSequenceStore>(
-            coordinator_task_sequence_store_path);
+        coordinator_task_sequence_store =
+            std::make_unique<fl::coordinator::CoordinatorTaskSequenceStore>(
+                coordinator_task_sequence_store_path);
     } catch (const fl::coordinator::CoordinatorTaskSequenceStoreError& error) {
         std::cerr << "coordinator task sequence store error: " << error.what() << "\n";
         return 1;
@@ -302,9 +305,11 @@ int main(int argc, char** argv) {
     const std::string coordinator_identity_label =
         coordinator_identity_label_env != nullptr ? coordinator_identity_label_env : "coordinator";
     if (!trusted_key_bundle_path.empty()) {
-        const auto bundle_result = fl::coordinator::write_trusted_key_bundle(
-            *coordinator_signing_key_registry, trusted_key_bundle_path, coordinator_identity_label,
-            now_unix_s());
+        const auto bundle_result =
+            fl::coordinator::write_trusted_key_bundle(*coordinator_signing_key_registry,
+                                                      trusted_key_bundle_path,
+                                                      coordinator_identity_label,
+                                                      now_unix_s());
         if (!bundle_result.ok) {
             std::cerr << "failed to write coordinator trusted-key bundle: " << bundle_result.reason
                       << "\n";
@@ -344,8 +349,8 @@ int main(int argc, char** argv) {
     // (can't open the path at all) does.
     const char* security_event_journal_path_env = std::getenv("FL_SECURITY_EVENT_JOURNAL_PATH");
     const std::string security_event_journal_path = security_event_journal_path_env != nullptr
-                                                          ? security_event_journal_path_env
-                                                          : "security_events.jsonl";
+                                                        ? security_event_journal_path_env
+                                                        : "security_events.jsonl";
     std::unique_ptr<fl::coordinator::SecurityEventJournal> security_event_journal;
     try {
         security_event_journal =
@@ -357,8 +362,8 @@ int main(int argc, char** argv) {
 
     const char* security_audit_journal_path_env = std::getenv("FL_SECURITY_AUDIT_JOURNAL_PATH");
     const std::string security_audit_journal_path = security_audit_journal_path_env != nullptr
-                                                          ? security_audit_journal_path_env
-                                                          : "security_audit.jsonl";
+                                                        ? security_audit_journal_path_env
+                                                        : "security_audit.jsonl";
     std::unique_ptr<fl::coordinator::SecurityAuditJournal> security_audit_journal;
     try {
         security_audit_journal =
@@ -397,12 +402,15 @@ int main(int argc, char** argv) {
     const char* secure_aggregation_session_store_path_env =
         std::getenv("FL_SECURE_AGGREGATION_SESSION_STORE_PATH");
     const std::string secure_aggregation_session_store_path =
-        secure_aggregation_session_store_path_env != nullptr ? secure_aggregation_session_store_path_env
-                                                              : "secure_aggregation_sessions.dat";
-    std::unique_ptr<fl::coordinator::SecureAggregationSessionStore> secure_aggregation_session_store;
+        secure_aggregation_session_store_path_env != nullptr
+            ? secure_aggregation_session_store_path_env
+            : "secure_aggregation_sessions.dat";
+    std::unique_ptr<fl::coordinator::SecureAggregationSessionStore>
+        secure_aggregation_session_store;
     try {
-        secure_aggregation_session_store = std::make_unique<fl::coordinator::SecureAggregationSessionStore>(
-            secure_aggregation_session_store_path);
+        secure_aggregation_session_store =
+            std::make_unique<fl::coordinator::SecureAggregationSessionStore>(
+                secure_aggregation_session_store_path);
     } catch (const fl::coordinator::SecureAggregationSessionStoreError& error) {
         std::cerr << "coordinator secure aggregation session store error: " << error.what() << "\n";
         return 1;
@@ -414,7 +422,8 @@ int main(int argc, char** argv) {
     // starts empty), so this is a log-level reconciliation of the
     // persisted record itself, done once, before any RPC can reach the
     // manager.
-    for (const auto& reconciled_session_id : secure_aggregation_session_store->reconcile_after_restart(now_unix_s())) {
+    for (const auto& reconciled_session_id :
+         secure_aggregation_session_store->reconcile_after_restart(now_unix_s())) {
         fl::coordinator::SecurityEvent event;
         event.source_service = "coordinator";
         event.source_component = "main";
@@ -445,13 +454,26 @@ int main(int argc, char** argv) {
     }();
 
     fl::coordinator::CoordinatorServiceImpl service(
-        manager, identity_registry.get(), replay_store.get(), allow_unsigned_client_results,
-        monotonicity_store.get(), allow_unsigned_privacy_records, signing_key_registry.get(),
-        coordinator_active_identity.get(), coordinator_signing_key_registry.get(),
-        coordinator_task_sequence_store.get(), idempotency_store.get(), coordinator_signing_key_dir,
-        trusted_key_bundle_path, coordinator_identity_label, transport_mode,
-        security_event_journal.get(), security_audit_journal.get(), &secure_aggregation_manager,
-        secure_aggregation_enabled, secure_aggregation_key_advertisement_window_seconds,
+        manager,
+        identity_registry.get(),
+        replay_store.get(),
+        allow_unsigned_client_results,
+        monotonicity_store.get(),
+        allow_unsigned_privacy_records,
+        signing_key_registry.get(),
+        coordinator_active_identity.get(),
+        coordinator_signing_key_registry.get(),
+        coordinator_task_sequence_store.get(),
+        idempotency_store.get(),
+        coordinator_signing_key_dir,
+        trusted_key_bundle_path,
+        coordinator_identity_label,
+        transport_mode,
+        security_event_journal.get(),
+        security_audit_journal.get(),
+        &secure_aggregation_manager,
+        secure_aggregation_enabled,
+        secure_aggregation_key_advertisement_window_seconds,
         secure_aggregation_masked_update_window_seconds);
 
     grpc::ServerBuilder builder;

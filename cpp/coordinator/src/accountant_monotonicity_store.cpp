@@ -80,8 +80,9 @@ AccountantMonotonicityRecord decode_record(const std::string& line) {
             std::string("accountant monotonicity record field parse failure: ") + error.what());
     }
     if (record.schema_version != AccountantMonotonicityRecord::kSchemaVersion) {
-        throw AccountantMonotonicityStoreError("unsupported accountant monotonicity schema version " +
-                                               std::to_string(record.schema_version));
+        throw AccountantMonotonicityStoreError(
+            "unsupported accountant monotonicity schema version " +
+            std::to_string(record.schema_version));
     }
     return record;
 }
@@ -114,8 +115,8 @@ AccountantMonotonicityStore::AccountantMonotonicityStore(std::string persistence
     }
     std::ifstream file(persistence_path_, std::ios::binary);
     if (!file) {
-        throw AccountantMonotonicityStoreError("failed to open accountant monotonicity store file: " +
-                                               persistence_path_);
+        throw AccountantMonotonicityStoreError(
+            "failed to open accountant monotonicity store file: " + persistence_path_);
     }
     std::ostringstream buffer;
     buffer << file.rdbuf();
@@ -129,7 +130,8 @@ AccountantMonotonicityStore::AccountantMonotonicityStore(std::string persistence
     const std::string body = payload.substr(0, marker + 1);
     std::string checksum_line = payload.substr(marker + 1);
     const auto equals = checksum_line.find('=');
-    std::string checksum_value = equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
+    std::string checksum_value =
+        equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
     while (!checksum_value.empty() &&
            (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
         checksum_value.pop_back();
@@ -161,7 +163,8 @@ AccountantMonotonicityStore::AccountantMonotonicityStore(std::string persistence
         }
     }
     if (!has_count) {
-        throw AccountantMonotonicityStoreError("accountant monotonicity store file missing record_count");
+        throw AccountantMonotonicityStoreError(
+            "accountant monotonicity store file missing record_count");
     }
     if (found_count != expected_count) {
         throw AccountantMonotonicityStoreError(
@@ -212,10 +215,11 @@ void AccountantMonotonicityStore::persist() const {
     }
 }
 
-MonotonicityDecision AccountantMonotonicityStore::validate(const MonotonicityCandidate& candidate) const {
+MonotonicityDecision AccountantMonotonicityStore::validate(
+    const MonotonicityCandidate& candidate) const {
     std::lock_guard<std::mutex> lock(mutex_);
-    const TrackKey key{candidate.run_id, candidate.client_id, candidate.worker_id,
-                       candidate.accountant_type};
+    const TrackKey key{
+        candidate.run_id, candidate.client_id, candidate.worker_id, candidate.accountant_type};
     const auto it = records_.find(key);
     if (it == records_.end()) {
         // Documented starting behavior, matching ReplayProtectionStore's
@@ -225,34 +229,39 @@ MonotonicityDecision AccountantMonotonicityStore::validate(const MonotonicityCan
     }
     const auto& record = it->second;
     if (candidate.configuration_hash != record.configuration_hash) {
-        return {false, MonotonicityRejectionReason::kConfigurationHashChanged,
-               "configuration_hash '" + candidate.configuration_hash +
-                   "' does not match this track's established configuration_hash '" +
-                   record.configuration_hash + "'"};
+        return {false,
+                MonotonicityRejectionReason::kConfigurationHashChanged,
+                "configuration_hash '" + candidate.configuration_hash +
+                    "' does not match this track's established configuration_hash '" +
+                    record.configuration_hash + "'"};
     }
     if (candidate.delta != record.delta) {
-        return {false, MonotonicityRejectionReason::kDeltaChanged,
-               "delta changed from " + std::to_string(record.delta) + " to " +
-                   std::to_string(candidate.delta) + " within the same accountant track"};
+        return {false,
+                MonotonicityRejectionReason::kDeltaChanged,
+                "delta changed from " + std::to_string(record.delta) + " to " +
+                    std::to_string(candidate.delta) + " within the same accountant track"};
     }
     if (candidate.step <= record.last_accepted_step) {
-        return {false, MonotonicityRejectionReason::kStepNotIncreasing,
-               "accountant_step " + std::to_string(candidate.step) +
-                   " does not exceed the last accepted step " +
-                   std::to_string(record.last_accepted_step)};
+        return {false,
+                MonotonicityRejectionReason::kStepNotIncreasing,
+                "accountant_step " + std::to_string(candidate.step) +
+                    " does not exceed the last accepted step " +
+                    std::to_string(record.last_accepted_step)};
     }
     if (candidate.epsilon < record.last_epsilon) {
-        return {false, MonotonicityRejectionReason::kEpsilonDecreased,
-               "epsilon " + std::to_string(candidate.epsilon) +
-                   " is lower than the last accepted epsilon " + std::to_string(record.last_epsilon)};
+        return {false,
+                MonotonicityRejectionReason::kEpsilonDecreased,
+                "epsilon " + std::to_string(candidate.epsilon) +
+                    " is lower than the last accepted epsilon " +
+                    std::to_string(record.last_epsilon)};
     }
     return {true, MonotonicityRejectionReason::kNone, "ok"};
 }
 
 void AccountantMonotonicityStore::commit(const MonotonicityCandidate& candidate) {
     std::lock_guard<std::mutex> lock(mutex_);
-    const TrackKey key{candidate.run_id, candidate.client_id, candidate.worker_id,
-                       candidate.accountant_type};
+    const TrackKey key{
+        candidate.run_id, candidate.client_id, candidate.worker_id, candidate.accountant_type};
     AccountantMonotonicityRecord record;
     record.run_id = candidate.run_id;
     record.client_id = candidate.client_id;
@@ -270,7 +279,8 @@ void AccountantMonotonicityStore::commit(const MonotonicityCandidate& candidate)
     persist();
 }
 
-std::optional<AccountantMonotonicityRecord> AccountantMonotonicityStore::find(const TrackKey& key) const {
+std::optional<AccountantMonotonicityRecord> AccountantMonotonicityStore::find(
+    const TrackKey& key) const {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto it = records_.find(key);
     if (it == records_.end()) {
@@ -279,7 +289,8 @@ std::optional<AccountantMonotonicityRecord> AccountantMonotonicityStore::find(co
     return it->second;
 }
 
-void AccountantMonotonicityStore::reset(const TrackKey& key, const std::string& reason,
+void AccountantMonotonicityStore::reset(const TrackKey& key,
+                                        const std::string& reason,
                                         double now_unix_s) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto it = records_.find(key);

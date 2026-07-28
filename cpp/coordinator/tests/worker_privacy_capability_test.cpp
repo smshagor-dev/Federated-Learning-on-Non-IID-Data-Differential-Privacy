@@ -82,8 +82,8 @@ void run_worker_privacy_capability_tests() {
         auto& run = manager.get("run-incompatible-worker");
         // Default-constructed WorkerCapability: supports_sample_level_dp
         // is false (the "never advertised" case).
-        manager.worker_registry().register_worker("worker-plain", fl::coordinator::WorkerCapability{},
-                                                   0.0);
+        manager.worker_registry().register_worker(
+            "worker-plain", fl::coordinator::WorkerCapability{}, 0.0);
         run.start("", 0.0);
 
         double now = 0.0;
@@ -128,8 +128,8 @@ void run_worker_privacy_capability_tests() {
                            "worker_privacy_capability_test_scratch/scaffold_c");
         manager.create_run(make_non_private_config("run-non-private"), 0.0);
         auto& run = manager.get("run-non-private");
-        manager.worker_registry().register_worker("worker-plain", fl::coordinator::WorkerCapability{},
-                                                   0.0);
+        manager.worker_registry().register_worker(
+            "worker-plain", fl::coordinator::WorkerCapability{}, 0.0);
         run.start("", 0.0);
 
         double now = 0.0;

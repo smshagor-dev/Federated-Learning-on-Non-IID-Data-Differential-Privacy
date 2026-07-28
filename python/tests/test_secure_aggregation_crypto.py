@@ -86,15 +86,21 @@ class HkdfTests(unittest.TestCase):
     def test_purpose_key_derivation_is_domain_separated(self) -> None:
         shared_secret = b"a-pretend-32-byte-shared-secret"
         tensor_key = derive_purpose_key(
-            shared_secret, HKDF_PURPOSE_TENSOR_MASK_STREAM, "session-1|round-1|worker-a|worker-b"
+            shared_secret,
+            HKDF_PURPOSE_TENSOR_MASK_STREAM,
+            "session-1|round-1|worker-a|worker-b",
         )
         weight_key = derive_purpose_key(
-            shared_secret, HKDF_PURPOSE_WEIGHT_MASK_STREAM, "session-1|round-1|worker-a|worker-b"
+            shared_secret,
+            HKDF_PURPOSE_WEIGHT_MASK_STREAM,
+            "session-1|round-1|worker-a|worker-b",
         )
         self.assertNotEqual(tensor_key, weight_key)
 
         different_context_key = derive_purpose_key(
-            shared_secret, HKDF_PURPOSE_TENSOR_MASK_STREAM, "session-1|round-2|worker-a|worker-b"
+            shared_secret,
+            HKDF_PURPOSE_TENSOR_MASK_STREAM,
+            "session-1|round-2|worker-a|worker-b",
         )
         self.assertNotEqual(tensor_key, different_context_key)
 
@@ -109,10 +115,14 @@ class ChaCha20Tests(unittest.TestCase):
         self.assertEqual(len(stream1), 64)
         self.assertEqual(stream1, stream2)
 
-        stream_different_key = chacha20_keystream(b"\x03" * CHACHA20_KEY_LENGTH, nonce, 0, 64)
+        stream_different_key = chacha20_keystream(
+            b"\x03" * CHACHA20_KEY_LENGTH, nonce, 0, 64
+        )
         self.assertNotEqual(stream1, stream_different_key)
 
-        stream_different_nonce = chacha20_keystream(key, b"\x04" * CHACHA20_NONCE_LENGTH, 0, 64)
+        stream_different_nonce = chacha20_keystream(
+            key, b"\x04" * CHACHA20_NONCE_LENGTH, 0, 64
+        )
         self.assertNotEqual(stream1, stream_different_nonce)
 
         stream_different_counter = chacha20_keystream(key, nonce, 1, 64)
@@ -129,8 +139,14 @@ class ChaCha20Tests(unittest.TestCase):
 
 class Sha256Tests(unittest.TestCase):
     def test_known_vectors(self) -> None:
-        self.assertEqual(sha256_hex(b""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-        self.assertEqual(sha256_hex(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        self.assertEqual(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        )
+        self.assertEqual(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        )
         self.assertEqual(len(sha256_digest(b"abc")), SHA256_DIGEST_LENGTH)
 
 
@@ -141,26 +157,39 @@ class CohortCommitmentTests(unittest.TestCase):
         commitment2 = compute_cohort_commitment("session-a", "run-1", 3, "v1", roster)
         self.assertEqual(commitment1, commitment2)
 
-        reordered = compute_cohort_commitment("session-a", "run-1", 3, "v1", ["worker-2", "worker-1", "worker-3"])
+        reordered = compute_cohort_commitment(
+            "session-a", "run-1", 3, "v1", ["worker-2", "worker-1", "worker-3"]
+        )
         self.assertNotEqual(commitment1, reordered)
 
-        different_round = compute_cohort_commitment("session-a", "run-1", 4, "v1", roster)
+        different_round = compute_cohort_commitment(
+            "session-a", "run-1", 4, "v1", roster
+        )
         self.assertNotEqual(commitment1, different_round)
 
-        different_session = compute_cohort_commitment("session-b", "run-1", 3, "v1", roster)
+        different_session = compute_cohort_commitment(
+            "session-b", "run-1", 3, "v1", roster
+        )
         self.assertNotEqual(commitment1, different_session)
 
     def test_matches_the_frozen_golden_fixture(self) -> None:
-        with (FIXTURES_DIR / "cohort_commitment_golden.json").open(encoding="utf-8") as handle:
+        with (FIXTURES_DIR / "cohort_commitment_golden.json").open(
+            encoding="utf-8"
+        ) as handle:
             fixture = json.load(handle)
         i = fixture["input"]
         actual = compute_cohort_commitment(
-            i["session_id"], i["run_id"], i["round_id"], i["model_version"], i["ordered_participant_ids"]
+            i["session_id"],
+            i["run_id"],
+            i["round_id"],
+            i["model_version"],
+            i["ordered_participant_ids"],
         )
         self.assertEqual(
             actual,
             fixture["expected_commitment_hex"],
-            "Python compute_cohort_commitment must match the same frozen reference value the C++ "
+            "Python compute_cohort_commitment must match the same frozen "
+            "reference value the C++ "
             "implementation is checked against",
         )
 
@@ -186,17 +215,23 @@ class SessionConfigurationHashTests(unittest.TestCase):
         self.assertNotEqual(hash1, compute_session_configuration_hash(config_changed))
 
     def test_matches_the_frozen_golden_fixture(self) -> None:
-        with (FIXTURES_DIR / "session_configuration_hash_golden.json").open(encoding="utf-8") as handle:
+        with (FIXTURES_DIR / "session_configuration_hash_golden.json").open(
+            encoding="utf-8"
+        ) as handle:
             fixture = json.load(handle)
         i = fixture["input"]
         config = SecureAggregationSessionConfig(
-            session_id=i["session_id"], run_id=i["run_id"], round_id=i["round_id"], provider=i["provider"]
+            session_id=i["session_id"],
+            run_id=i["run_id"],
+            round_id=i["round_id"],
+            provider=i["provider"],
         )
         actual = compute_session_configuration_hash(config)
         self.assertEqual(
             actual,
             fixture["expected_hash_hex"],
-            "Python compute_session_configuration_hash must match the same frozen reference value the "
+            "Python compute_session_configuration_hash must match the same "
+            "frozen reference value the "
             "C++ implementation is checked against",
         )
 

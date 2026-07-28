@@ -18,16 +18,16 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
     std::filesystem::create_directories(scratch_dir);
     const std::string store_path = scratch_dir + "/coordinator_signing_key_registry.dat";
 
-    auto make_initial = [](const std::string& key_id, const std::string& public_key_hex,
-                           double now) {
-        InitialCoordinatorSigningKeyRegistration request;
-        request.signing_key_id = key_id;
-        request.public_key_hex = public_key_hex;
-        request.public_key_fingerprint = "fp-" + public_key_hex;
-        request.now_unix_s = now;
-        request.expires_at_unix_s = 0.0;
-        return request;
-    };
+    auto make_initial =
+        [](const std::string& key_id, const std::string& public_key_hex, double now) {
+            InitialCoordinatorSigningKeyRegistration request;
+            request.signing_key_id = key_id;
+            request.public_key_hex = public_key_hex;
+            request.public_key_fingerprint = "fp-" + public_key_hex;
+            request.now_unix_s = now;
+            request.expires_at_unix_s = 0.0;
+            return request;
+        };
 
     const std::string kKeyA(64, 'a');
     const std::string kKeyB(64, 'b');
@@ -36,11 +36,13 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
     {
         CoordinatorSigningKeyRegistry registry(store_path);
 
-        const auto record = registry.register_initial_key(make_initial("coord-key-1", kKeyA, 100.0));
+        const auto record =
+            registry.register_initial_key(make_initial("coord-key-1", kKeyA, 100.0));
         check(record.status == CoordinatorSigningKeyStatus::kActive,
               "the coordinator's first-ever signing key is ACTIVE immediately");
 
-        const auto refreshed = registry.register_initial_key(make_initial("coord-key-1", kKeyA, 101.0));
+        const auto refreshed =
+            registry.register_initial_key(make_initial("coord-key-1", kKeyA, 101.0));
         check(refreshed.created_at_unix_s == 100.0,
               "re-registering the identical key is idempotent (created_at unchanged)");
 
@@ -48,8 +50,9 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
             [&]() { registry.register_initial_key(make_initial("coord-key-1", kKeyB, 102.0)); },
             "a key-swap attempt under the same signing_key_id is rejected");
 
-        expect_throw([&]() { registry.register_initial_key(make_initial("coord-key-2", kKeyB, 103.0)); },
-                     "registering a second initial key while one is already ACTIVE is rejected");
+        expect_throw(
+            [&]() { registry.register_initial_key(make_initial("coord-key-2", kKeyB, 103.0)); },
+            "registering a second initial key while one is already ACTIVE is rejected");
 
         const auto active = registry.active_key(150.0);
         check(active.has_value() && active->signing_key_id == "coord-key-1",
@@ -76,8 +79,9 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
               "the previous key becomes GRACE_PERIOD on commit (grace_period_seconds > 0)");
 
         const auto trusted = registry.trusted_public_keys(210.0);
-        check(trusted.size() == 2,
-              "trusted_public_keys() includes both the new ACTIVE key and the old GRACE_PERIOD key");
+        check(
+            trusted.size() == 2,
+            "trusted_public_keys() includes both the new ACTIVE key and the old GRACE_PERIOD key");
 
         const auto trusted_after_grace = registry.trusted_public_keys(4000.0);
         check(trusted_after_grace.size() == 1,
@@ -107,7 +111,8 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
         dup_id.new_signing_key_id = "coord-key-1";  // already exists
         const auto dup_result = registry.validate_rotation(dup_id);
         check(!dup_result.accepted &&
-                  dup_result.reason == CoordinatorSigningKeyRotationRejectionReason::kDuplicateNewKeyId,
+                  dup_result.reason ==
+                      CoordinatorSigningKeyRotationRejectionReason::kDuplicateNewKeyId,
               "rotation to an already-registered key_id is rejected");
 
         CoordinatorSigningKeyRotationRequest excessive_grace = rotation;
@@ -115,7 +120,8 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
         excessive_grace.new_signing_key_id = "coord-key-3";
         excessive_grace.new_public_key_hex = kKeyC;
         excessive_grace.new_public_key_fingerprint = "fp-" + kKeyC;
-        excessive_grace.grace_period_seconds = CoordinatorSigningKeyRegistry::kMaxGracePeriodSeconds + 1.0;
+        excessive_grace.grace_period_seconds =
+            CoordinatorSigningKeyRegistry::kMaxGracePeriodSeconds + 1.0;
         const auto excessive_result = registry.validate_rotation(excessive_grace);
         check(!excessive_result.accepted &&
                   excessive_result.reason ==
@@ -130,7 +136,8 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
         bad_expiry.new_key_expires_at_unix_s = 150.0;  // <= now_unix_s (200.0)
         const auto bad_expiry_result = registry.validate_rotation(bad_expiry);
         check(!bad_expiry_result.accepted &&
-                  bad_expiry_result.reason == CoordinatorSigningKeyRotationRejectionReason::kInvalidExpiry,
+                  bad_expiry_result.reason ==
+                      CoordinatorSigningKeyRotationRejectionReason::kInvalidExpiry,
               "a new-key expiry not strictly after now is rejected");
 
         CoordinatorSigningKeyRotationRequest excessive_lifetime = rotation;
@@ -139,7 +146,8 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
         excessive_lifetime.new_public_key_hex = std::string(64, 'e');
         excessive_lifetime.new_public_key_fingerprint = "fp-e";
         excessive_lifetime.new_key_expires_at_unix_s =
-            rotation.now_unix_s + CoordinatorSigningKeyRegistry::kMaxCoordinatorKeyLifetimeSeconds + 1.0;
+            rotation.now_unix_s + CoordinatorSigningKeyRegistry::kMaxCoordinatorKeyLifetimeSeconds +
+            1.0;
         const auto excessive_lifetime_result = registry.validate_rotation(excessive_lifetime);
         check(!excessive_lifetime_result.accepted &&
                   excessive_lifetime_result.reason ==
@@ -166,9 +174,9 @@ void run_coordinator_signing_key_registry_tests(const std::string& scratch_dir) 
         const auto keys = restarted.list(400.0);
         check(keys.size() == 2, "both coordinator signing keys survive a restart");
         const auto revoked_key = restarted.find("coord-key-2", 400.0);
-        check(revoked_key.has_value() &&
-                  revoked_key->status == CoordinatorSigningKeyStatus::kRevoked,
-              "the revoked key's status survives a restart");
+        check(
+            revoked_key.has_value() && revoked_key->status == CoordinatorSigningKeyStatus::kRevoked,
+            "the revoked key's status survives a restart");
     }
 
     // Corruption detection.

@@ -28,6 +28,8 @@ def all_scenarios() -> list[Scenario]:
         privacy_authenticity,
         recovery,
         regression,
+        research_registry,
+        secure_adaptive_clipping,
         secure_hybrid_dp,
         secure_user_level_dp,
         security_api,
@@ -55,7 +57,9 @@ def all_scenarios() -> list[Scenario]:
         metrics,
         secure_user_level_dp,
         secure_hybrid_dp,
+        secure_adaptive_clipping,
         recovery,
+        research_registry,
         regression,
     ):
         scenarios.extend(module.SCENARIOS)

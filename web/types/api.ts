@@ -68,6 +68,29 @@ export type OverviewData = {
   source: "live" | "demo";
 };
 
+export type ResearchExperimentSummary = {
+  experiment_id: string;
+  display_name: string;
+  research_question: string;
+  dataset_id: string;
+  model_id: string;
+  algorithm_id: string;
+  privacy_mode: string;
+  secure_aggregation_enabled: boolean;
+  secure_aggregation_provider?: string;
+  adaptive_clipping_enabled: boolean;
+  declared_seed_count: number;
+  current_state: string;
+  successful_run_count: number;
+  failed_run_count: number;
+  canceled_run_count: number;
+  blocked_run_count: number;
+  created_at: string;
+  updated_at: string;
+  degraded?: boolean;
+  degraded_reason?: string;
+};
+
 export type RunDashboardMetrics = {
   current_round: number;
   target_rounds: number;

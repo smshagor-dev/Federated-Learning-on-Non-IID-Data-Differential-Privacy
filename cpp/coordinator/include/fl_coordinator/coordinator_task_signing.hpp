@@ -44,10 +44,14 @@ struct TaskHashResult {
     std::string reason;      // set only when ok == false
 };
 
-[[nodiscard]] TaskHashResult training_configuration_hash(const fl::coordinator::v1::ClientTrainingTask& task);
-[[nodiscard]] TaskHashResult model_configuration_hash(const fl::coordinator::v1::ClientTrainingTask& task);
-[[nodiscard]] TaskHashResult dataset_partition_hash(const fl::coordinator::v1::ClientTrainingTask& task);
-[[nodiscard]] TaskHashResult privacy_configuration_hash(const fl::coordinator::v1::ClientTrainingTask& task);
+[[nodiscard]] TaskHashResult training_configuration_hash(
+    const fl::coordinator::v1::ClientTrainingTask& task);
+[[nodiscard]] TaskHashResult model_configuration_hash(
+    const fl::coordinator::v1::ClientTrainingTask& task);
+[[nodiscard]] TaskHashResult dataset_partition_hash(
+    const fl::coordinator::v1::ClientTrainingTask& task);
+[[nodiscard]] TaskHashResult privacy_configuration_hash(
+    const fl::coordinator::v1::ClientTrainingTask& task);
 [[nodiscard]] TaskHashResult personalization_configuration_hash(
     const fl::coordinator::v1::ClientTrainingTask& task);
 [[nodiscard]] TaskHashResult task_payload_hash(const fl::coordinator::v1::ClientTrainingTask& task);
@@ -104,8 +108,10 @@ struct SignCoordinatorTaskResult {
 // mutated -- the caller attaches `out` as ClientTrainingTask.signed_task
 // separately.
 [[nodiscard]] SignCoordinatorTaskResult sign_coordinator_task(
-    const fl::coordinator::v1::ClientTrainingTask& task, const SignCoordinatorTaskParams& params,
-    const CoordinatorSigningIdentity& identity, fl::coordinator::v1::SignedCoordinatorTask& out);
+    const fl::coordinator::v1::ClientTrainingTask& task,
+    const SignCoordinatorTaskParams& params,
+    const CoordinatorSigningIdentity& identity,
+    fl::coordinator::v1::SignedCoordinatorTask& out);
 
 // Test/round-trip-only: verifies signed_task's Ed25519 signature
 // against signing_public_key_hex. Does not check expiry, worker

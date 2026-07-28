@@ -43,6 +43,9 @@ SECURE_AGGREGATION_TASK_BINDING_DOMAIN_SEPARATION_PREFIX = (
 SECURE_USER_LEVEL_DP_CONFIG_DOMAIN_SEPARATION_PREFIX = (
     b"FL_PLATFORM_SECURE_USER_LEVEL_DP_CONFIG_V1\x00"
 )
+SECURE_ADAPTIVE_CLIPPING_CONFIG_DOMAIN_SEPARATION_PREFIX = (
+    b"FL_PLATFORM_SECURE_ADAPTIVE_CLIPPING_CONFIG_V1\x00"
+)
 
 
 class CoordinatorTaskSigningError(RuntimeError):
@@ -136,6 +139,20 @@ class SecureAggregationTaskBindingFields:
     secure_user_level_max_epsilon: float = 0.0
     secure_user_level_fixed_weight: int = 0
     secure_user_level_sampling_assumption: int = 0
+    # Secure Adaptive Clipping with Private Indicator Aggregation
+    # slice -- mirrors fl.coordinator.v1.SecureAggregationTaskBinding's
+    # fields 27-36 field-for-field. indicator_definition is the raw
+    # proto enum int (SecureAdaptiveClippingIndicatorDefinition),
+    # matching provider/adjacency_model's own convention above.
+    secure_adaptive_clipping_active: bool = False
+    secure_adaptive_clipping_indicator_definition: int = 0
+    secure_adaptive_clipping_current_bound: float = 0.0
+    secure_adaptive_clipping_min_bound: float = 0.0
+    secure_adaptive_clipping_max_bound: float = 0.0
+    secure_adaptive_clipping_target_quantile: float = 0.0
+    secure_adaptive_clipping_learning_rate: float = 0.0
+    secure_adaptive_clipping_indicator_noise_multiplier: float = 0.0
+    secure_adaptive_clipping_clip_state_step_count: int = 0
 
 
 @dataclass(slots=True, frozen=True)
@@ -351,6 +368,56 @@ def secure_user_level_dp_configuration_hash(fields: TaskConfigurationFields) -> 
     )
 
 
+def secure_adaptive_clipping_configuration_hash(fields: TaskConfigurationFields) -> str:
+    """Must byte-for-byte match coordinator_task_signing.cpp's
+    secure_adaptive_clipping_configuration_hash. A third sibling hash,
+    same convention as secure_user_level_dp_configuration_hash above."""
+    binding = fields.secure_aggregation
+    if not binding.secure_adaptive_clipping_active:
+        payload: dict[str, Any] = {"secure_adaptive_clipping_active": False}
+        return _sha256_hex_prefixed(
+            SECURE_ADAPTIVE_CLIPPING_CONFIG_DOMAIN_SEPARATION_PREFIX, payload
+        )
+    _reject_non_finite(
+        binding.secure_adaptive_clipping_current_bound,
+        binding.secure_adaptive_clipping_min_bound,
+        binding.secure_adaptive_clipping_max_bound,
+        binding.secure_adaptive_clipping_target_quantile,
+        binding.secure_adaptive_clipping_learning_rate,
+        binding.secure_adaptive_clipping_indicator_noise_multiplier,
+    )
+    payload = {
+        "secure_adaptive_clipping_active": True,
+        "secure_adaptive_clipping_clip_state_step_count": (
+            binding.secure_adaptive_clipping_clip_state_step_count
+        ),
+        "secure_adaptive_clipping_current_bound": (
+            binding.secure_adaptive_clipping_current_bound
+        ),
+        "secure_adaptive_clipping_indicator_definition": (
+            binding.secure_adaptive_clipping_indicator_definition
+        ),
+        "secure_adaptive_clipping_indicator_noise_multiplier": (
+            binding.secure_adaptive_clipping_indicator_noise_multiplier
+        ),
+        "secure_adaptive_clipping_learning_rate": (
+            binding.secure_adaptive_clipping_learning_rate
+        ),
+        "secure_adaptive_clipping_max_bound": (
+            binding.secure_adaptive_clipping_max_bound
+        ),
+        "secure_adaptive_clipping_min_bound": (
+            binding.secure_adaptive_clipping_min_bound
+        ),
+        "secure_adaptive_clipping_target_quantile": (
+            binding.secure_adaptive_clipping_target_quantile
+        ),
+    }
+    return _sha256_hex_prefixed(
+        SECURE_ADAPTIVE_CLIPPING_CONFIG_DOMAIN_SEPARATION_PREFIX, payload
+    )
+
+
 def task_payload_hash(fields: TaskConfigurationFields) -> str:
     _reject_non_finite(
         fields.learning_rate, fields.momentum, fields.weight_decay, fields.fedprox_mu
@@ -392,6 +459,7 @@ class SignedCoordinatorTaskFields:
     task_payload_hash: str
     secure_aggregation_configuration_hash: str = ""
     secure_user_level_dp_configuration_hash: str = ""
+    secure_adaptive_clipping_configuration_hash: str = ""
     schema_version: int = SCHEMA_VERSION
 
 
@@ -410,6 +478,9 @@ def coordinator_task_signing_bytes(fields: SignedCoordinatorTaskFields) -> bytes
         "personalization_configuration_hash": fields.personalization_configuration_hash,
         "privacy_configuration_hash": fields.privacy_configuration_hash,
         "schema_version": fields.schema_version,
+        "secure_adaptive_clipping_configuration_hash": (
+            fields.secure_adaptive_clipping_configuration_hash
+        ),
         "secure_aggregation_configuration_hash": (
             fields.secure_aggregation_configuration_hash
         ),

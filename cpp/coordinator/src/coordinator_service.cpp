@@ -3,8 +3,8 @@
 #include "fl_coordinator/capability_statement_verifier.hpp"
 #include "fl_coordinator/coordinator_task_signing.hpp"
 #include "fl_coordinator/peer_identity.hpp"
-#include "fl_coordinator/signed_envelope_verifier.hpp"
 #include "fl_coordinator/secure_aggregation_encoding.hpp"
+#include "fl_coordinator/signed_envelope_verifier.hpp"
 #include "fl_coordinator/trusted_key_bundle.hpp"
 #include "fl_core/secure_random.hpp"
 
@@ -158,7 +158,8 @@ fl::privacy::v1::AccountantType accountant_type_to_wire(const std::string& value
 // safe default (see fl_core/privacy.hpp's PrivacyBudgetPolicy doc
 // comment) — a caller who configures an epsilon_budget without
 // explicitly picking a policy gets visibility, not a surprise stoppage.
-fl::core::PrivacyBudgetPolicy privacy_budget_policy_from_wire(fl::privacy::v1::PrivacyBudgetPolicy value) {
+fl::core::PrivacyBudgetPolicy privacy_budget_policy_from_wire(
+    fl::privacy::v1::PrivacyBudgetPolicy value) {
     switch (value) {
         case fl::privacy::v1::PRIVACY_BUDGET_POLICY_STOP_BEFORE_EXCEEDING:
             return fl::core::PrivacyBudgetPolicy::kStopBeforeExceeding;
@@ -214,8 +215,9 @@ fl::core::TensorDescriptor tensor_descriptor_from_wire(
 // delta) reject that via the same validation path a missing/malformed
 // tensor already goes through in submit_client_result.
 fl::core::TensorBuffer tensor_buffer_from_wire(const fl::worker::v1::TensorManifest& tensor) {
-    return fl::core::TensorBuffer(tensor_descriptor_from_wire(tensor),
-                                  std::vector<double>(tensor.values().begin(), tensor.values().end()));
+    return fl::core::TensorBuffer(
+        tensor_descriptor_from_wire(tensor),
+        std::vector<double>(tensor.values().begin(), tensor.values().end()));
 }
 
 fl::core::TensorCollection tensor_collection_from_wire(
@@ -241,8 +243,7 @@ RunConfig config_from_request(const fl::coordinator::v1::CreateRunRequest& reque
     }
     if (request.target_clients_per_round() == 0 ||
         request.target_clients_per_round() > request.total_clients()) {
-        throw std::invalid_argument(
-            "target_clients_per_round must be between 1 and total_clients");
+        throw std::invalid_argument("target_clients_per_round must be between 1 and total_clients");
     }
 
     RunConfig config;
@@ -321,7 +322,8 @@ RunConfig config_from_request(const fl::coordinator::v1::CreateRunRequest& reque
         config.sample_level_privacy.noise_multiplier = wire_sample_level.noise_multiplier();
         config.sample_level_privacy.max_grad_norm = wire_sample_level.max_grad_norm();
         config.sample_level_privacy.target_delta = wire_sample_level.target_delta();
-        config.sample_level_privacy.accountant = accountant_type_from_wire(wire_sample_level.accountant());
+        config.sample_level_privacy.accountant =
+            accountant_type_from_wire(wire_sample_level.accountant());
         config.sample_level_privacy.poisson_sampling = wire_sample_level.poisson_sampling();
         config.sample_level_privacy.epsilon_budget = wire_sample_level.epsilon_budget();
         if (config.sample_level_privacy.noise_multiplier <= 0.0) {
@@ -347,8 +349,7 @@ RunConfig config_from_request(const fl::coordinator::v1::CreateRunRequest& reque
             throw std::invalid_argument("user-level DP requires a positive noise_multiplier");
         }
         if (config.user_level_privacy.initial_clipping_bound <= 0.0) {
-            throw std::invalid_argument(
-                "user-level DP requires a positive initial_clipping_bound");
+            throw std::invalid_argument("user-level DP requires a positive initial_clipping_bound");
         }
         if (!(config.user_level_privacy.target_delta > 0.0 &&
               config.user_level_privacy.target_delta < 1.0)) {
@@ -378,7 +379,8 @@ RunConfig config_from_request(const fl::coordinator::v1::CreateRunRequest& reque
             config.adaptive_clipping.clip_learning_rate = wire_adaptive.clip_learning_rate();
             config.adaptive_clipping.min_clip = wire_adaptive.min_clip();
             config.adaptive_clipping.max_clip = wire_adaptive.max_clip();
-            config.adaptive_clipping.count_noise_multiplier = wire_adaptive.count_noise_multiplier();
+            config.adaptive_clipping.count_noise_multiplier =
+                wire_adaptive.count_noise_multiplier();
             config.adaptive_clipping.target_delta = wire_adaptive.target_delta();
             config.adaptive_clipping.epsilon_budget = wire_adaptive.epsilon_budget();
         }
@@ -420,15 +422,15 @@ grpc::Status to_grpc_status(const std::exception& error) {
 // non-mTLS-authenticated connection is a deliberate no-op, matching
 // peer_identity.hpp's documented contract -- see its header comment.
 std::optional<grpc::Status> reject_if_worker_identity_mismatch(grpc::ServerContext* context,
-                                                                const std::string& worker_id) {
+                                                               const std::string& worker_id) {
     if (context == nullptr) {
         return std::nullopt;
     }
     const auto peer_identity = extract_peer_identity(*context);
     if (peer_identity.authenticated && !has_worker_identity(peer_identity, worker_id)) {
-        return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                            "worker_id '" + worker_id +
-                                "' does not match the authenticated certificate identity");
+        return grpc::Status(
+            grpc::StatusCode::PERMISSION_DENIED,
+            "worker_id '" + worker_id + "' does not match the authenticated certificate identity");
     }
     return std::nullopt;
 }
@@ -453,9 +455,8 @@ std::optional<grpc::Status> reject_if_not_go_api_service_identity(grpc::ServerCo
                             "administration RPCs require an authenticated service certificate");
     }
     if (!has_service_identity(peer_identity, "go-api")) {
-        return grpc::Status(
-            grpc::StatusCode::PERMISSION_DENIED,
-            "administration RPCs require the go-api service certificate identity");
+        return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                            "administration RPCs require the go-api service certificate identity");
     }
     return std::nullopt;
 }
@@ -481,7 +482,8 @@ std::string safe_actor_label(grpc::ServerContext* context) {
 // ADMIN_CONTROL RPC guarded by reject_if_not_go_api_service_identity.
 // No-op when no journal is configured, matching every optional-store
 // convention in this file.
-void emit_permission_denied_event(SecurityEventJournal* journal, grpc::ServerContext* context,
+void emit_permission_denied_event(SecurityEventJournal* journal,
+                                  grpc::ServerContext* context,
                                   const std::string& rpc_name) {
     if (journal == nullptr) {
         return;
@@ -521,10 +523,14 @@ SecurityEventType security_event_type_for_envelope_rejection(const std::string& 
 // separate calls/journals per Design Decision 7 (events answer "what
 // happened", audit answers "who did it").
 void emit_worker_lifecycle_records(SecurityEventJournal* event_journal,
-                                   SecurityAuditJournal* audit_journal, grpc::ServerContext* context,
-                                   SecurityEventType event_type, const std::string& action,
-                                   const std::string& worker_id, const std::string& reason,
-                                   const std::string& request_id, const std::string& trace_id) {
+                                   SecurityAuditJournal* audit_journal,
+                                   grpc::ServerContext* context,
+                                   SecurityEventType event_type,
+                                   const std::string& action,
+                                   const std::string& worker_id,
+                                   const std::string& reason,
+                                   const std::string& request_id,
+                                   const std::string& trace_id) {
     const std::string actor = safe_actor_label(context);
     if (event_journal != nullptr) {
         SecurityEvent event;
@@ -578,10 +584,15 @@ void emit_worker_lifecycle_records(SecurityEventJournal* event_journal,
 // as invalid, not silently accepted).
 std::string budget_decision_contradiction_reason(const std::string& budget_decision) {
     static const std::vector<std::string> kKnownValues = {
-        "allowed", "warned", "stopped_before_step", "stopped_after_task",
-        "failed_task", "refused_before_training",
+        "allowed",
+        "warned",
+        "stopped_before_step",
+        "stopped_after_task",
+        "failed_task",
+        "refused_before_training",
     };
-    if (std::find(kKnownValues.begin(), kKnownValues.end(), budget_decision) == kKnownValues.end()) {
+    if (std::find(kKnownValues.begin(), kKnownValues.end(), budget_decision) ==
+        kKnownValues.end()) {
         return "unrecognized budget_decision value: '" + budget_decision + "'";
     }
     if (budget_decision == "stopped_before_step") {
@@ -719,54 +730,60 @@ struct ResolvedSigningKey {
 ResolvedSigningKey resolve_signing_key(SigningKeyRegistry* signing_key_registry,
                                        const WorkerIdentityRecord& identity_record,
                                        const std::string& presented_signing_key_id,
-                                       SignedMessageKind kind, double now_unix_s) {
+                                       SignedMessageKind kind,
+                                       double now_unix_s) {
     if (signing_key_registry == nullptr) {
         if (presented_signing_key_id != identity_record.signing_key_id) {
-            return {false, "unknown_signing_key",
-                   "signing_key_id does not match the signing key on record for this worker", ""};
+            return {false,
+                    "unknown_signing_key",
+                    "signing_key_id does not match the signing key on record for this worker",
+                    ""};
         }
         return {true, "", "", identity_record.signing_public_key};
     }
     const auto record =
         signing_key_registry->find(identity_record.worker_id, presented_signing_key_id, now_unix_s);
     if (!record.has_value()) {
-        return {false, "unknown_signing_key",
-               "signing_key_id '" + presented_signing_key_id +
-                   "' is not registered for worker_id '" + identity_record.worker_id + "'",
-               ""};
+        return {false,
+                "unknown_signing_key",
+                "signing_key_id '" + presented_signing_key_id +
+                    "' is not registered for worker_id '" + identity_record.worker_id + "'",
+                ""};
     }
     if (!signing_key_status_permits(record->status, kind)) {
-        return {false, "signing_key_" + to_string(record->status),
-               "signing key '" + presented_signing_key_id + "' has status '" +
-                   to_string(record->status) + "', which does not permit this message type",
-               ""};
+        return {false,
+                "signing_key_" + to_string(record->status),
+                "signing key '" + presented_signing_key_id + "' has status '" +
+                    to_string(record->status) + "', which does not permit this message type",
+                ""};
     }
     return {true, "", "", record->public_key_hex};
 }
 
 }  // namespace
 
-CoordinatorServiceImpl::CoordinatorServiceImpl(RunManager& manager,
-                                               WorkerIdentityRegistry* identity_registry,
-                                               ReplayProtectionStore* replay_store,
-                                               bool allow_unsigned_client_results,
-                                               AccountantMonotonicityStore* monotonicity_store,
-                                               bool allow_unsigned_privacy_records,
-                                               SigningKeyRegistry* signing_key_registry,
-                                               CoordinatorActiveIdentityStore* coordinator_active_identity,
-                                               CoordinatorSigningKeyRegistry* coordinator_signing_key_registry,
-                                               CoordinatorTaskSequenceStore* coordinator_task_sequence_store,
-                                               IdempotencyStore* idempotency_store,
-                                               std::string coordinator_signing_key_dir,
-                                               std::string trusted_key_bundle_path,
-                                               std::string coordinator_identity_label,
-                                               TransportMode transport_mode,
-                                               SecurityEventJournal* security_event_journal,
-                                               SecurityAuditJournal* security_audit_journal,
-                                               SecureAggregationSessionManager* secure_aggregation_manager,
-                                               bool secure_aggregation_enabled,
-                                               double secure_aggregation_key_advertisement_window_seconds,
-                                               double secure_aggregation_masked_update_window_seconds)
+CoordinatorServiceImpl::CoordinatorServiceImpl(
+    RunManager& manager,
+    WorkerIdentityRegistry* identity_registry,
+    ReplayProtectionStore* replay_store,
+    bool allow_unsigned_client_results,
+    AccountantMonotonicityStore* monotonicity_store,
+    bool allow_unsigned_privacy_records,
+    SigningKeyRegistry* signing_key_registry,
+    CoordinatorActiveIdentityStore* coordinator_active_identity,
+    CoordinatorSigningKeyRegistry* coordinator_signing_key_registry,
+    CoordinatorTaskSequenceStore* coordinator_task_sequence_store,
+    IdempotencyStore* idempotency_store,
+    std::string coordinator_signing_key_dir,
+    std::string trusted_key_bundle_path,
+    std::string coordinator_identity_label,
+    TransportMode transport_mode,
+    SecurityEventJournal* security_event_journal,
+    SecurityAuditJournal* security_audit_journal,
+    SecureAggregationSessionManager* secure_aggregation_manager,
+    bool secure_aggregation_enabled,
+    double secure_aggregation_key_advertisement_window_seconds,
+    double secure_aggregation_masked_update_window_seconds)
     : manager_(&manager),
       identity_registry_(identity_registry),
       replay_store_(replay_store),
@@ -787,8 +804,10 @@ CoordinatorServiceImpl::CoordinatorServiceImpl(RunManager& manager,
       security_audit_journal_(security_audit_journal),
       secure_aggregation_manager_(secure_aggregation_manager),
       secure_aggregation_enabled_(secure_aggregation_enabled),
-      secure_aggregation_key_advertisement_window_seconds_(secure_aggregation_key_advertisement_window_seconds),
-      secure_aggregation_masked_update_window_seconds_(secure_aggregation_masked_update_window_seconds) {}
+      secure_aggregation_key_advertisement_window_seconds_(
+          secure_aggregation_key_advertisement_window_seconds),
+      secure_aggregation_masked_update_window_seconds_(
+          secure_aggregation_masked_update_window_seconds) {}
 
 double CoordinatorServiceImpl::now_unix_s() {
     return static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -890,7 +909,8 @@ grpc::Status CoordinatorServiceImpl::GetRound(grpc::ServerContext*,
 }
 
 grpc::Status CoordinatorServiceImpl::GetModelManifest(
-    grpc::ServerContext*, const fl::coordinator::v1::GetModelManifestRequest*,
+    grpc::ServerContext*,
+    const fl::coordinator::v1::GetModelManifestRequest*,
     fl::coordinator::v1::ModelManifest*) {
     // Work Package N: same reasoning as GetRound above -- declared, not
     // required by the current live flow (the manifest a run needs is
@@ -921,10 +941,9 @@ grpc::Status CoordinatorServiceImpl::RegisterWorker(
             peer_identity = extract_peer_identity(*context);
             if (peer_identity.authenticated &&
                 !has_worker_identity(peer_identity, request->worker_id())) {
-                return grpc::Status(
-                    grpc::StatusCode::PERMISSION_DENIED,
-                    "worker_id '" + request->worker_id() +
-                        "' does not match the authenticated certificate identity");
+                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                                    "worker_id '" + request->worker_id() +
+                                        "' does not match the authenticated certificate identity");
             }
         }
 
@@ -940,9 +959,8 @@ grpc::Status CoordinatorServiceImpl::RegisterWorker(
             const auto& signed_statement = request->signed_capability();
             const auto verification = verify_capability_statement(signed_statement, now_unix_s());
             if (!verification.valid) {
-                return grpc::Status(
-                    grpc::StatusCode::PERMISSION_DENIED,
-                    "signed capability statement rejected: " + verification.reason);
+                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                                    "signed capability statement rejected: " + verification.reason);
             }
             if (signed_statement.worker_id() != request->worker_id()) {
                 return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
@@ -1025,22 +1043,29 @@ grpc::Status CoordinatorServiceImpl::RegisterWorker(
                 // unauthenticated (insecure/dev) connection has no real
                 // certificate to derive one from.
                 if (peer_identity.authenticated) {
-                    const std::string certificate_identity =
-                        peer_identity.uri_sans.empty() ? std::string() : peer_identity.uri_sans.front();
+                    const std::string certificate_identity = peer_identity.uri_sans.empty()
+                                                                 ? std::string()
+                                                                 : peer_identity.uri_sans.front();
                     try {
                         identity_registry_->register_identity(
-                            request->worker_id(), certificate_identity, /*certificate_serial=*/"",
+                            request->worker_id(),
+                            certificate_identity,
+                            /*certificate_serial=*/"",
                             peer_identity.certificate_fingerprint_sha256,
-                            signed_statement.signing_public_key(), signed_statement.signing_key_id(),
-                            signed_statement.software_version(), signed_statement.build_id(),
-                            now_unix_s(), signed_statement.expires_at());
+                            signed_statement.signing_public_key(),
+                            signed_statement.signing_key_id(),
+                            signed_statement.software_version(),
+                            signed_statement.build_id(),
+                            now_unix_s(),
+                            signed_statement.expires_at());
                     } catch (const WorkerIdentityRegistryError& error) {
                         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, error.what());
                     }
                     if (signing_key_registry_ != nullptr &&
                         !signing_key_registry_
-                             ->find(request->worker_id(), signed_statement.signing_key_id(),
-                                   now_unix_s())
+                             ->find(request->worker_id(),
+                                    signed_statement.signing_key_id(),
+                                    now_unix_s())
                              .has_value()) {
                         InitialSigningKeyRegistration key_registration;
                         key_registration.worker_id = request->worker_id();
@@ -1069,7 +1094,8 @@ grpc::Status CoordinatorServiceImpl::RegisterWorker(
         capability.available_memory_bytes = request->capability().available_memory_bytes();
         if (request->capability().has_privacy()) {
             const auto& wire_privacy_caps = request->capability().privacy();
-            capability.privacy.supports_sample_level_dp = wire_privacy_caps.supports_sample_level_dp();
+            capability.privacy.supports_sample_level_dp =
+                wire_privacy_caps.supports_sample_level_dp();
             capability.privacy.opacus_version = wire_privacy_caps.opacus_version();
             capability.privacy.supports_secure_random = wire_privacy_caps.supports_secure_random();
             for (const auto& accountant : wire_privacy_caps.supported_accountants()) {
@@ -1148,9 +1174,11 @@ grpc::Status CoordinatorServiceImpl::Heartbeat(
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
                             "worker_id '" + request->worker_id() + "' is revoked");
     }
-    const auto resolved_key =
-        resolve_signing_key(signing_key_registry_, *identity_record, envelope.signing_key_id(),
-                           SignedMessageKind::kHeartbeat, now_unix_s());
+    const auto resolved_key = resolve_signing_key(signing_key_registry_,
+                                                  *identity_record,
+                                                  envelope.signing_key_id(),
+                                                  SignedMessageKind::kHeartbeat,
+                                                  now_unix_s());
     if (!resolved_key.ok) {
         response->set_rejection_code(resolved_key.rejection_code);
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, resolved_key.reason);
@@ -1160,7 +1188,9 @@ grpc::Status CoordinatorServiceImpl::Heartbeat(
     const auto verification = verify_signed_envelope(
         envelope,
         static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_WORKER_HEARTBEAT),
-        payload_hash_input, resolved_key.public_key_hex, now_unix_s(),
+        payload_hash_input,
+        resolved_key.public_key_hex,
+        now_unix_s(),
         /*future_issued_tolerance_seconds=*/30.0);
     if (!verification.valid) {
         response->set_rejection_code(verification.rejection_code);
@@ -1168,7 +1198,8 @@ grpc::Status CoordinatorServiceImpl::Heartbeat(
             SecurityEvent event;
             event.source_service = "coordinator";
             event.source_component = "coordinator_service";
-            event.event_type = security_event_type_for_envelope_rejection(verification.rejection_code);
+            event.event_type =
+                security_event_type_for_envelope_rejection(verification.rejection_code);
             event.severity = default_severity(event.event_type);
             event.actor_type = SecurityActorType::kWorker;
             event.safe_actor_id = request->worker_id();
@@ -1336,10 +1367,9 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
             // coordinator without one configured) is unaffected.
             if (signing_key_registry_ != nullptr &&
                 !signing_key_registry_->has_any_valid_key(request->worker_id(), now_unix_s())) {
-                return grpc::Status(
-                    grpc::StatusCode::PERMISSION_DENIED,
-                    "worker_id '" + request->worker_id() +
-                        "' has no ACTIVE or GRACE_PERIOD signing key on record");
+                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                                    "worker_id '" + request->worker_id() +
+                                        "' has no ACTIVE or GRACE_PERIOD signing key on record");
             }
         }
     }
@@ -1359,7 +1389,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
             // and the signature below must bind the real lease
             // deadline and attempt count, not a placeholder), not a
             // broader unrelated rewrite. See docs/signed-coordinator-tasks.md.
-            response->set_lease_expires_at(iso8601_from_unix_seconds(task->lease_expires_at_unix_s));
+            response->set_lease_expires_at(
+                iso8601_from_unix_seconds(task->lease_expires_at_unix_s));
             response->set_attempt(task->attempt);
             auto* wire_task = response->mutable_task();
             wire_task->set_run_id(task->descriptor.run_id);
@@ -1406,15 +1437,16 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
             // correction" section.
             if (secure_aggregation_manager_ != nullptr) {
                 if (secure_aggregation_enabled_ &&
-                    !secure_aggregation_manager_->has_session_for_run_round(request->run_id(),
-                                                                            task->descriptor.round_id)) {
+                    !secure_aggregation_manager_->has_session_for_run_round(
+                        request->run_id(), task->descriptor.round_id)) {
                     const auto round = run.round_snapshot(task->descriptor.round_id);
                     if (round.has_value() && !round->selected_clients.empty()) {
                         fl::coordinator::v1::SecureAggregationSessionConfig secure_config;
                         secure_config.set_schema_version(1);
                         secure_config.set_protocol_version(1);
                         secure_config.set_provider(
-                            fl::worker::v1::SECURE_AGGREGATION_PROVIDER_SECAGG_NO_DROPOUT_EXPERIMENTAL);
+                            fl::worker::v1::
+                                SECURE_AGGREGATION_PROVIDER_SECAGG_NO_DROPOUT_EXPERIMENTAL);
                         secure_config.set_session_id(request->run_id() + ":" +
                                                      std::to_string(task->descriptor.round_id));
                         secure_config.set_run_id(request->run_id());
@@ -1450,11 +1482,14 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                         // profile; this is not a second, independent
                         // safety decision, only the same proof's output
                         // surfaced onto the wire for the worker to see).
-                        secure_config.set_max_absolute_update_bound(fixed_point_profile->max_input_magnitude());
-                        secure_config.set_max_client_weight(fixed_point_profile->max_client_weight());
+                        secure_config.set_max_absolute_update_bound(
+                            fixed_point_profile->max_input_magnitude());
+                        secure_config.set_max_client_weight(
+                            fixed_point_profile->max_client_weight());
                         const auto bounds_proof = fl::coordinator::prove_domain_bounds(
                             fl::coordinator::FixedPointEncodingProfile{});
-                        secure_config.set_max_aggregate_bound(bounds_proof.worst_case_aggregate_magnitude);
+                        secure_config.set_max_aggregate_bound(
+                            bounds_proof.worst_case_aggregate_magnitude);
                         auto* crypto_profile = secure_config.mutable_cryptographic_profile();
                         crypto_profile->set_mask_generator_profile("chacha20_ietf");
                         crypto_profile->set_key_agreement_profile("x25519");
@@ -1467,7 +1502,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                         secure_config.set_masked_update_deadline_unix_s(
                             now + secure_aggregation_key_advertisement_window_seconds_ +
                             secure_aggregation_masked_update_window_seconds_);
-                        secure_config.set_session_expiry_unix_s(secure_config.masked_update_deadline_unix_s());
+                        secure_config.set_session_expiry_unix_s(
+                            secure_config.masked_update_deadline_unix_s());
                         // Work Areas Z/AB: decided once per session,
                         // never re-derived per participant -- this
                         // run's algorithm/privacy mode do not change
@@ -1483,23 +1519,31 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                         if (run.algorithm() != fl::core::AggregationAlgorithm::kFedAvg) {
                             secure_config.set_privacy_mode_compatible(false);
                             secure_config.set_privacy_incompatibility_reason(
-                                "SECURE_AGGREGATION_ALGORITHM_UNSUPPORTED: only fedavg is supported under "
+                                "SECURE_AGGREGATION_ALGORITHM_UNSUPPORTED: only fedavg is "
+                                "supported under "
                                 "secure aggregation this slice");
-                        } else if (run.adaptive_clipping_enabled()) {
-                            // Moved ahead of the privacy_mode-specific
-                            // branches below (Secure User-Level
-                            // Differential Privacy Runtime slice) --
-                            // this rejection applies regardless of
-                            // which privacy mode adaptive clipping is
-                            // combined with, and must fire even for a
-                            // USER_LEVEL_DP run so that branch never
-                            // has to re-check it.
+                        } else if (run.adaptive_clipping_enabled() &&
+                                   run.privacy_mode() != fl::core::PrivacyMode::kUserLevelDp &&
+                                   run.privacy_mode() != fl::core::PrivacyMode::kHybridDp) {
+                            // Secure Adaptive Clipping with Private
+                            // Indicator Aggregation slice: adaptive
+                            // clipping requires a user-level clipping
+                            // layer to adapt -- it is meaningless for
+                            // NONE/SAMPLE_LEVEL. When the mode IS
+                            // USER_LEVEL_DP/HYBRID_DP, this branch does
+                            // NOT fire and adaptive clipping is instead
+                            // validated inside the shared ladder below
+                            // (see docs/secure-adaptive-clipping-semantics.md
+                            // section 13) -- the blanket rejection this
+                            // used to be, regardless of privacy mode,
+                            // is lifted.
                             secure_config.set_privacy_mode_compatible(false);
                             secure_config.set_privacy_incompatibility_reason(
-                                "SECURE_AGGREGATION_ADAPTIVE_CLIPPING_UNSUPPORTED: clipping indicators are "
-                                "not themselves securely aggregated yet");
+                                "SECURE_ADAPTIVE_CLIPPING_UNSUPPORTED_PRIVACY_MODE: adaptive "
+                                "clipping "
+                                "requires USER_LEVEL_DP or HYBRID_DP as the active privacy mode");
                         } else if (run.privacy_mode() == fl::core::PrivacyMode::kUserLevelDp ||
-                                  run.privacy_mode() == fl::core::PrivacyMode::kHybridDp) {
+                                   run.privacy_mode() == fl::core::PrivacyMode::kHybridDp) {
                             // Secure User-Level Differential Privacy
                             // Runtime slice (Work Areas D/E/H/N), extended
                             // by the Secure Hybrid Differential Privacy
@@ -1520,7 +1564,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                             // this same signed task via
                             // privacy_configuration_hash and
                             // secure_user_level_dp_configuration_hash.
-                            const bool is_hybrid = run.privacy_mode() == fl::core::PrivacyMode::kHybridDp;
+                            const bool is_hybrid =
+                                run.privacy_mode() == fl::core::PrivacyMode::kHybridDp;
                             const std::string reason_prefix =
                                 is_hybrid ? "SECURE_HYBRID_DP" : "SECURE_USER_LEVEL_DP";
                             bool sample_config_ok = true;
@@ -1531,13 +1576,16 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                     !std::isfinite(sample_level.max_grad_norm) ||
                                     sample_level.max_grad_norm <= 0.0 ||
                                     !std::isfinite(sample_level.target_delta) ||
-                                    sample_level.target_delta <= 0.0 || sample_level.target_delta >= 1.0) {
+                                    sample_level.target_delta <= 0.0 ||
+                                    sample_level.target_delta >= 1.0) {
                                     sample_config_ok = false;
                                     secure_config.set_privacy_mode_compatible(false);
                                     secure_config.set_privacy_incompatibility_reason(
                                         reason_prefix +
-                                        "_INVALID_SAMPLE_CONFIGURATION: noise_multiplier, max_grad_norm, "
-                                        "and target_delta must all be finite and positive (target_delta "
+                                        "_INVALID_SAMPLE_CONFIGURATION: noise_multiplier, "
+                                        "max_grad_norm, "
+                                        "and target_delta must all be finite and positive "
+                                        "(target_delta "
                                         "additionally < 1)");
                                 }
                             }
@@ -1546,47 +1594,81 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                     secure_config.set_privacy_mode_compatible(false);
                                     secure_config.set_privacy_incompatibility_reason(
                                         reason_prefix +
-                                        "_VARIABLE_WEIGHT_UNSUPPORTED: secure aggregation requires uniform "
-                                        "weighting (fixed weight 1 per user) -- variable/sample-count "
+                                        "_VARIABLE_WEIGHT_UNSUPPORTED: secure aggregation requires "
+                                        "uniform "
+                                        "weighting (fixed weight 1 per user) -- "
+                                        "variable/sample-count "
                                         "weighting changes user-level sensitivity");
                                 } else {
                                     const auto& user_level = run.user_level_privacy();
-                                    const double clip_norm = user_level.initial_clipping_bound;
+                                    // Secure Adaptive Clipping with
+                                    // Private Indicator Aggregation
+                                    // slice: the bound this round's
+                                    // tasks are signed with is the
+                                    // adaptive controller's current
+                                    // value when adaptive clipping is
+                                    // active for this run -- a single
+                                    // substitution point that
+                                    // automatically makes every
+                                    // downstream quantization-margin/
+                                    // sensitivity/wire-binding
+                                    // computation below correctly
+                                    // adaptive-aware with no further
+                                    // changes (see the semantics doc
+                                    // section 13).
+                                    const bool adaptive_active = run.adaptive_clipping_enabled();
+                                    const double clip_norm =
+                                        adaptive_active ? run.current_adaptive_clip_bound()
+                                                        : user_level.initial_clipping_bound;
                                     if (!std::isfinite(clip_norm) || clip_norm <= 0.0 ||
                                         !std::isfinite(user_level.noise_multiplier) ||
                                         user_level.noise_multiplier <= 0.0 ||
                                         !std::isfinite(user_level.target_delta) ||
-                                        user_level.target_delta <= 0.0 || user_level.target_delta >= 1.0) {
+                                        user_level.target_delta <= 0.0 ||
+                                        user_level.target_delta >= 1.0) {
                                         secure_config.set_privacy_mode_compatible(false);
                                         secure_config.set_privacy_incompatibility_reason(
                                             reason_prefix +
-                                            "_INVALID_CONFIGURATION: clip_norm, noise_multiplier, and "
-                                            "target_delta must all be finite and positive (target_delta "
+                                            "_INVALID_CONFIGURATION: clip_norm, noise_multiplier, "
+                                            "and "
+                                            "target_delta must all be finite and positive "
+                                            "(target_delta "
                                             "additionally < 1)");
                                     } else {
                                         std::uint64_t total_elements = 0;
                                         for (const auto& descriptor : run.manifest().tensors) {
                                             std::uint64_t element_count = 1;
-                                            for (const auto dim : descriptor.shape) element_count *= dim;
+                                            for (const auto dim : descriptor.shape)
+                                                element_count *= dim;
                                             total_elements += element_count;
                                         }
-                                        const fl::coordinator::FixedPointEncodingProfile secure_profile{};
-                                        const double margin = fl::coordinator::compute_quantization_margin(
-                                            total_elements, secure_profile);
+                                        const fl::coordinator::FixedPointEncodingProfile
+                                            secure_profile{};
+                                        const double margin =
+                                            fl::coordinator::compute_quantization_margin(
+                                                total_elements, secure_profile);
                                         const double effective_sensitivity =
-                                            fl::coordinator::compute_effective_sensitivity(clip_norm, margin);
-                                        if (!std::isfinite(margin) || !std::isfinite(effective_sensitivity) ||
-                                            effective_sensitivity >= secure_profile.max_input_magnitude) {
+                                            fl::coordinator::compute_effective_sensitivity(
+                                                clip_norm, margin);
+                                        if (!std::isfinite(margin) ||
+                                            !std::isfinite(effective_sensitivity) ||
+                                            effective_sensitivity >=
+                                                secure_profile.max_input_magnitude) {
                                             secure_config.set_privacy_mode_compatible(false);
                                             secure_config.set_privacy_incompatibility_reason(
                                                 reason_prefix +
-                                                "_UNSAFE_QUANTIZATION_MARGIN: clip_norm plus the proven "
-                                                "worst-case quantization margin does not fit under this "
-                                                "profile's max_input_magnitude -- lower the clip norm or the "
-                                                "model size, or raise the profile's magnitude bound");
-                                        } else if (user_level.epsilon_budget > 0.0 &&
-                                                  run.project_user_level_epsilon_after_one_more_step() >=
-                                                      user_level.epsilon_budget) {
+                                                "_UNSAFE_QUANTIZATION_MARGIN: clip_norm plus the "
+                                                "proven "
+                                                "worst-case quantization margin does not fit under "
+                                                "this "
+                                                "profile's max_input_magnitude -- lower the clip "
+                                                "norm or the "
+                                                "model size, or raise the profile's magnitude "
+                                                "bound");
+                                        } else if (
+                                            user_level.epsilon_budget > 0.0 &&
+                                            run.project_user_level_epsilon_after_one_more_step() >=
+                                                user_level.epsilon_budget) {
                                             // Work Area N's "reserve": a
                                             // non-mutating pre-check,
                                             // refused here (before any
@@ -1602,18 +1684,78 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                             secure_config.set_privacy_mode_compatible(false);
                                             secure_config.set_privacy_incompatibility_reason(
                                                 reason_prefix +
-                                                "_BUDGET_EXHAUSTED: this round's projected epsilon would "
+                                                "_BUDGET_EXHAUSTED: this round's projected epsilon "
+                                                "would "
                                                 "meet or exceed the configured epsilon_budget");
+                                        } else if (adaptive_active &&
+                                                   (!std::isfinite(
+                                                        run.adaptive_clipping_config().min_clip) ||
+                                                    !std::isfinite(
+                                                        run.adaptive_clipping_config().max_clip) ||
+                                                    run.adaptive_clipping_config().min_clip <=
+                                                        0.0 ||
+                                                    run.adaptive_clipping_config().min_clip >
+                                                        run.adaptive_clipping_config().max_clip ||
+                                                    clip_norm <
+                                                        run.adaptive_clipping_config().min_clip ||
+                                                    clip_norm >
+                                                        run.adaptive_clipping_config().max_clip ||
+                                                    !std::isfinite(run.adaptive_clipping_config()
+                                                                       .target_quantile) ||
+                                                    run.adaptive_clipping_config()
+                                                            .target_quantile <= 0.0 ||
+                                                    run.adaptive_clipping_config()
+                                                            .target_quantile >= 1.0 ||
+                                                    !std::isfinite(run.adaptive_clipping_config()
+                                                                       .clip_learning_rate) ||
+                                                    run.adaptive_clipping_config()
+                                                            .clip_learning_rate <= 0.0 ||
+                                                    !std::isfinite(run.adaptive_clipping_config()
+                                                                       .count_noise_multiplier) ||
+                                                    run.adaptive_clipping_config()
+                                                            .count_noise_multiplier <= 0.0)) {
+                                            // Secure Adaptive Clipping
+                                            // with Private Indicator
+                                            // Aggregation slice, Work
+                                            // Area D: min_clip <=
+                                            // current bound <= max_clip
+                                            // (the current bound is
+                                            // always adaptive_active's
+                                            // clip_norm above, already
+                                            // maintained inside
+                                            // [min_clip, max_clip] by
+                                            // AdaptiveClipController's
+                                            // own clamp -- this is a
+                                            // defensive re-check, not
+                                            // the primary enforcement),
+                                            // strict (0,1) target
+                                            // quantile, positive finite
+                                            // learning rate, positive
+                                            // finite indicator noise
+                                            // multiplier.
+                                            secure_config.set_privacy_mode_compatible(false);
+                                            secure_config.set_privacy_incompatibility_reason(
+                                                "SECURE_ADAPTIVE_CLIPPING_INVALID_CONFIGURATION: "
+                                                "min_clip, "
+                                                "max_clip, target_quantile, learning_rate, and "
+                                                "count_noise_multiplier must all be finite and "
+                                                "within their "
+                                                "required ranges, and the current bound must lie "
+                                                "in "
+                                                "[min_clip, max_clip]");
                                         } else {
                                             secure_config.set_privacy_mode_compatible(true);
                                             secure_config.set_secure_user_level_dp_active(true);
                                             secure_config.set_secure_user_level_adjacency_model(
                                                 fl::coordinator::v1::
                                                     SECURE_USER_LEVEL_ADJACENCY_MODEL_ADD_REMOVE_ONE);
-                                            secure_config.set_secure_user_level_clip_norm(clip_norm);
-                                            secure_config.set_secure_user_level_quantization_margin(margin);
-                                            secure_config.set_secure_user_level_effective_sensitivity(
-                                                effective_sensitivity);
+                                            secure_config.set_secure_user_level_clip_norm(
+                                                clip_norm);
+                                            secure_config.set_secure_user_level_quantization_margin(
+                                                margin);
+                                            secure_config
+                                                .set_secure_user_level_effective_sensitivity(
+                                                    effective_sensitivity);
                                             secure_config.set_secure_user_level_noise_multiplier(
                                                 user_level.noise_multiplier);
                                             secure_config.set_secure_user_level_target_delta(
@@ -1624,6 +1766,37 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                             secure_config.set_secure_user_level_sampling_assumption(
                                                 fl::coordinator::v1::
                                                     SECURE_USER_LEVEL_SAMPLING_ASSUMPTION_NO_AMPLIFICATION);
+                                            if (adaptive_active) {
+                                                const auto& adaptive =
+                                                    run.adaptive_clipping_config();
+                                                secure_config.set_secure_adaptive_clipping_active(
+                                                    true);
+                                                secure_config
+                                                    .set_secure_adaptive_clipping_indicator_definition(
+                                                        fl::privacy::v1::
+                                                            SECURE_ADAPTIVE_CLIPPING_INDICATOR_DEFINITION_OVER_THRESHOLD);
+                                                secure_config
+                                                    .set_secure_adaptive_clipping_current_bound(
+                                                        clip_norm);
+                                                secure_config
+                                                    .set_secure_adaptive_clipping_min_bound(
+                                                        adaptive.min_clip);
+                                                secure_config
+                                                    .set_secure_adaptive_clipping_max_bound(
+                                                        adaptive.max_clip);
+                                                secure_config
+                                                    .set_secure_adaptive_clipping_target_quantile(
+                                                        adaptive.target_quantile);
+                                                secure_config
+                                                    .set_secure_adaptive_clipping_learning_rate(
+                                                        adaptive.clip_learning_rate);
+                                                secure_config
+                                                    .set_secure_adaptive_clipping_indicator_noise_multiplier(
+                                                        adaptive.count_noise_multiplier);
+                                                secure_config
+                                                    .set_secure_adaptive_clipping_clip_state_step_count(
+                                                        run.adaptive_clip_state_step_count());
+                                            }
                                         }
                                     }
                                 }
@@ -1649,14 +1822,17 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                 dp_event.source_service = "coordinator";
                                 dp_event.source_component = "coordinator_service";
                                 dp_event.actor_type = SecurityActorType::kCoordinator;
-                                dp_event.subject_type = SecuritySubjectType::kSecureAggregationSession;
+                                dp_event.subject_type =
+                                    SecuritySubjectType::kSecureAggregationSession;
                                 dp_event.safe_subject_id = secure_config.session_id();
                                 dp_event.run_id = request->run_id();
                                 dp_event.round_id = task->descriptor.round_id;
                                 if (secure_config.privacy_mode_compatible()) {
                                     dp_event.event_type =
-                                        is_hybrid ? SecurityEventType::kSecureHybridDpConfigurationAccepted
-                                                  : SecurityEventType::kSecureUserLevelDpConfigurationAccepted;
+                                        is_hybrid ? SecurityEventType::
+                                                        kSecureHybridDpConfigurationAccepted
+                                                  : SecurityEventType::
+                                                        kSecureUserLevelDpConfigurationAccepted;
                                     dp_event.severity = default_severity(dp_event.event_type);
                                     dp_event.outcome = SecurityOutcome::kAccepted;
                                     security_event_journal_->emit(dp_event);
@@ -1672,9 +1848,25 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                     // separately from configuration
                                     // acceptance in general.
                                     dp_event.event_type =
-                                        is_hybrid ? SecurityEventType::kSecureHybridDpUserBudgetReserved
-                                                  : SecurityEventType::kSecureUserLevelDpBudgetReserved;
-                                    security_event_journal_->emit(std::move(dp_event));
+                                        is_hybrid
+                                            ? SecurityEventType::kSecureHybridDpUserBudgetReserved
+                                            : SecurityEventType::kSecureUserLevelDpBudgetReserved;
+                                    security_event_journal_->emit(dp_event);
+                                    // Secure Adaptive Clipping with
+                                    // Private Indicator Aggregation
+                                    // slice: an additional, distinct
+                                    // event -- adaptive clipping is a
+                                    // composition on top of user-level/
+                                    // hybrid, not a replacement, so both
+                                    // the (already-emitted) layer event
+                                    // above AND this one fire together
+                                    // when adaptive is active.
+                                    if (secure_config.secure_adaptive_clipping_active()) {
+                                        dp_event.event_type = SecurityEventType::
+                                            kSecureAdaptiveClippingConfigurationAccepted;
+                                        dp_event.severity = default_severity(dp_event.event_type);
+                                        security_event_journal_->emit(std::move(dp_event));
+                                    }
                                 } else {
                                     const bool budget_exhausted =
                                         secure_config.privacy_incompatibility_reason().rfind(
@@ -1693,15 +1885,35 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                     // still always present in
                                     // reason_code below either way.
                                     dp_event.event_type =
-                                        is_hybrid
-                                            ? SecurityEventType::kSecureHybridDpConfigurationRejected
+                                        is_hybrid ? SecurityEventType::
+                                                        kSecureHybridDpConfigurationRejected
                                         : budget_exhausted
                                             ? SecurityEventType::kSecureUserLevelDpBudgetExhausted
-                                            : SecurityEventType::kSecureUserLevelDpConfigurationRejected;
+                                            : SecurityEventType::
+                                                  kSecureUserLevelDpConfigurationRejected;
                                     dp_event.severity = default_severity(dp_event.event_type);
                                     dp_event.outcome = SecurityOutcome::kRejected;
-                                    dp_event.reason_code = secure_config.privacy_incompatibility_reason();
-                                    security_event_journal_->emit(std::move(dp_event));
+                                    dp_event.reason_code =
+                                        secure_config.privacy_incompatibility_reason();
+                                    // Secure Adaptive Clipping with
+                                    // Private Indicator Aggregation
+                                    // slice: an additional, distinct
+                                    // event for a rejection reason this
+                                    // slice's own validation ladder
+                                    // produced (SECURE_ADAPTIVE_CLIPPING_*
+                                    // -prefixed), same "layer event AND
+                                    // adaptive event both fire" reasoning
+                                    // as the accepted branch above.
+                                    if (dp_event.reason_code.rfind("SECURE_ADAPTIVE_CLIPPING", 0) ==
+                                        0) {
+                                        security_event_journal_->emit(dp_event);
+                                        dp_event.event_type = SecurityEventType::
+                                            kSecureAdaptiveClippingConfigurationRejected;
+                                        dp_event.severity = default_severity(dp_event.event_type);
+                                        security_event_journal_->emit(std::move(dp_event));
+                                    } else {
+                                        security_event_journal_->emit(std::move(dp_event));
+                                    }
                                 }
                             }
                         } else {
@@ -1713,7 +1925,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                 SecurityEvent event;
                                 event.source_service = "coordinator";
                                 event.source_component = "secure_aggregation_session_manager";
-                                event.event_type = SecurityEventType::kSecureAggregationSessionCreated;
+                                event.event_type =
+                                    SecurityEventType::kSecureAggregationSessionCreated;
                                 event.severity = default_severity(event.event_type);
                                 event.actor_type = SecurityActorType::kCoordinator;
                                 event.subject_type = SecuritySubjectType::kSecureAggregationSession;
@@ -1721,7 +1934,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                                 event.run_id = request->run_id();
                                 event.round_id = task->descriptor.round_id;
                                 event.outcome = SecurityOutcome::kCompleted;
-                                event.safe_details["cohort_size"] = std::to_string(round->selected_clients.size());
+                                event.safe_details["cohort_size"] =
+                                    std::to_string(round->selected_clients.size());
                                 security_event_journal_->emit(std::move(event));
                             }
                             // Work Areas Z/AB: a session created with an
@@ -1734,16 +1948,20 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                             if (!secure_config.privacy_mode_compatible()) {
                                 secure_aggregation_manager_->abort(
                                     secure_config.session_id(),
-                                    fl::coordinator::v1::SECURE_AGGREGATION_ABORT_REASON_PRIVACY_MODE_INCOMPATIBLE,
+                                    fl::coordinator::v1::
+                                        SECURE_AGGREGATION_ABORT_REASON_PRIVACY_MODE_INCOMPATIBLE,
                                     now);
                                 if (security_event_journal_ != nullptr) {
                                     SecurityEvent abort_event;
                                     abort_event.source_service = "coordinator";
-                                    abort_event.source_component = "secure_aggregation_session_manager";
-                                    abort_event.event_type = SecurityEventType::kSecureAggregationSessionAborted;
+                                    abort_event.source_component =
+                                        "secure_aggregation_session_manager";
+                                    abort_event.event_type =
+                                        SecurityEventType::kSecureAggregationSessionAborted;
                                     abort_event.severity = default_severity(abort_event.event_type);
                                     abort_event.actor_type = SecurityActorType::kCoordinator;
-                                    abort_event.subject_type = SecuritySubjectType::kSecureAggregationSession;
+                                    abort_event.subject_type =
+                                        SecuritySubjectType::kSecureAggregationSession;
                                     abort_event.safe_subject_id = secure_config.session_id();
                                     abort_event.run_id = request->run_id();
                                     abort_event.round_id = task->descriptor.round_id;
@@ -1759,8 +1977,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                             // dispatch -- logged, not propagated as an RPC
                             // failure.
                             std::cerr << "secure aggregation session creation failed for run "
-                                      << request->run_id() << " round " << task->descriptor.round_id << ": "
-                                      << error.what() << "\n";
+                                      << request->run_id() << " round " << task->descriptor.round_id
+                                      << ": " << error.what() << "\n";
                         }
                     }
                 }
@@ -1770,7 +1988,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                 // convention) -- aborts any session whose key-advertisement
                 // deadline has passed with an incomplete cohort.
                 for (const auto& expired_session_id :
-                     secure_aggregation_manager_->sweep_expired_advertisement_deadlines(now_unix_s())) {
+                     secure_aggregation_manager_->sweep_expired_advertisement_deadlines(
+                         now_unix_s())) {
                     if (security_event_journal_ != nullptr) {
                         SecurityEvent event;
                         event.source_service = "coordinator";
@@ -1789,7 +2008,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                 // the sweep immediately above -- same "cheap to call on
                 // every AcquireTask" convention.
                 for (const auto& expired_session_id :
-                     secure_aggregation_manager_->sweep_expired_masked_update_deadlines(now_unix_s())) {
+                     secure_aggregation_manager_->sweep_expired_masked_update_deadlines(
+                         now_unix_s())) {
                     if (security_event_journal_ != nullptr) {
                         SecurityEvent event;
                         event.source_service = "coordinator";
@@ -1841,11 +2061,10 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
                 params.issued_at = now_unix_s();
                 params.expires_at = task->lease_expires_at_unix_s;
                 params.nonce = generate_task_nonce();
-                params.sequence_number =
-                    coordinator_task_sequence_store_ != nullptr
-                        ? coordinator_task_sequence_store_->next_sequence(
-                              active_identity->key_id, request->worker_id())
-                        : 0;
+                params.sequence_number = coordinator_task_sequence_store_ != nullptr
+                                             ? coordinator_task_sequence_store_->next_sequence(
+                                                   active_identity->key_id, request->worker_id())
+                                             : 0;
                 // Computed into a local message first, then copied in --
                 // never passes *response (the hash input) and
                 // response->mutable_signed_task() (a field of that same
@@ -1868,7 +2087,8 @@ grpc::Status CoordinatorServiceImpl::AcquireTask(
 }
 
 grpc::Status CoordinatorServiceImpl::ReportTaskProgress(
-    grpc::ServerContext* context, const fl::coordinator::v1::TaskProgressRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::TaskProgressRequest* request,
     fl::coordinator::v1::TaskProgressResponse* response) {
     if (const auto rejection = reject_if_worker_identity_mismatch(context, request->worker_id())) {
         return *rejection;
@@ -1890,8 +2110,8 @@ grpc::Status CoordinatorServiceImpl::ReportTaskProgress(
         for (const auto& run_id : manager_->list_run_ids()) {
             auto& run = manager_->get(run_id);
             try {
-                run.report_task_progress(request->worker_id(), request->task_id(),
-                                         request->lease_id());
+                run.report_task_progress(
+                    request->worker_id(), request->task_id(), request->lease_id());
                 found = true;
                 break;
             } catch (const std::exception&) {
@@ -1962,7 +2182,8 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
             request->result().run_id(), request->result().round_id());
         if (secure_status.has_value()) {
             const bool privacy_incompatible_fallback =
-                secure_status->state() == fl::coordinator::v1::SECURE_AGGREGATION_SESSION_STATE_ABORTED &&
+                secure_status->state() ==
+                    fl::coordinator::v1::SECURE_AGGREGATION_SESSION_STATE_ABORTED &&
                 secure_status->abort_reason() ==
                     fl::coordinator::v1::SECURE_AGGREGATION_ABORT_REASON_PRIVACY_MODE_INCOMPATIBLE;
             if (!privacy_incompatible_fallback) {
@@ -1983,12 +2204,12 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
                     event.reason_code = "cleartext_result_forbidden_for_secure_round";
                     security_event_journal_->emit(std::move(event));
                 }
-                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                    "run '" + request->result().run_id() + "' round " +
-                                        std::to_string(request->result().round_id()) +
-                                        " is bound to secure aggregation session '" +
-                                        secure_status->session_id() +
-                                        "' -- cleartext SubmitClientResult is forbidden for this round");
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "run '" + request->result().run_id() + "' round " +
+                        std::to_string(request->result().round_id()) +
+                        " is bound to secure aggregation session '" + secure_status->session_id() +
+                        "' -- cleartext SubmitClientResult is forbidden for this round");
             }
         }
     }
@@ -2002,9 +2223,11 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
             return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
                                 "unknown worker_id: " + request->worker_id());
         }
-        const auto resolved_key =
-            resolve_signing_key(signing_key_registry_, *identity_record, envelope.signing_key_id(),
-                               SignedMessageKind::kClientResult, now_unix_s());
+        const auto resolved_key = resolve_signing_key(signing_key_registry_,
+                                                      *identity_record,
+                                                      envelope.signing_key_id(),
+                                                      SignedMessageKind::kClientResult,
+                                                      now_unix_s());
         if (!resolved_key.ok) {
             response->set_rejection_code(resolved_key.rejection_code);
             return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, resolved_key.reason);
@@ -2016,8 +2239,11 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
                                 "signed result rejected: " + hash_result.reason);
         }
         const auto verification = verify_signed_envelope(
-            envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_CLIENT_RESULT),
-            hash_result.hash_input, resolved_key.public_key_hex, now_unix_s(),
+            envelope,
+            static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_CLIENT_RESULT),
+            hash_result.hash_input,
+            resolved_key.public_key_hex,
+            now_unix_s(),
             /*future_issued_tolerance_seconds=*/30.0);
         if (!verification.valid) {
             response->set_rejection_code(verification.rejection_code);
@@ -2097,28 +2323,36 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
                     "privacy record signing_key_id does not match the outer client result's "
                     "signing_key_id");
             }
-            const auto resolved_privacy_key = resolve_signing_key(
-                signing_key_registry_, *identity_record, privacy_envelope.signing_key_id(),
-                SignedMessageKind::kPrivacyRecord, now_unix_s());
+            const auto resolved_privacy_key = resolve_signing_key(signing_key_registry_,
+                                                                  *identity_record,
+                                                                  privacy_envelope.signing_key_id(),
+                                                                  SignedMessageKind::kPrivacyRecord,
+                                                                  now_unix_s());
             if (!resolved_privacy_key.ok) {
                 response->set_rejection_code(resolved_privacy_key.rejection_code);
-                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, resolved_privacy_key.reason);
+                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                                    resolved_privacy_key.reason);
             }
             const auto privacy_hash_result = sample_privacy_record_payload_hash_input(payload);
             if (!privacy_hash_result.ok) {
                 response->set_rejection_code("privacy_payload_hash_mismatch");
-                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                    "signed privacy record rejected: " + privacy_hash_result.reason);
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed privacy record rejected: " + privacy_hash_result.reason);
             }
             const auto privacy_verification = verify_signed_envelope(
                 privacy_envelope,
-                static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD),
-                privacy_hash_result.hash_input, resolved_privacy_key.public_key_hex, now_unix_s(),
+                static_cast<int>(
+                    fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD),
+                privacy_hash_result.hash_input,
+                resolved_privacy_key.public_key_hex,
+                now_unix_s(),
                 /*future_issued_tolerance_seconds=*/30.0);
             if (!privacy_verification.valid) {
                 response->set_rejection_code(privacy_verification.rejection_code);
-                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                    "signed privacy record rejected: " + privacy_verification.reason);
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed privacy record rejected: " + privacy_verification.reason);
             }
 
             // Work Package 6 ("bind privacy records to signed client
@@ -2129,15 +2363,18 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
             // different one in the field the coordinator actually
             // persists and relays.
             const auto& wire_entry = request->sample_level_privacy();
-            const bool binding_ok =
-                payload.worker_id() == request->worker_id() && payload.run_id() == wire_entry.run_id() &&
-                payload.round_id() == wire_entry.round_id() &&
-                payload.client_id() == wire_entry.client_id() && payload.task_id() == request->task_id() &&
-                payload.epsilon() == wire_entry.epsilon() && payload.delta() == wire_entry.delta() &&
-                payload.noise_multiplier() == wire_entry.noise_multiplier() &&
-                payload.sample_rate() == wire_entry.sample_rate() &&
-                payload.accountant_step() == wire_entry.steps() &&
-                static_cast<int>(payload.accountant_type()) == static_cast<int>(wire_entry.accountant());
+            const bool binding_ok = payload.worker_id() == request->worker_id() &&
+                                    payload.run_id() == wire_entry.run_id() &&
+                                    payload.round_id() == wire_entry.round_id() &&
+                                    payload.client_id() == wire_entry.client_id() &&
+                                    payload.task_id() == request->task_id() &&
+                                    payload.epsilon() == wire_entry.epsilon() &&
+                                    payload.delta() == wire_entry.delta() &&
+                                    payload.noise_multiplier() == wire_entry.noise_multiplier() &&
+                                    payload.sample_rate() == wire_entry.sample_rate() &&
+                                    payload.accountant_step() == wire_entry.steps() &&
+                                    static_cast<int>(payload.accountant_type()) ==
+                                        static_cast<int>(wire_entry.accountant());
             if (!binding_ok) {
                 response->set_rejection_code("privacy_record_binding_mismatch");
                 return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
@@ -2154,12 +2391,13 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
                 privacy_replay_candidate.now_unix_s = now_unix_s();
                 const double window = privacy_envelope.expires_at() - privacy_envelope.issued_at();
                 privacy_replay_candidate.nonce_retention_seconds = window > 1.0 ? window : 1.0;
-                const auto privacy_replay_decision = replay_store_->validate(privacy_replay_candidate);
+                const auto privacy_replay_decision =
+                    replay_store_->validate(privacy_replay_candidate);
                 if (!privacy_replay_decision.accepted) {
                     response->set_rejection_code(to_string(privacy_replay_decision.reason));
-                    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                        "signed privacy record rejected: " +
-                                            privacy_replay_decision.detail);
+                    return grpc::Status(
+                        grpc::StatusCode::PERMISSION_DENIED,
+                        "signed privacy record rejected: " + privacy_replay_decision.detail);
                 }
                 have_privacy_replay_candidate = true;
             }
@@ -2168,7 +2406,8 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
                 monotonicity_candidate.run_id = payload.run_id();
                 monotonicity_candidate.client_id = payload.client_id();
                 monotonicity_candidate.worker_id = payload.worker_id();
-                monotonicity_candidate.accountant_type = static_cast<int>(payload.accountant_type());
+                monotonicity_candidate.accountant_type =
+                    static_cast<int>(payload.accountant_type());
                 monotonicity_candidate.step = payload.accountant_step();
                 monotonicity_candidate.epsilon = payload.epsilon();
                 monotonicity_candidate.delta = payload.delta();
@@ -2177,17 +2416,19 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
                 monotonicity_candidate.round_id = payload.round_id();
                 monotonicity_candidate.task_id = payload.task_id();
                 monotonicity_candidate.now_unix_s = now_unix_s();
-                const auto monotonicity_decision = monotonicity_store_->validate(monotonicity_candidate);
+                const auto monotonicity_decision =
+                    monotonicity_store_->validate(monotonicity_candidate);
                 if (!monotonicity_decision.accepted) {
                     response->set_rejection_code(to_string(monotonicity_decision.reason));
-                    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                        "signed privacy record rejected: " +
-                                            monotonicity_decision.detail);
+                    return grpc::Status(
+                        grpc::StatusCode::PERMISSION_DENIED,
+                        "signed privacy record rejected: " + monotonicity_decision.detail);
                 }
                 have_monotonicity_candidate = true;
             }
 
-            const auto contradiction = budget_decision_contradiction_reason(payload.budget_decision());
+            const auto contradiction =
+                budget_decision_contradiction_reason(payload.budget_decision());
             if (!contradiction.empty()) {
                 response->set_rejection_code("budget_decision_contradiction");
                 return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
@@ -2199,14 +2440,15 @@ grpc::Status CoordinatorServiceImpl::SubmitClientResult(
                                 "a signed sample privacy record is required alongside "
                                 "sample_level_privacy on this coordinator");
         } else {
-            std::cerr << "timestamp_unix_s=" << now_unix_s()
-                      << " service=coordinator level=WARNING event=unsigned_privacy_record_accepted "
-                         "worker_id="
-                      << request->worker_id()
-                      << " reason=\"FL_ALLOW_UNSIGNED_PRIVACY_RECORDS is set -- this coordinator is "
-                         "running in an explicit development-compatibility mode that is unsafe for "
-                         "private/production runs\""
-                      << std::endl;
+            std::cerr
+                << "timestamp_unix_s=" << now_unix_s()
+                << " service=coordinator level=WARNING event=unsigned_privacy_record_accepted "
+                   "worker_id="
+                << request->worker_id()
+                << " reason=\"FL_ALLOW_UNSIGNED_PRIVACY_RECORDS is set -- this coordinator is "
+                   "running in an explicit development-compatibility mode that is unsafe for "
+                   "private/production runs\""
+                << std::endl;
         }
     }
 
@@ -2375,17 +2617,17 @@ grpc::Status CoordinatorServiceImpl::GetPrivacyLedger(
         const auto& user_entries = run.user_level_ledger();
         const auto& clipping_entries = run.adaptive_clipping_ledger();
 
-        const auto emit_window = [&](const auto& entries, std::size_t begin, std::size_t limit,
-                                     auto&& append) {
-            if (begin >= entries.size()) {
-                return;
-            }
-            const std::size_t end =
-                (limit == 0) ? entries.size() : std::min(entries.size(), begin + limit);
-            for (std::size_t i = begin; i < end; ++i) {
-                append(entries[i]);
-            }
-        };
+        const auto emit_window =
+            [&](const auto& entries, std::size_t begin, std::size_t limit, auto&& append) {
+                if (begin >= entries.size()) {
+                    return;
+                }
+                const std::size_t end =
+                    (limit == 0) ? entries.size() : std::min(entries.size(), begin + limit);
+                for (std::size_t i = begin; i < end; ++i) {
+                    append(entries[i]);
+                }
+            };
 
         emit_window(sample_entries, offset, page_size, [&](const auto& entry) {
             auto* wire_entry = response->add_sample_level_entries();
@@ -2426,8 +2668,8 @@ grpc::Status CoordinatorServiceImpl::GetPrivacyLedger(
 
         const std::size_t next_offset = offset + page_size;
         const bool more_remaining = page_size > 0 && (next_offset < sample_entries.size() ||
-                                                       next_offset < user_entries.size() ||
-                                                       next_offset < clipping_entries.size());
+                                                      next_offset < user_entries.size() ||
+                                                      next_offset < clipping_entries.size());
         if (more_remaining) {
             response->set_next_page_token(std::to_string(next_offset));
         }
@@ -2554,7 +2796,8 @@ grpc::Status CoordinatorServiceImpl::Health(grpc::ServerContext*,
 }
 
 grpc::Status CoordinatorServiceImpl::GetWorkerIdentity(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetWorkerIdentityRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetWorkerIdentityRequest* request,
     fl::coordinator::v1::WorkerIdentitySummary* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
         return *rejection;
@@ -2573,7 +2816,8 @@ grpc::Status CoordinatorServiceImpl::GetWorkerIdentity(
 }
 
 grpc::Status CoordinatorServiceImpl::ListWorkerIdentities(
-    grpc::ServerContext* context, const fl::coordinator::v1::ListWorkerIdentitiesRequest*,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::ListWorkerIdentitiesRequest*,
     fl::coordinator::v1::ListWorkerIdentitiesResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
         return *rejection;
@@ -2589,7 +2833,8 @@ grpc::Status CoordinatorServiceImpl::ListWorkerIdentities(
 }
 
 grpc::Status CoordinatorServiceImpl::SuspendWorker(
-    grpc::ServerContext* context, const fl::coordinator::v1::SuspendWorkerRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::SuspendWorkerRequest* request,
     fl::coordinator::v1::WorkerLifecycleResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
         emit_permission_denied_event(security_event_journal_, context, "SuspendWorker");
@@ -2612,9 +2857,14 @@ grpc::Status CoordinatorServiceImpl::SuspendWorker(
                   << " service=coordinator event=WORKER_SUSPENDED worker_id="
                   << request->worker_id() << " reason=\"" << request->reason() << "\""
                   << " request_id=" << request->request_id() << std::endl;
-        emit_worker_lifecycle_records(security_event_journal_, security_audit_journal_, context,
-                                      SecurityEventType::kWorkerSuspended, "SuspendWorker",
-                                      request->worker_id(), request->reason(), request->request_id(),
+        emit_worker_lifecycle_records(security_event_journal_,
+                                      security_audit_journal_,
+                                      context,
+                                      SecurityEventType::kWorkerSuspended,
+                                      "SuspendWorker",
+                                      request->worker_id(),
+                                      request->reason(),
+                                      request->request_id(),
                                       request->trace_id());
         return grpc::Status::OK;
     } catch (const WorkerIdentityRegistryError& error) {
@@ -2623,7 +2873,8 @@ grpc::Status CoordinatorServiceImpl::SuspendWorker(
 }
 
 grpc::Status CoordinatorServiceImpl::ActivateWorker(
-    grpc::ServerContext* context, const fl::coordinator::v1::ActivateWorkerRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::ActivateWorkerRequest* request,
     fl::coordinator::v1::WorkerLifecycleResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
         emit_permission_denied_event(security_event_journal_, context, "ActivateWorker");
@@ -2637,8 +2888,7 @@ grpc::Status CoordinatorServiceImpl::ActivateWorker(
         const auto before = identity_registry_->find_by_worker_id(request->worker_id());
         const bool was_already_active =
             before.has_value() && before->registration_status == WorkerIdentityStatus::kActive;
-        const auto record =
-            identity_registry_->activate(request->worker_id(), now_unix_s());
+        const auto record = identity_registry_->activate(request->worker_id(), now_unix_s());
         *response->mutable_identity() = to_wire_identity_summary(record);
         response->set_changed(!was_already_active);
         response->set_leases_canceled(0);
@@ -2646,9 +2896,14 @@ grpc::Status CoordinatorServiceImpl::ActivateWorker(
                   << " service=coordinator event=WORKER_ACTIVATED worker_id="
                   << request->worker_id() << " reason=\"" << request->reason() << "\""
                   << " request_id=" << request->request_id() << std::endl;
-        emit_worker_lifecycle_records(security_event_journal_, security_audit_journal_, context,
-                                      SecurityEventType::kWorkerActivated, "ActivateWorker",
-                                      request->worker_id(), request->reason(), request->request_id(),
+        emit_worker_lifecycle_records(security_event_journal_,
+                                      security_audit_journal_,
+                                      context,
+                                      SecurityEventType::kWorkerActivated,
+                                      "ActivateWorker",
+                                      request->worker_id(),
+                                      request->reason(),
+                                      request->request_id(),
                                       request->trace_id());
         return grpc::Status::OK;
     } catch (const WorkerIdentityRegistryError& error) {
@@ -2657,7 +2912,8 @@ grpc::Status CoordinatorServiceImpl::ActivateWorker(
 }
 
 grpc::Status CoordinatorServiceImpl::RevokeWorker(
-    grpc::ServerContext* context, const fl::coordinator::v1::RevokeWorkerRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::RevokeWorkerRequest* request,
     fl::coordinator::v1::WorkerLifecycleResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
         emit_permission_denied_event(security_event_journal_, context, "RevokeWorker");
@@ -2681,8 +2937,8 @@ grpc::Status CoordinatorServiceImpl::RevokeWorker(
         // REVOKED check above makes that window effectively empty in
         // practice; canceling unconditionally here costs nothing and
         // closes the gap entirely).
-        const auto leases_canceled =
-            manager_->cancel_leases_for_worker(request->worker_id(), request->reason(), now_unix_s());
+        const auto leases_canceled = manager_->cancel_leases_for_worker(
+            request->worker_id(), request->reason(), now_unix_s());
         if (replay_store_ != nullptr) {
             // Work Package E: worker-revocation cleanup policy -- this
             // worker can never send another acceptable signed message
@@ -2698,9 +2954,14 @@ grpc::Status CoordinatorServiceImpl::RevokeWorker(
                   << " reason=\"" << request->reason() << "\""
                   << " request_id=" << request->request_id()
                   << " leases_canceled=" << leases_canceled << std::endl;
-        emit_worker_lifecycle_records(security_event_journal_, security_audit_journal_, context,
-                                      SecurityEventType::kWorkerRevoked, "RevokeWorker",
-                                      request->worker_id(), request->reason(), request->request_id(),
+        emit_worker_lifecycle_records(security_event_journal_,
+                                      security_audit_journal_,
+                                      context,
+                                      SecurityEventType::kWorkerRevoked,
+                                      "RevokeWorker",
+                                      request->worker_id(),
+                                      request->reason(),
+                                      request->request_id(),
                                       request->trace_id());
         if (leases_canceled > 0) {
             SecurityEvent lease_event;
@@ -2729,7 +2990,8 @@ grpc::Status CoordinatorServiceImpl::RevokeWorker(
 }
 
 grpc::Status CoordinatorServiceImpl::RotateWorkerSigningKey(
-    grpc::ServerContext* context, const fl::coordinator::v1::RotateWorkerSigningKeyRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::RotateWorkerSigningKeyRequest* request,
     fl::coordinator::v1::RotateWorkerSigningKeyResponse* response) {
     if (const auto rejection = reject_if_worker_identity_mismatch(context, request->worker_id())) {
         return *rejection;
@@ -2774,9 +3036,11 @@ grpc::Status CoordinatorServiceImpl::RotateWorkerSigningKey(
             "envelope.signing_key_id does not match payload.current_signing_key_id");
     }
 
-    const auto resolved_key =
-        resolve_signing_key(signing_key_registry_, *identity_record, envelope.signing_key_id(),
-                           SignedMessageKind::kKeyRotation, now_unix_s());
+    const auto resolved_key = resolve_signing_key(signing_key_registry_,
+                                                  *identity_record,
+                                                  envelope.signing_key_id(),
+                                                  SignedMessageKind::kKeyRotation,
+                                                  now_unix_s());
     if (!resolved_key.ok) {
         response->set_rejection_code(resolved_key.rejection_code);
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, resolved_key.reason);
@@ -2789,8 +3053,11 @@ grpc::Status CoordinatorServiceImpl::RotateWorkerSigningKey(
                             "rotation request rejected: " + hash_result.reason);
     }
     const auto verification = verify_signed_envelope(
-        envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_KEY_ROTATION_REQUEST),
-        hash_result.hash_input, resolved_key.public_key_hex, now_unix_s(),
+        envelope,
+        static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_KEY_ROTATION_REQUEST),
+        hash_result.hash_input,
+        resolved_key.public_key_hex,
+        now_unix_s(),
         /*future_issued_tolerance_seconds=*/30.0);
     if (!verification.valid) {
         response->set_rejection_code(verification.rejection_code);
@@ -2847,12 +3114,16 @@ grpc::Status CoordinatorServiceImpl::RotateWorkerSigningKey(
     // WorkerIdentitySummary) should see the current key without needing
     // to itself become SigningKeyRegistry-aware.
     try {
-        identity_registry_->register_identity(
-            request->worker_id(), identity_record->certificate_identity,
-            identity_record->certificate_serial, identity_record->certificate_fingerprint,
-            payload.new_public_key_hex(), payload.new_signing_key_id(),
-            identity_record->software_version, identity_record->build_id, now_unix_s(),
-            identity_record->expires_at_unix_s);
+        identity_registry_->register_identity(request->worker_id(),
+                                              identity_record->certificate_identity,
+                                              identity_record->certificate_serial,
+                                              identity_record->certificate_fingerprint,
+                                              payload.new_public_key_hex(),
+                                              payload.new_signing_key_id(),
+                                              identity_record->software_version,
+                                              identity_record->build_id,
+                                              now_unix_s(),
+                                              identity_record->expires_at_unix_s);
     } catch (const WorkerIdentityRegistryError& error) {
         return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, error.what());
     }
@@ -2868,7 +3139,8 @@ grpc::Status CoordinatorServiceImpl::RotateWorkerSigningKey(
 }
 
 grpc::Status CoordinatorServiceImpl::GetWorkerSigningKeys(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetWorkerSigningKeysRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetWorkerSigningKeysRequest* request,
     fl::coordinator::v1::GetWorkerSigningKeysResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
         return *rejection;
@@ -2877,14 +3149,16 @@ grpc::Status CoordinatorServiceImpl::GetWorkerSigningKeys(
         return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
                             "no signing-key registry is configured");
     }
-    for (const auto& record : signing_key_registry_->list_for_worker(request->worker_id(), now_unix_s())) {
+    for (const auto& record :
+         signing_key_registry_->list_for_worker(request->worker_id(), now_unix_s())) {
         *response->add_keys() = to_wire_signing_key_summary(record);
     }
     return grpc::Status::OK;
 }
 
 grpc::Status CoordinatorServiceImpl::RevokeWorkerSigningKey(
-    grpc::ServerContext* context, const fl::coordinator::v1::RevokeWorkerSigningKeyRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::RevokeWorkerSigningKeyRequest* request,
     fl::coordinator::v1::RevokeWorkerSigningKeyResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
         emit_permission_denied_event(security_event_journal_, context, "RevokeWorkerSigningKey");
@@ -2895,8 +3169,8 @@ grpc::Status CoordinatorServiceImpl::RevokeWorkerSigningKey(
                             "no signing-key registry is configured");
     }
     try {
-        const auto before =
-            signing_key_registry_->find(request->worker_id(), request->signing_key_id(), now_unix_s());
+        const auto before = signing_key_registry_->find(
+            request->worker_id(), request->signing_key_id(), now_unix_s());
         const bool was_already_revoked =
             before.has_value() && before->status == SigningKeyStatus::kRevoked;
         const auto record = signing_key_registry_->revoke_key(
@@ -2971,7 +3245,8 @@ grpc::Status CoordinatorServiceImpl::RevokeWorkerSigningKey(
 }
 
 grpc::Status CoordinatorServiceImpl::GetCoordinatorSigningKeys(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetCoordinatorSigningKeysRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetCoordinatorSigningKeysRequest* request,
     fl::coordinator::v1::GetCoordinatorSigningKeysResponse* response) {
     (void)request;
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
@@ -2988,7 +3263,8 @@ grpc::Status CoordinatorServiceImpl::GetCoordinatorSigningKeys(
 }
 
 grpc::Status CoordinatorServiceImpl::GetTransportSecurityStatus(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetTransportSecurityStatusRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetTransportSecurityStatusRequest* request,
     fl::coordinator::v1::TransportSecurityStatusResponse* response) {
     (void)request;
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
@@ -3001,7 +3277,8 @@ grpc::Status CoordinatorServiceImpl::GetTransportSecurityStatus(
 }
 
 grpc::Status CoordinatorServiceImpl::GetSecurityTrustModel(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetSecurityTrustModelRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetSecurityTrustModelRequest* request,
     fl::coordinator::v1::SecurityTrustModelResponse* response) {
     (void)request;
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
@@ -3039,7 +3316,8 @@ bool CoordinatorServiceImpl::regenerate_trusted_key_bundle(std::string& reason) 
         return false;
     }
     const auto result = write_trusted_key_bundle(*coordinator_signing_key_registry_,
-                                                 trusted_key_bundle_path_, coordinator_identity_label_,
+                                                 trusted_key_bundle_path_,
+                                                 coordinator_identity_label_,
                                                  now_unix_s());
     if (!result.ok) {
         reason = result.reason;
@@ -3060,7 +3338,8 @@ grpc::Status CoordinatorServiceImpl::RotateCoordinatorSigningKey(
     const fl::coordinator::v1::RotateCoordinatorSigningKeyRequest* request,
     fl::coordinator::v1::RotateCoordinatorSigningKeyResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
-        emit_permission_denied_event(security_event_journal_, context, "RotateCoordinatorSigningKey");
+        emit_permission_denied_event(
+            security_event_journal_, context, "RotateCoordinatorSigningKey");
         return *rejection;
     }
     if (coordinator_signing_key_registry_ == nullptr || coordinator_active_identity_ == nullptr ||
@@ -3076,16 +3355,17 @@ grpc::Status CoordinatorServiceImpl::RotateCoordinatorSigningKey(
             response->set_accepted(existing->accepted);
             response->set_rejection_code(existing->rejection_code);
             response->set_idempotent_replay(true);
-            response->set_reason(existing->accepted ? "ok (idempotent replay)"
-                                                     : "rejected (idempotent replay): " +
-                                                           existing->rejection_code);
+            response->set_reason(existing->accepted
+                                     ? "ok (idempotent replay)"
+                                     : "rejected (idempotent replay): " + existing->rejection_code);
             if (existing->accepted) {
                 const auto new_record =
                     coordinator_signing_key_registry_->find(existing->result_key_id, now_unix_s());
-                const auto previous_record =
-                    coordinator_signing_key_registry_->find(existing->previous_key_id, now_unix_s());
+                const auto previous_record = coordinator_signing_key_registry_->find(
+                    existing->previous_key_id, now_unix_s());
                 if (new_record.has_value()) {
-                    *response->mutable_new_key() = to_wire_coordinator_signing_key_summary(*new_record);
+                    *response->mutable_new_key() =
+                        to_wire_coordinator_signing_key_summary(*new_record);
                 }
                 if (previous_record.has_value()) {
                     *response->mutable_previous_key() =
@@ -3124,7 +3404,8 @@ grpc::Status CoordinatorServiceImpl::RotateCoordinatorSigningKey(
         rotation.current_signing_key_id = request->expected_current_signing_key_id();
         rotation.new_signing_key_id = new_identity.key_id;
         rotation.new_public_key_hex = new_identity.public_key_hex;
-        rotation.new_public_key_fingerprint = public_key_fingerprint_hex(new_identity.public_key_hex);
+        rotation.new_public_key_fingerprint =
+            public_key_fingerprint_hex(new_identity.public_key_hex);
         rotation.new_key_expires_at_unix_s = request->new_key_expires_at_unix_s();
         rotation.grace_period_seconds = request->requested_grace_period_seconds();
         rotation.now_unix_s = now_unix_s();
@@ -3157,7 +3438,8 @@ grpc::Status CoordinatorServiceImpl::RotateCoordinatorSigningKey(
                 event.safe_actor_id = safe_actor_label(context);
                 event.subject_type = SecuritySubjectType::kCoordinatorSigningKey;
                 event.outcome = SecurityOutcome::kRejected;
-                event.reason_code = to_string(validation.reason).substr(0, kSecurityEventMaxReasonCodeLength);
+                event.reason_code =
+                    to_string(validation.reason).substr(0, kSecurityEventMaxReasonCodeLength);
                 event.request_id = request->request_id();
                 event.trace_id = request->trace_id();
                 event.safe_details["action"] = "RotateCoordinatorSigningKey";
@@ -3272,7 +3554,8 @@ grpc::Status CoordinatorServiceImpl::RevokeCoordinatorSigningKey(
     const fl::coordinator::v1::RevokeCoordinatorSigningKeyRequest* request,
     fl::coordinator::v1::RevokeCoordinatorSigningKeyResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
-        emit_permission_denied_event(security_event_journal_, context, "RevokeCoordinatorSigningKey");
+        emit_permission_denied_event(
+            security_event_journal_, context, "RevokeCoordinatorSigningKey");
         return *rejection;
     }
     if (coordinator_signing_key_registry_ == nullptr || idempotency_store_ == nullptr) {
@@ -3297,15 +3580,18 @@ grpc::Status CoordinatorServiceImpl::RevokeCoordinatorSigningKey(
         }
     }
 
-    const auto before = coordinator_signing_key_registry_->find(request->signing_key_id(), now_unix_s());
+    const auto before =
+        coordinator_signing_key_registry_->find(request->signing_key_id(), now_unix_s());
     if (!before.has_value()) {
-        return grpc::Status(grpc::StatusCode::NOT_FOUND, "unknown coordinator signing key '" +
-                                                              request->signing_key_id() + "'");
+        return grpc::Status(grpc::StatusCode::NOT_FOUND,
+                            "unknown coordinator signing key '" + request->signing_key_id() + "'");
     }
-    if (!request->expected_status().empty() && to_string(before->status) != request->expected_status()) {
+    if (!request->expected_status().empty() &&
+        to_string(before->status) != request->expected_status()) {
         return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
                             "expected_status '" + request->expected_status() +
-                                "' does not match current status '" + to_string(before->status) + "'");
+                                "' does not match current status '" + to_string(before->status) +
+                                "'");
     }
 
     try {
@@ -3349,7 +3635,8 @@ grpc::Status CoordinatorServiceImpl::RevokeCoordinatorSigningKey(
             event.source_service = "coordinator";
             event.source_component = "coordinator_service";
             event.event_type = SecurityEventType::kSecurityMutationAccepted;
-            event.severity = SecuritySeverity::kHigh;  // a trust-root revocation, not a routine mutation
+            event.severity =
+                SecuritySeverity::kHigh;  // a trust-root revocation, not a routine mutation
             event.actor_type = SecurityActorType::kService;
             event.safe_actor_id = safe_actor_label(context);
             event.subject_type = SecuritySubjectType::kCoordinatorSigningKey;
@@ -3383,7 +3670,8 @@ grpc::Status CoordinatorServiceImpl::RevokeCoordinatorSigningKey(
             return grpc::Status(grpc::StatusCode::INTERNAL,
                                 "coordinator key revoked but trusted-key bundle regeneration "
                                 "failed: " +
-                                    bundle_reason + " -- use the recovery tool to regenerate the bundle");
+                                    bundle_reason +
+                                    " -- use the recovery tool to regenerate the bundle");
         }
         return grpc::Status::OK;
     } catch (const std::exception& error) {
@@ -3424,7 +3712,8 @@ fl::coordinator::v1::SecurityEventRecord to_wire_security_event(const SecurityEv
 }  // namespace
 
 grpc::Status CoordinatorServiceImpl::ListSecurityEvents(
-    grpc::ServerContext* context, const fl::coordinator::v1::ListSecurityEventsRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::ListSecurityEventsRequest* request,
     fl::coordinator::v1::ListSecurityEventsResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
         emit_permission_denied_event(security_event_journal_, context, "ListSecurityEvents");
@@ -3470,11 +3759,13 @@ grpc::Status CoordinatorServiceImpl::ListSecurityEvents(
 }
 
 grpc::Status CoordinatorServiceImpl::GetSecurityEventSourceHealth(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetSecurityEventSourceHealthRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetSecurityEventSourceHealthRequest* request,
     fl::coordinator::v1::GetSecurityEventSourceHealthResponse* response) {
     (void)request;
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
-        emit_permission_denied_event(security_event_journal_, context, "GetSecurityEventSourceHealth");
+        emit_permission_denied_event(
+            security_event_journal_, context, "GetSecurityEventSourceHealth");
         return *rejection;
     }
     response->set_checked_at_unix_s(now_unix_s());
@@ -3484,7 +3775,8 @@ grpc::Status CoordinatorServiceImpl::GetSecurityEventSourceHealth(
         coordinator_source->set_source_service("coordinator");
         coordinator_source->set_last_event_at(security_event_journal_->last_record_timestamp());
         coordinator_source->set_record_count(security_event_journal_->size());
-        coordinator_source->set_recovered_line_count(security_event_journal_->recovered_line_count());
+        coordinator_source->set_recovered_line_count(
+            security_event_journal_->recovered_line_count());
         coordinator_source->set_corrupted(security_event_journal_->recovered_line_count() > 0);
         coordinator_source->set_retention_active(security_event_journal_->has_rotated());
     }
@@ -3560,7 +3852,8 @@ std::optional<SecurityEvent> security_event_from_worker_payload(
 }  // namespace
 
 grpc::Status CoordinatorServiceImpl::SubmitWorkerSecurityEvents(
-    grpc::ServerContext* context, const fl::coordinator::v1::SubmitWorkerSecurityEventsRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::SubmitWorkerSecurityEventsRequest* request,
     fl::coordinator::v1::SubmitWorkerSecurityEventsResponse* response) {
     if (const auto rejection = reject_if_worker_identity_mismatch(context, request->worker_id())) {
         return *rejection;
@@ -3618,9 +3911,11 @@ grpc::Status CoordinatorServiceImpl::SubmitWorkerSecurityEvents(
     }
     const auto& envelope = request->envelope();
 
-    const auto resolved_key =
-        resolve_signing_key(signing_key_registry_, *identity_record, envelope.signing_key_id(),
-                           SignedMessageKind::kSecurityEventBatch, now_unix_s());
+    const auto resolved_key = resolve_signing_key(signing_key_registry_,
+                                                  *identity_record,
+                                                  envelope.signing_key_id(),
+                                                  SignedMessageKind::kSecurityEventBatch,
+                                                  now_unix_s());
     if (!resolved_key.ok) {
         response->set_rejection_code(resolved_key.rejection_code);
         record_rejection();
@@ -3635,8 +3930,11 @@ grpc::Status CoordinatorServiceImpl::SubmitWorkerSecurityEvents(
                             "security-event batch rejected: " + hash_result.reason);
     }
     const auto verification = verify_signed_envelope(
-        envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURITY_EVENT_BATCH),
-        hash_result.hash_input, resolved_key.public_key_hex, now_unix_s(),
+        envelope,
+        static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURITY_EVENT_BATCH),
+        hash_result.hash_input,
+        resolved_key.public_key_hex,
+        now_unix_s(),
         /*future_issued_tolerance_seconds=*/30.0);
     if (!verification.valid) {
         response->set_rejection_code(verification.rejection_code);
@@ -3733,15 +4031,18 @@ grpc::Status CoordinatorServiceImpl::SubmitWorkerSecurityEvents(
 // masked-update execution boundary is separately completed and
 // validated.
 grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
-    grpc::ServerContext* context, const fl::coordinator::v1::AdvertiseSecureAggregationKeyRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::AdvertiseSecureAggregationKeyRequest* request,
     fl::coordinator::v1::AdvertiseSecureAggregationKeyResponse* response) {
     response->set_accepted(false);
-    response->set_rejection_reason(fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_UNSPECIFIED);
+    response->set_rejection_reason(
+        fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_UNSPECIFIED);
 
     if (secure_aggregation_manager_ == nullptr) {
         response->set_reason("secure_aggregation_unavailable");
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
-                            "this coordinator has no secure aggregation session manager configured");
+        return grpc::Status(
+            grpc::StatusCode::FAILED_PRECONDITION,
+            "this coordinator has no secure aggregation session manager configured");
     }
     if (!request->has_key_advertisement()) {
         response->set_reason("key_advertisement_missing");
@@ -3755,7 +4056,8 @@ grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
     // -> replay/sequence validate -> domain call -> replay commit only
     // after domain success -> auto-freeze if this advertisement
     // completes the cohort.
-    if (const auto rejection = reject_if_worker_identity_mismatch(context, advertisement.worker_id())) {
+    if (const auto rejection =
+            reject_if_worker_identity_mismatch(context, advertisement.worker_id())) {
         response->set_reason("certificate_identity_mismatch");
         return *rejection;
     }
@@ -3768,7 +4070,8 @@ grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
 
     if (identity_registry_ == nullptr) {
         response->set_reason("identity_registry_unavailable");
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "no worker identity registry is configured");
+        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                            "no worker identity registry is configured");
     }
     const auto identity_record = identity_registry_->find_by_worker_id(advertisement.worker_id());
     if (!identity_record.has_value()) {
@@ -3783,8 +4086,11 @@ grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
     }
 
     const auto resolved_key =
-        resolve_signing_key(signing_key_registry_, *identity_record, envelope.signing_key_id(),
-                            SignedMessageKind::kSecureAggregationKeyAdvertisement, now_unix_s());
+        resolve_signing_key(signing_key_registry_,
+                            *identity_record,
+                            envelope.signing_key_id(),
+                            SignedMessageKind::kSecureAggregationKeyAdvertisement,
+                            now_unix_s());
     if (!resolved_key.ok) {
         response->set_reason(resolved_key.rejection_code);
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, resolved_key.reason);
@@ -3797,12 +4103,15 @@ grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
     }
     const auto verification = verify_signed_envelope(
         envelope,
-        static_cast<int>(
-            fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURE_AGGREGATION_KEY_ADVERTISEMENT),
-        hash_result.hash_input, resolved_key.public_key_hex, now_unix_s(),
+        static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::
+                             MESSAGE_TYPE_SECURE_AGGREGATION_KEY_ADVERTISEMENT),
+        hash_result.hash_input,
+        resolved_key.public_key_hex,
+        now_unix_s(),
         /*future_issued_tolerance_seconds=*/30.0);
     auto emit_rejection_event = [&](const std::string& code) {
-        if (security_event_journal_ == nullptr) return;
+        if (security_event_journal_ == nullptr)
+            return;
         SecurityEvent event;
         event.source_service = "coordinator";
         event.source_component = "coordinator_service";
@@ -3820,7 +4129,8 @@ grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
     };
     if (!verification.valid) {
         response->set_reason(verification.rejection_code);
-        response->set_rejection_reason(fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_INVALID_SIGNATURE);
+        response->set_rejection_reason(
+            fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_INVALID_SIGNATURE);
         emit_rejection_event(verification.rejection_code);
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
                             "signed key advertisement rejected: " + verification.reason);
@@ -3881,10 +4191,11 @@ grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
     // this protocol's surface (see the design doc's audit finding).
     if (status.key_advertisement_count() == status.cohort_size()) {
         try {
-            const auto active_identity =
-                coordinator_active_identity_ != nullptr ? coordinator_active_identity_->current() : nullptr;
-            secure_aggregation_manager_->freeze_cohort(advertisement.session_id(), now_unix_s(),
-                                                       active_identity.get());
+            const auto active_identity = coordinator_active_identity_ != nullptr
+                                             ? coordinator_active_identity_->current()
+                                             : nullptr;
+            secure_aggregation_manager_->freeze_cohort(
+                advertisement.session_id(), now_unix_s(), active_identity.get());
             if (security_event_journal_ != nullptr) {
                 SecurityEvent event;
                 event.source_service = "coordinator";
@@ -3904,8 +4215,8 @@ grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
             // for this call (the session is left in whatever state
             // freeze_cohort left it in; a subsequent GetSecureAggregationSession
             // call reveals the real state).
-            std::cerr << "secure aggregation cohort freeze failed for session " << advertisement.session_id()
-                      << ": " << error.what() << "\n";
+            std::cerr << "secure aggregation cohort freeze failed for session "
+                      << advertisement.session_id() << ": " << error.what() << "\n";
         }
     }
 
@@ -3914,13 +4225,15 @@ grpc::Status CoordinatorServiceImpl::AdvertiseSecureAggregationKey(
 }
 
 grpc::Status CoordinatorServiceImpl::GetFrozenCohortRoster(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetFrozenCohortRosterRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetFrozenCohortRosterRequest* request,
     fl::coordinator::v1::GetFrozenCohortRosterResponse* response) {
     response->set_available(false);
     if (secure_aggregation_manager_ == nullptr) {
         response->set_reason("secure_aggregation_unavailable");
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
-                            "this coordinator has no secure aggregation session manager configured");
+        return grpc::Status(
+            grpc::StatusCode::FAILED_PRECONDITION,
+            "this coordinator has no secure aggregation session manager configured");
     }
     if (const auto rejection = reject_if_worker_identity_mismatch(context, request->worker_id())) {
         response->set_reason("certificate_identity_mismatch");
@@ -3936,13 +4249,15 @@ grpc::Status CoordinatorServiceImpl::GetFrozenCohortRoster(
         response->set_reason("cohort_not_yet_frozen_or_unknown_session");
         return grpc::Status::OK;
     }
-    const bool is_participant =
-        std::any_of(roster->participants().begin(), roster->participants().end(),
-                    [&](const auto& participant) { return participant.worker_id() == request->worker_id(); });
+    const bool is_participant = std::any_of(
+        roster->participants().begin(), roster->participants().end(), [&](const auto& participant) {
+            return participant.worker_id() == request->worker_id();
+        });
     if (!is_participant) {
         response->set_reason("not_a_participant");
-        return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                            "worker_id '" + request->worker_id() + "' is not a participant in this cohort");
+        return grpc::Status(
+            grpc::StatusCode::PERMISSION_DENIED,
+            "worker_id '" + request->worker_id() + "' is not a participant in this cohort");
     }
     response->set_available(true);
     *response->mutable_roster() = *roster;
@@ -3950,7 +4265,8 @@ grpc::Status CoordinatorServiceImpl::GetFrozenCohortRoster(
 }
 
 grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
-    grpc::ServerContext* context, const fl::coordinator::v1::SubmitMaskedClientUpdateRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::SubmitMaskedClientUpdateRequest* request,
     fl::coordinator::v1::SubmitMaskedClientUpdateResponse* response) {
     // Masked Update Runtime and No-Dropout Secure FedAvg Finalization
     // slice, Work Area N: real, live handler -- the exact same
@@ -3964,12 +4280,14 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
     // advance the model version. Never decodes or exposes an
     // individual accepted contribution.
     response->set_accepted(false);
-    response->set_rejection_reason(fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_UNSPECIFIED);
+    response->set_rejection_reason(
+        fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_UNSPECIFIED);
 
     if (secure_aggregation_manager_ == nullptr) {
         response->set_reason("secure_aggregation_unavailable");
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
-                            "this coordinator has no secure aggregation session manager configured");
+        return grpc::Status(
+            grpc::StatusCode::FAILED_PRECONDITION,
+            "this coordinator has no secure aggregation session manager configured");
     }
     if (!request->has_masked_update()) {
         response->set_reason("masked_update_missing");
@@ -3990,12 +4308,14 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
 
     if (identity_registry_ == nullptr) {
         response->set_reason("identity_registry_unavailable");
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "no worker identity registry is configured");
+        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                            "no worker identity registry is configured");
     }
     const auto identity_record = identity_registry_->find_by_worker_id(update.worker_id());
     if (!identity_record.has_value()) {
         response->set_reason("unknown_worker");
-        return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "unknown worker_id: " + update.worker_id());
+        return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                            "unknown worker_id: " + update.worker_id());
     }
     if (identity_record->registration_status == WorkerIdentityStatus::kRevoked) {
         response->set_reason("worker_revoked");
@@ -4003,9 +4323,11 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                             "worker_id '" + update.worker_id() + "' is revoked");
     }
 
-    const auto resolved_key = resolve_signing_key(signing_key_registry_, *identity_record,
+    const auto resolved_key = resolve_signing_key(signing_key_registry_,
+                                                  *identity_record,
                                                   envelope.signing_key_id(),
-                                                  SignedMessageKind::kSecureAggregationMaskedUpdate, now_unix_s());
+                                                  SignedMessageKind::kSecureAggregationMaskedUpdate,
+                                                  now_unix_s());
     if (!resolved_key.ok) {
         response->set_reason(resolved_key.rejection_code);
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, resolved_key.reason);
@@ -4017,11 +4339,16 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, hash_result.reason);
     }
     const auto verification = verify_signed_envelope(
-        envelope, static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURE_AGGREGATION_MASKED_UPDATE),
-        hash_result.hash_input, resolved_key.public_key_hex, now_unix_s(),
+        envelope,
+        static_cast<int>(
+            fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SECURE_AGGREGATION_MASKED_UPDATE),
+        hash_result.hash_input,
+        resolved_key.public_key_hex,
+        now_unix_s(),
         /*future_issued_tolerance_seconds=*/30.0);
     auto emit_rejection_event = [&](const std::string& code) {
-        if (security_event_journal_ == nullptr) return;
+        if (security_event_journal_ == nullptr)
+            return;
         SecurityEvent event;
         event.source_service = "coordinator";
         event.source_component = "coordinator_service";
@@ -4046,12 +4373,39 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
     // happened" without inferring it from reason_code string matching
     // on the generic event.
     auto emit_attestation_event = [&](bool accepted, const std::string& code) {
-        if (security_event_journal_ == nullptr) return;
+        if (security_event_journal_ == nullptr)
+            return;
         SecurityEvent event;
         event.source_service = "coordinator";
         event.source_component = "coordinator_service";
         event.event_type = accepted ? SecurityEventType::kSecureUserLevelDpAttestationAccepted
-                                     : SecurityEventType::kSecureUserLevelDpAttestationRejected;
+                                    : SecurityEventType::kSecureUserLevelDpAttestationRejected;
+        event.severity = default_severity(event.event_type);
+        event.actor_type = SecurityActorType::kWorker;
+        event.safe_actor_id = update.worker_id();
+        event.subject_type = SecuritySubjectType::kSecureAggregationSession;
+        event.safe_subject_id = update.session_id();
+        event.worker_id = update.worker_id();
+        event.run_id = update.run_id();
+        event.round_id = update.round_id();
+        event.safe_signing_key_id = envelope.signing_key_id();
+        event.outcome = accepted ? SecurityOutcome::kAccepted : SecurityOutcome::kRejected;
+        event.reason_code = code;
+        security_event_journal_->emit(std::move(event));
+    };
+    // Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: distinct from emit_attestation_event -- isolates
+    // indicator-binding rejections from user-level-attestation
+    // rejections on the same submission, same reasoning as
+    // emit_sample_record_event below.
+    auto emit_indicator_event = [&](bool accepted, const std::string& code) {
+        if (security_event_journal_ == nullptr)
+            return;
+        SecurityEvent event;
+        event.source_service = "coordinator";
+        event.source_component = "coordinator_service";
+        event.event_type = accepted ? SecurityEventType::kSecureAdaptiveClippingIndicatorAccepted
+                                    : SecurityEventType::kSecureAdaptiveClippingIndicatorRejected;
         event.severity = default_severity(event.event_type);
         event.actor_type = SecurityActorType::kWorker;
         event.safe_actor_id = update.worker_id();
@@ -4067,7 +4421,8 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
     };
     if (!verification.valid) {
         response->set_reason(verification.rejection_code);
-        response->set_rejection_reason(fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_INVALID_SIGNATURE);
+        response->set_rejection_reason(
+            fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_INVALID_SIGNATURE);
         emit_rejection_event(verification.rejection_code);
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
                             "signed masked update rejected: " + verification.reason);
@@ -4117,12 +4472,13 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
     // operator can isolate sample-record rejections from user-
     // attestation rejections on the same submission.
     auto emit_sample_record_event = [&](bool accepted, const std::string& code) {
-        if (security_event_journal_ == nullptr) return;
+        if (security_event_journal_ == nullptr)
+            return;
         SecurityEvent event;
         event.source_service = "coordinator";
         event.source_component = "coordinator_service";
         event.event_type = accepted ? SecurityEventType::kSecureHybridDpSampleRecordAccepted
-                                     : SecurityEventType::kSecureHybridDpSampleRecordRejected;
+                                    : SecurityEventType::kSecureHybridDpSampleRecordRejected;
         event.severity = default_severity(event.event_type);
         event.actor_type = SecurityActorType::kWorker;
         event.safe_actor_id = update.worker_id();
@@ -4146,7 +4502,8 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
     // structural binding to this exact update.
     try {
         auto& privacy_run = manager_->get(update.run_id());
-        const bool is_hybrid_update = privacy_run.privacy_mode() == fl::core::PrivacyMode::kHybridDp;
+        const bool is_hybrid_update =
+            privacy_run.privacy_mode() == fl::core::PrivacyMode::kHybridDp;
         if (privacy_run.privacy_mode() == fl::core::PrivacyMode::kUserLevelDp || is_hybrid_update) {
             if (!update.has_user_level_attestation()) {
                 response->set_reason("user_level_attestation_missing");
@@ -4175,7 +4532,8 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
             if (!binding_ok) {
                 response->set_reason("user_level_attestation_binding_mismatch");
                 response->set_rejection_reason(
-                    fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_BINDING_MISMATCH);
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_BINDING_MISMATCH);
                 emit_rejection_event("user_level_attestation_binding_mismatch");
                 emit_attestation_event(false, "user_level_attestation_binding_mismatch");
                 return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
@@ -4189,19 +4547,22 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
             if (attestation.signing_key_id() != envelope.signing_key_id()) {
                 response->set_reason("user_level_attestation_wrong_signing_key");
                 response->set_rejection_reason(
-                    fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_INVALID_SIGNATURE);
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_INVALID_SIGNATURE);
                 emit_rejection_event("user_level_attestation_wrong_signing_key");
                 emit_attestation_event(false, "user_level_attestation_wrong_signing_key");
-                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                    "signed user-level privacy attestation was not signed by the same "
-                                    "key as this submission's outer envelope");
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed user-level privacy attestation was not signed by the same "
+                    "key as this submission's outer envelope");
             }
-            const auto attestation_verification =
-                verify_user_level_privacy_attestation(attestation, resolved_key.public_key_hex, now_unix_s());
+            const auto attestation_verification = verify_user_level_privacy_attestation(
+                attestation, resolved_key.public_key_hex, now_unix_s());
             if (!attestation_verification.valid) {
                 response->set_reason(attestation_verification.rejection_code);
                 response->set_rejection_reason(
-                    fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_INVALID_SIGNATURE);
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_ATTESTATION_INVALID_SIGNATURE);
                 emit_rejection_event(attestation_verification.rejection_code);
                 emit_attestation_event(false, attestation_verification.rejection_code);
                 return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
@@ -4209,6 +4570,95 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                                         attestation_verification.reason);
             }
             emit_attestation_event(true, "ok");
+        }
+        // Secure Adaptive Clipping with Private Indicator Aggregation
+        // slice: inserted here (after the user-level attestation block,
+        // before the hybrid sample-record block), following the exact
+        // same staged-then-committed discipline every other check in
+        // this function uses -- see
+        // docs/secure-adaptive-clipping-semantics.md section 16.
+        if (privacy_run.secure_adaptive_clipping_active()) {
+            if (!update.has_adaptive_clipping_binding()) {
+                response->set_reason("adaptive_clipping_binding_missing");
+                response->set_rejection_reason(
+                    fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_MISSING);
+                emit_rejection_event("adaptive_clipping_binding_missing");
+                emit_indicator_event(false, "adaptive_clipping_binding_missing");
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "a signed adaptive clipping binding is required for this secure "
+                    "adaptive-clipping round");
+            }
+            const auto& adaptive_binding = update.adaptive_clipping_binding();
+            const bool adaptive_binding_ok =
+                adaptive_binding.worker_id() == update.worker_id() &&
+                adaptive_binding.client_id() == update.client_id() &&
+                adaptive_binding.run_id() == update.run_id() &&
+                adaptive_binding.round_id() == update.round_id() &&
+                adaptive_binding.task_id() == update.task_id() &&
+                adaptive_binding.session_id() == update.session_id() &&
+                adaptive_binding.model_version() == update.model_version() &&
+                adaptive_binding.operation_completed();
+            if (!adaptive_binding_ok) {
+                response->set_reason("adaptive_clipping_binding_mismatch");
+                response->set_rejection_reason(
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_BINDING_MISMATCH);
+                emit_rejection_event("adaptive_clipping_binding_mismatch");
+                emit_indicator_event(false, "adaptive_clipping_binding_mismatch");
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed adaptive clipping binding does not match this submission's "
+                    "worker/client/session/task/round/model_version");
+            }
+            if (adaptive_binding.signing_key_id() != envelope.signing_key_id()) {
+                response->set_reason("adaptive_clipping_binding_wrong_signing_key");
+                response->set_rejection_reason(
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_INVALID_SIGNATURE);
+                emit_rejection_event("adaptive_clipping_binding_wrong_signing_key");
+                emit_indicator_event(false, "adaptive_clipping_binding_wrong_signing_key");
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed adaptive clipping binding was not signed by the same key as "
+                    "this submission's outer envelope");
+            }
+            const auto adaptive_binding_verification = verify_adaptive_clipping_binding(
+                adaptive_binding, resolved_key.public_key_hex, now_unix_s());
+            if (!adaptive_binding_verification.valid) {
+                response->set_reason(adaptive_binding_verification.rejection_code);
+                response->set_rejection_reason(
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_INVALID_SIGNATURE);
+                emit_rejection_event(adaptive_binding_verification.rejection_code);
+                emit_indicator_event(false, adaptive_binding_verification.rejection_code);
+                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                                    "signed adaptive clipping binding rejected: " +
+                                        adaptive_binding_verification.reason);
+            }
+            // Stale clip-state rejection (Work Area L): a worker holding
+            // a task signed against an OLDER clip-state step count than
+            // the one currently live for this run must be rejected, not
+            // silently accepted against a mismatched bound -- the
+            // current step count only ever advances at finalize time
+            // (see run_manager.cpp's apply_secure_aggregate_and_advance),
+            // so it is unchanged since this round's tasks were signed
+            // unless the round has already finalized underneath this
+            // submission.
+            if (adaptive_binding.clip_state_step_count() !=
+                privacy_run.adaptive_clip_state_step_count()) {
+                response->set_reason("adaptive_clipping_stale_clip_state");
+                response->set_rejection_reason(
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_STALE_CLIP_STATE);
+                emit_rejection_event("adaptive_clipping_stale_clip_state");
+                emit_indicator_event(false, "adaptive_clipping_stale_clip_state");
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed adaptive clipping binding was signed against a clip-state step "
+                    "count that is no longer current for this run");
+            }
+            emit_indicator_event(true, "ok");
         }
         // Secure Hybrid Differential Privacy Runtime slice, Work Areas
         // K/L/M: closes the pre-existing sample_privacy_record_hash gap
@@ -4237,34 +4687,42 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
             if (sample_envelope.signing_key_id() != envelope.signing_key_id()) {
                 response->set_reason("sample_privacy_record_key_mismatch");
                 response->set_rejection_reason(
-                    fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_INVALID_SIGNATURE);
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_INVALID_SIGNATURE);
                 emit_rejection_event("sample_privacy_record_key_mismatch");
                 emit_sample_record_event(false, "sample_privacy_record_key_mismatch");
                 return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
                                     "sample privacy record signing_key_id does not match the outer "
                                     "masked update's signing_key_id");
             }
-            const auto sample_hash_result = sample_privacy_record_payload_hash_input(sample_payload);
+            const auto sample_hash_result =
+                sample_privacy_record_payload_hash_input(sample_payload);
             if (!sample_hash_result.ok) {
                 response->set_reason("sample_privacy_payload_hash_computation_failed");
                 emit_rejection_event("sample_privacy_payload_hash_computation_failed");
                 emit_sample_record_event(false, "sample_privacy_payload_hash_computation_failed");
-                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                    "signed sample privacy record rejected: " + sample_hash_result.reason);
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed sample privacy record rejected: " + sample_hash_result.reason);
             }
             const auto sample_verification = verify_signed_envelope(
                 sample_envelope,
-                static_cast<int>(fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD),
-                sample_hash_result.hash_input, resolved_key.public_key_hex, now_unix_s(),
+                static_cast<int>(
+                    fl::worker::v1::SignedWorkerEnvelope::MESSAGE_TYPE_SAMPLE_PRIVACY_RECORD),
+                sample_hash_result.hash_input,
+                resolved_key.public_key_hex,
+                now_unix_s(),
                 /*future_issued_tolerance_seconds=*/30.0);
             if (!sample_verification.valid) {
                 response->set_reason(sample_verification.rejection_code);
                 response->set_rejection_reason(
-                    fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_INVALID_SIGNATURE);
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_INVALID_SIGNATURE);
                 emit_rejection_event(sample_verification.rejection_code);
                 emit_sample_record_event(false, sample_verification.rejection_code);
-                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                    "signed sample privacy record rejected: " + sample_verification.reason);
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed sample privacy record rejected: " + sample_verification.reason);
             }
             // Binds sample_privacy_record_hash (already covered by the
             // outer masked update's own signature, see
@@ -4274,16 +4732,18 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
             // payload_hash IS the canonical hash of this record (see
             // the semantics doc section 5), so no separate hash
             // function is introduced.
-            const bool binding_ok = sample_payload.worker_id() == update.worker_id() &&
-                                    sample_payload.run_id() == update.run_id() &&
-                                    sample_payload.round_id() == update.round_id() &&
-                                    sample_payload.client_id() == update.client_id() &&
-                                    sample_payload.task_id() == update.task_id() &&
-                                    update.sample_privacy_record_hash() == sample_envelope.payload_hash();
+            const bool binding_ok =
+                sample_payload.worker_id() == update.worker_id() &&
+                sample_payload.run_id() == update.run_id() &&
+                sample_payload.round_id() == update.round_id() &&
+                sample_payload.client_id() == update.client_id() &&
+                sample_payload.task_id() == update.task_id() &&
+                update.sample_privacy_record_hash() == sample_envelope.payload_hash();
             if (!binding_ok) {
                 response->set_reason("sample_privacy_record_binding_mismatch");
                 response->set_rejection_reason(
-                    fl::coordinator::v1::SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_BINDING_MISMATCH);
+                    fl::coordinator::v1::
+                        SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_BINDING_MISMATCH);
                 emit_rejection_event("sample_privacy_record_binding_mismatch");
                 emit_sample_record_event(false, "sample_privacy_record_binding_mismatch");
                 return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
@@ -4299,14 +4759,15 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                 sample_replay_candidate.now_unix_s = now_unix_s();
                 const double window = sample_envelope.expires_at() - sample_envelope.issued_at();
                 sample_replay_candidate.nonce_retention_seconds = window > 1.0 ? window : 1.0;
-                const auto sample_replay_decision = replay_store_->validate(sample_replay_candidate);
+                const auto sample_replay_decision =
+                    replay_store_->validate(sample_replay_candidate);
                 if (!sample_replay_decision.accepted) {
                     response->set_reason(to_string(sample_replay_decision.reason));
                     emit_rejection_event(to_string(sample_replay_decision.reason));
                     emit_sample_record_event(false, to_string(sample_replay_decision.reason));
-                    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                        "signed sample privacy record rejected: " +
-                                            sample_replay_decision.detail);
+                    return grpc::Status(
+                        grpc::StatusCode::PERMISSION_DENIED,
+                        "signed sample privacy record rejected: " + sample_replay_decision.detail);
                 }
                 have_sample_replay_candidate = true;
             }
@@ -4319,8 +4780,10 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                 sample_monotonicity_candidate.step = sample_payload.accountant_step();
                 sample_monotonicity_candidate.epsilon = sample_payload.epsilon();
                 sample_monotonicity_candidate.delta = sample_payload.delta();
-                sample_monotonicity_candidate.accountant_state_hash = sample_payload.accountant_state_hash();
-                sample_monotonicity_candidate.configuration_hash = sample_payload.configuration_hash();
+                sample_monotonicity_candidate.accountant_state_hash =
+                    sample_payload.accountant_state_hash();
+                sample_monotonicity_candidate.configuration_hash =
+                    sample_payload.configuration_hash();
                 sample_monotonicity_candidate.round_id = sample_payload.round_id();
                 sample_monotonicity_candidate.task_id = sample_payload.task_id();
                 sample_monotonicity_candidate.now_unix_s = now_unix_s();
@@ -4342,8 +4805,9 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                 response->set_reason("sample_budget_decision_contradiction");
                 emit_rejection_event("sample_budget_decision_contradiction");
                 emit_sample_record_event(false, "sample_budget_decision_contradiction");
-                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                                    "signed sample privacy record rejected: " + sample_contradiction);
+                return grpc::Status(
+                    grpc::StatusCode::PERMISSION_DENIED,
+                    "signed sample privacy record rejected: " + sample_contradiction);
             }
             // Work Area O's sample-level publication boundary: staged
             // here, actually committed/appended only after
@@ -4374,9 +4838,9 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
         response->set_reason("user_level_attestation_verification_failed");
         emit_rejection_event("user_level_attestation_verification_failed");
         emit_attestation_event(false, "user_level_attestation_verification_failed");
-        return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                            std::string("user-level privacy attestation verification failed: ") +
-                                error.what());
+        return grpc::Status(
+            grpc::StatusCode::PERMISSION_DENIED,
+            std::string("user-level privacy attestation verification failed: ") + error.what());
     }
 
     fl::coordinator::v1::SecureAggregationSessionStatus status;
@@ -4503,8 +4967,20 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                 const fl::coordinator::FixedPointEncodingProfile secure_profile{};
                 const double margin =
                     fl::coordinator::compute_quantization_margin(total_elements, secure_profile);
+                // Secure Adaptive Clipping with Private Indicator
+                // Aggregation slice: the bound to calibrate model noise
+                // against is the adaptive controller's current (this-
+                // round) value when adaptive clipping is active for
+                // this run -- config_.user_level_privacy.initial_clipping_bound
+                // was a real latent under-calibration bug for the
+                // secure path (never reachable before this slice, since
+                // AcquireTask unconditionally rejected adaptive clipping
+                // under secure aggregation).
+                const double clip_bound_this_round = run.secure_adaptive_clipping_active()
+                                                         ? run.current_adaptive_clip_bound()
+                                                         : user_level.initial_clipping_bound;
                 const double effective_sensitivity =
-                    fl::coordinator::compute_effective_sensitivity(user_level.initial_clipping_bound, margin);
+                    fl::coordinator::compute_effective_sensitivity(clip_bound_this_round, margin);
                 noise_provider = run.user_level_noise_provider();
                 noise_std_dev = user_level.noise_multiplier * effective_sensitivity;
                 // Work Area L: the fixed-weight-1 integrity check (see
@@ -4513,9 +4989,40 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                 // created with.
                 expected_weight_sum = static_cast<double>(status.cohort_size());
             }
-            const auto aggregate =
-                secure_aggregation_manager_->finalize(update.session_id(), now_unix_s(), noise_provider,
-                                                       noise_std_dev, expected_weight_sum);
+            // Secure Adaptive Clipping with Private Indicator
+            // Aggregation slice: the indicator sum is decoded BEFORE
+            // finalize() (while the session is still in
+            // MASKED_UPDATE_COLLECTION with the complete cohort's
+            // contributions present) -- see
+            // docs/secure-adaptive-clipping-semantics.md section 17.
+            // Never decodes or exposes an individual indicator; only
+            // the final aggregate count ever crosses this boundary.
+            std::optional<std::uint64_t> indicator_over_threshold_count;
+            if (run.secure_adaptive_clipping_active()) {
+                indicator_over_threshold_count =
+                    secure_aggregation_manager_->decode_secure_adaptive_clipping_indicator_count(
+                        update.session_id());
+                if (security_event_journal_ != nullptr) {
+                    SecurityEvent event;
+                    event.source_service = "coordinator";
+                    event.source_component = "secure_aggregation_session_manager";
+                    event.event_type =
+                        SecurityEventType::kSecureAdaptiveClippingCompleteCohortReconstructed;
+                    event.severity = default_severity(event.event_type);
+                    event.actor_type = SecurityActorType::kCoordinator;
+                    event.subject_type = SecuritySubjectType::kSecureAggregationSession;
+                    event.safe_subject_id = update.session_id();
+                    event.run_id = update.run_id();
+                    event.round_id = update.round_id();
+                    event.outcome = SecurityOutcome::kCompleted;
+                    security_event_journal_->emit(std::move(event));
+                }
+            }
+            const auto aggregate = secure_aggregation_manager_->finalize(update.session_id(),
+                                                                         now_unix_s(),
+                                                                         noise_provider,
+                                                                         noise_std_dev,
+                                                                         expected_weight_sum);
             const bool is_hybrid_dp = run.privacy_mode() == fl::core::PrivacyMode::kHybridDp;
             const bool is_user_level_dp =
                 run.privacy_mode() == fl::core::PrivacyMode::kUserLevelDp || is_hybrid_dp;
@@ -4547,16 +5054,45 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
             bool advanced = false;
             std::string advance_error;
             try {
-                advanced = run.apply_secure_aggregate_and_advance(update.round_id(), aggregate, now_unix_s());
+                advanced = run.apply_secure_aggregate_and_advance(
+                    update.round_id(), aggregate, now_unix_s(), indicator_over_threshold_count);
             } catch (const std::exception& error) {
                 advance_error = error.what();
+            }
+            if (advanced && run.secure_adaptive_clipping_active() &&
+                security_event_journal_ != nullptr) {
+                // One atomic transaction with the model mechanism's own
+                // kSecureAggregationSessionCompleted event just below --
+                // see docs/secure-adaptive-clipping-semantics.md section
+                // 18. NEXT_STATE_PUBLISHED and ROUND_COMPLETED are
+                // distinct events (mirroring the hybrid slice's own
+                // BINDING_ACCEPTED/ROUND_COMPLETED split) so an operator
+                // dashboard can count "a next clip bound was durably
+                // published" separately from "a full adaptive round
+                // completed."
+                SecurityEvent event;
+                event.source_service = "coordinator";
+                event.source_component = "run_manager";
+                event.actor_type = SecurityActorType::kCoordinator;
+                event.subject_type = SecuritySubjectType::kSecureAggregationSession;
+                event.safe_subject_id = update.session_id();
+                event.run_id = update.run_id();
+                event.round_id = update.round_id();
+                event.outcome = SecurityOutcome::kCompleted;
+                event.event_type = SecurityEventType::kSecureAdaptiveClippingNextStatePublished;
+                event.severity = default_severity(event.event_type);
+                security_event_journal_->emit(event);
+                event.event_type = SecurityEventType::kSecureAdaptiveClippingRoundCompleted;
+                event.severity = default_severity(event.event_type);
+                security_event_journal_->emit(std::move(event));
             }
             if (security_event_journal_ != nullptr) {
                 SecurityEvent event;
                 event.source_service = "coordinator";
                 event.source_component = "run_manager";
-                event.event_type = advanced ? SecurityEventType::kSecureAggregationSessionCompleted
-                                            : SecurityEventType::kSecureAggregationAggregateValidationFailed;
+                event.event_type =
+                    advanced ? SecurityEventType::kSecureAggregationSessionCompleted
+                             : SecurityEventType::kSecureAggregationAggregateValidationFailed;
                 event.severity = default_severity(event.event_type);
                 event.actor_type = SecurityActorType::kCoordinator;
                 event.subject_type = SecuritySubjectType::kSecureAggregationSession;
@@ -4595,13 +5131,29 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                             security_event_journal_->emit(std::move(event));
                         }
                     } else {
-                        event.event_type = SecurityEventType::kSecureUserLevelDpFinalizationConflict;
+                        event.event_type =
+                            SecurityEventType::kSecureUserLevelDpFinalizationConflict;
                         event.severity = default_severity(event.event_type);
                         event.run_id = update.run_id();
                         event.round_id = update.round_id();
                         security_event_journal_->emit(event);
                         if (is_hybrid_dp) {
                             event.event_type = SecurityEventType::kSecureHybridDpRoundAborted;
+                            event.severity = default_severity(event.event_type);
+                            security_event_journal_->emit(event);
+                        }
+                        if (run.secure_adaptive_clipping_active()) {
+                            // Secure Adaptive Clipping with Private
+                            // Indicator Aggregation slice: the same
+                            // finalization-conflict guard that prevents
+                            // the model mechanism from double-committing
+                            // also prevents the clip-state update from
+                            // re-applying -- see the semantics doc
+                            // section 18. Never a real privacy
+                            // double-spend; the guard firing IS the
+                            // protection working.
+                            event.event_type =
+                                SecurityEventType::kSecureAdaptiveClippingRoundAborted;
                             event.severity = default_severity(event.event_type);
                             security_event_journal_->emit(std::move(event));
                         }
@@ -4616,11 +5168,14 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                 // (finalize() succeeded above), but the model version
                 // did not actually advance. Logged loudly -- never
                 // silently reported as a successful secure round.
-                std::cerr << "secure aggregate for session " << update.session_id()
-                          << " decoded successfully but RunInstance::apply_secure_aggregate_and_advance "
-                          << "did not advance the model (run_id=" << update.run_id()
-                          << " round_id=" << update.round_id() << (advance_error.empty() ? "" : ": " + advance_error)
-                          << ") -- the secure session reports COMPLETED but the model version is unchanged\n";
+                std::cerr
+                    << "secure aggregate for session " << update.session_id()
+                    << " decoded successfully but RunInstance::apply_secure_aggregate_and_advance "
+                    << "did not advance the model (run_id=" << update.run_id()
+                    << " round_id=" << update.round_id()
+                    << (advance_error.empty() ? "" : ": " + advance_error)
+                    << ") -- the secure session reports COMPLETED but the model version is "
+                       "unchanged\n";
             }
         } catch (const std::exception& error) {
             if (security_event_journal_ != nullptr) {
@@ -4635,8 +5190,8 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
                 event.outcome = SecurityOutcome::kRejected;
                 security_event_journal_->emit(std::move(event));
             }
-            std::cerr << "secure aggregation finalization failed for session " << update.session_id() << ": "
-                      << error.what() << "\n";
+            std::cerr << "secure aggregation finalization failed for session "
+                      << update.session_id() << ": " << error.what() << "\n";
         }
     }
 
@@ -4644,12 +5199,14 @@ grpc::Status CoordinatorServiceImpl::SubmitMaskedClientUpdate(
 }
 
 grpc::Status CoordinatorServiceImpl::GetSecureAggregationSession(
-    grpc::ServerContext*, const fl::coordinator::v1::GetSecureAggregationSessionRequest* request,
+    grpc::ServerContext*,
+    const fl::coordinator::v1::GetSecureAggregationSessionRequest* request,
     fl::coordinator::v1::GetSecureAggregationSessionResponse* response) {
     response->set_found(false);
     if (secure_aggregation_manager_ == nullptr) {
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
-                            "this coordinator has no secure aggregation session manager configured");
+        return grpc::Status(
+            grpc::StatusCode::FAILED_PRECONDITION,
+            "this coordinator has no secure aggregation session manager configured");
     }
     const auto status = secure_aggregation_manager_->find(request->session_id());
     if (!status.has_value()) {
@@ -4661,11 +5218,13 @@ grpc::Status CoordinatorServiceImpl::GetSecureAggregationSession(
 }
 
 grpc::Status CoordinatorServiceImpl::ListSecureAggregationSessions(
-    grpc::ServerContext*, const fl::coordinator::v1::ListSecureAggregationSessionsRequest* request,
+    grpc::ServerContext*,
+    const fl::coordinator::v1::ListSecureAggregationSessionsRequest* request,
     fl::coordinator::v1::ListSecureAggregationSessionsResponse* response) {
     if (secure_aggregation_manager_ == nullptr) {
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
-                            "this coordinator has no secure aggregation session manager configured");
+        return grpc::Status(
+            grpc::StatusCode::FAILED_PRECONDITION,
+            "this coordinator has no secure aggregation session manager configured");
     }
     // Work item 13: pagination fields (page_size/page_token) are
     // accepted on the wire but not yet implemented -- this pass's
@@ -4676,7 +5235,8 @@ grpc::Status CoordinatorServiceImpl::ListSecureAggregationSessions(
         if (!request->run_id().empty() && summary.run_id() != request->run_id()) {
             continue;
         }
-        if (request->state_filter() != fl::coordinator::v1::SECURE_AGGREGATION_SESSION_STATE_UNSPECIFIED &&
+        if (request->state_filter() !=
+                fl::coordinator::v1::SECURE_AGGREGATION_SESSION_STATE_UNSPECIFIED &&
             summary.state() != request->state_filter()) {
             continue;
         }
@@ -4686,23 +5246,28 @@ grpc::Status CoordinatorServiceImpl::ListSecureAggregationSessions(
 }
 
 grpc::Status CoordinatorServiceImpl::AbortSecureAggregationSession(
-    grpc::ServerContext* context, const fl::coordinator::v1::AbortSecureAggregationSessionRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::AbortSecureAggregationSessionRequest* request,
     fl::coordinator::v1::AbortSecureAggregationSessionResponse* response) {
     response->set_accepted(false);
     // ADMIN_CONTROL, same gate as SuspendWorker/RevokeWorker -- manual
     // abort is an administrative action, not a worker-initiated one.
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
-        emit_permission_denied_event(security_event_journal_, context, "AbortSecureAggregationSession");
+        emit_permission_denied_event(
+            security_event_journal_, context, "AbortSecureAggregationSession");
         return *rejection;
     }
     if (secure_aggregation_manager_ == nullptr) {
         response->set_reason("secure_aggregation_unavailable");
-        return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
-                            "this coordinator has no secure aggregation session manager configured");
+        return grpc::Status(
+            grpc::StatusCode::FAILED_PRECONDITION,
+            "this coordinator has no secure aggregation session manager configured");
     }
     try {
         const auto status = secure_aggregation_manager_->abort(
-            request->session_id(), fl::coordinator::v1::SECURE_AGGREGATION_ABORT_REASON_MANUAL_ABORT, now_unix_s());
+            request->session_id(),
+            fl::coordinator::v1::SECURE_AGGREGATION_ABORT_REASON_MANUAL_ABORT,
+            now_unix_s());
         (void)status;
         if (security_event_journal_ != nullptr) {
             SecurityEvent event;
@@ -4733,12 +5298,14 @@ namespace {
 // Every field here is a fixed design fact this slice's own mechanism uses
 // unconditionally, not something read back from a run (a run either uses
 // this mechanism or doesn't; there is no per-run variant of it).
-void fill_secure_user_level_privacy_capability(fl::coordinator::v1::SecureUserLevelPrivacyCapabilityInfo* info) {
+void fill_secure_user_level_privacy_capability(
+    fl::coordinator::v1::SecureUserLevelPrivacyCapabilityInfo* info) {
     info->set_available(true);
     info->set_provider("SECAGG_NO_DROPOUT_EXPERIMENTAL");
     info->set_adjacency_model("ADD_REMOVE_ONE");
     info->set_sampling_assumption("NO_AMPLIFICATION");
-    info->set_sensitivity_formula("clip_norm + sqrt(total_elements) * (0.5 / fixed_point_scale_factor)");
+    info->set_sensitivity_formula(
+        "clip_norm + sqrt(total_elements) * (0.5 / fixed_point_scale_factor)");
     info->set_noise_placement("sum_before_divide");
     info->set_fixed_weight(1.0);
     info->add_trust_limitations("honest_client_dependent_clipping_not_cryptographically_verified");
@@ -4752,11 +5319,13 @@ void fill_secure_user_level_privacy_capability(fl::coordinator::v1::SecureUserLe
 }  // namespace
 
 grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyHealth(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetSecureUserLevelPrivacyHealthRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetSecureUserLevelPrivacyHealthRequest* request,
     fl::coordinator::v1::SecureUserLevelPrivacyHealthResponse* response) {
     (void)request;
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
-        emit_permission_denied_event(security_event_journal_, context, "GetSecureUserLevelPrivacyHealth");
+        emit_permission_denied_event(
+            security_event_journal_, context, "GetSecureUserLevelPrivacyHealth");
         return *rejection;
     }
     fill_secure_user_level_privacy_capability(response->mutable_capability());
@@ -4790,7 +5359,8 @@ grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyHealth(
                 }
                 ++active_runs;
                 const auto& ledger = run.user_level_ledger();
-                if (!ledger.empty() && ledger.back().committed_at_unix_s > last_successful_round_unix_s) {
+                if (!ledger.empty() &&
+                    ledger.back().committed_at_unix_s > last_successful_round_unix_s) {
                     last_successful_round_unix_s = ledger.back().committed_at_unix_s;
                 }
             } catch (const std::exception&) {
@@ -4824,10 +5394,12 @@ grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyHealth(
 }
 
 grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyBudget(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetSecureUserLevelPrivacyBudgetRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetSecureUserLevelPrivacyBudgetRequest* request,
     fl::coordinator::v1::SecureUserLevelPrivacyBudgetResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
-        emit_permission_denied_event(security_event_journal_, context, "GetSecureUserLevelPrivacyBudget");
+        emit_permission_denied_event(
+            security_event_journal_, context, "GetSecureUserLevelPrivacyBudget");
         return *rejection;
     }
     if (manager_ == nullptr) {
@@ -4847,8 +5419,9 @@ grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyBudget(
         if (run.privacy_mode() != fl::core::PrivacyMode::kUserLevelDp &&
             run.privacy_mode() != fl::core::PrivacyMode::kHybridDp) {
             return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
-                                "run_id '" + request->run_id() + "' is not a user-level-DP or "
-                                "hybrid-DP run");
+                                "run_id '" + request->run_id() +
+                                    "' is not a user-level-DP or "
+                                    "hybrid-DP run");
         }
         const auto& user_level = run.user_level_privacy();
         const auto& ledger = run.user_level_ledger();
@@ -4857,8 +5430,8 @@ grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyBudget(
         response->set_budget_configured(budget_configured);
         response->set_epsilon_spent(epsilon_spent);
         response->set_epsilon_budget(user_level.epsilon_budget);
-        response->set_epsilon_remaining(budget_configured ? std::max(0.0, user_level.epsilon_budget - epsilon_spent)
-                                                           : 0.0);
+        response->set_epsilon_remaining(
+            budget_configured ? std::max(0.0, user_level.epsilon_budget - epsilon_spent) : 0.0);
         response->set_target_delta(user_level.target_delta);
         response->set_rounds_committed(static_cast<std::uint64_t>(ledger.size()));
         return grpc::Status::OK;
@@ -4884,10 +5457,12 @@ fl::coordinator::v1::SecureUserLevelPrivacyRoundSummary to_round_summary(
 }  // namespace
 
 grpc::Status CoordinatorServiceImpl::ListSecureUserLevelPrivacyRounds(
-    grpc::ServerContext* context, const fl::coordinator::v1::ListSecureUserLevelPrivacyRoundsRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::ListSecureUserLevelPrivacyRoundsRequest* request,
     fl::coordinator::v1::ListSecureUserLevelPrivacyRoundsResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
-        emit_permission_denied_event(security_event_journal_, context, "ListSecureUserLevelPrivacyRounds");
+        emit_permission_denied_event(
+            security_event_journal_, context, "ListSecureUserLevelPrivacyRounds");
         return *rejection;
     }
     if (manager_ == nullptr) {
@@ -4923,8 +5498,10 @@ grpc::Status CoordinatorServiceImpl::ListSecureUserLevelPrivacyRounds(
         std::uint64_t last_round_id = 0;
         std::uint32_t emitted = 0;
         for (const auto& entry : run.user_level_ledger()) {
-            if (entry.round_id <= after_round_id) continue;
-            if (emitted >= limit) break;
+            if (entry.round_id <= after_round_id)
+                continue;
+            if (emitted >= limit)
+                break;
             *response->add_rounds() = to_round_summary(request->run_id(), entry);
             last_round_id = entry.round_id;
             ++emitted;
@@ -4937,10 +5514,12 @@ grpc::Status CoordinatorServiceImpl::ListSecureUserLevelPrivacyRounds(
 }
 
 grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyRound(
-    grpc::ServerContext* context, const fl::coordinator::v1::GetSecureUserLevelPrivacyRoundRequest* request,
+    grpc::ServerContext* context,
+    const fl::coordinator::v1::GetSecureUserLevelPrivacyRoundRequest* request,
     fl::coordinator::v1::GetSecureUserLevelPrivacyRoundResponse* response) {
     if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
-        emit_permission_denied_event(security_event_journal_, context, "GetSecureUserLevelPrivacyRound");
+        emit_permission_denied_event(
+            security_event_journal_, context, "GetSecureUserLevelPrivacyRound");
         return *rejection;
     }
     if (manager_ == nullptr) {

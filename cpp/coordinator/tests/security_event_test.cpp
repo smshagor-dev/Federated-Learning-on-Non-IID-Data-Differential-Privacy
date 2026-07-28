@@ -29,12 +29,14 @@ void run_security_event_tests() {
               "CRITICAL severity round-trips");
 
         SecurityOutcome outcome{};
-        check(security_outcome_from_string("BLOCKED", outcome) && outcome == SecurityOutcome::kBlocked,
+        check(security_outcome_from_string("BLOCKED", outcome) &&
+                  outcome == SecurityOutcome::kBlocked,
               "BLOCKED outcome round-trips");
 
         SecurityActorType actor{};
-        check(security_actor_type_from_string("WORKER", actor) && actor == SecurityActorType::kWorker,
-              "WORKER actor type round-trips");
+        check(
+            security_actor_type_from_string("WORKER", actor) && actor == SecurityActorType::kWorker,
+            "WORKER actor type round-trips");
 
         SecuritySubjectType subject{};
         check(security_subject_type_from_string("COORDINATOR_SIGNING_KEY", subject) &&
@@ -47,8 +49,9 @@ void run_security_event_tests() {
         check(default_severity(SecurityEventType::kCoordinatorTaskSigningFailed) ==
                   SecuritySeverity::kCritical,
               "task-signing failure defaults to CRITICAL");
-        check(default_severity(SecurityEventType::kMessageReplayRejected) == SecuritySeverity::kHigh,
-              "replay rejection defaults to HIGH");
+        check(
+            default_severity(SecurityEventType::kMessageReplayRejected) == SecuritySeverity::kHigh,
+            "replay rejection defaults to HIGH");
         check(default_severity(SecurityEventType::kWorkerSuspended) == SecuritySeverity::kWarning,
               "worker suspension defaults to WARNING");
         check(default_severity(SecurityEventType::kWorkerRegistered) == SecuritySeverity::kInfo,
@@ -84,7 +87,8 @@ void run_security_event_tests() {
 
         SecurityEvent long_detail_value;
         long_detail_value.source_service = "coordinator";
-        long_detail_value.safe_details["k"] = std::string(kSecurityEventMaxDetailValueLength + 1, 'x');
+        long_detail_value.safe_details["k"] =
+            std::string(kSecurityEventMaxDetailValueLength + 1, 'x');
         check(!validate_security_event(long_detail_value).valid,
               "a safe_details value past the length bound fails validation");
     }

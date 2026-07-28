@@ -11,6 +11,7 @@ import (
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/models"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/observability"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/projects"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/research"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/runs"
 )
 
@@ -24,6 +25,7 @@ type PersistencePaths struct {
 	Models            string
 	Datasets          string
 	DatasetPartitions string
+	ResearchRoot      string
 }
 
 func PathsForDataDir(dataDir string) PersistencePaths {
@@ -37,6 +39,7 @@ func PathsForDataDir(dataDir string) PersistencePaths {
 		Models:            filepath.Join(dataDir, "models.json"),
 		Datasets:          filepath.Join(dataDir, "datasets.json"),
 		DatasetPartitions: filepath.Join(dataDir, "dataset-partitions.json"),
+		ResearchRoot:      filepath.Join(dataDir, "research"),
 	}
 }
 
@@ -81,8 +84,9 @@ func NewPersistentServicesWithCoordinator(paths PersistencePaths, coordinatorCli
 	if err != nil {
 		return nil, err
 	}
+	researchRepo := research.NewFileRepository(paths.ResearchRoot)
 	return application.NewServicesWithRegistries(
 		projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo,
-		modelRepo, datasetRepo, coordinatorClient, clock,
+		modelRepo, datasetRepo, researchRepo, nil, coordinatorClient, clock,
 	), nil
 }

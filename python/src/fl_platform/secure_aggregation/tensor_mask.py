@@ -17,7 +17,11 @@ from fl_platform.secure_aggregation.crypto import (
     derive_purpose_key,
 )
 from fl_platform.secure_aggregation.fixed_point_encoding import UINT64_MASK
-from fl_platform.secure_aggregation.pairwise_mask import SignedMask, apply_pairwise_mask, sum_masked_values
+from fl_platform.secure_aggregation.pairwise_mask import (
+    SignedMask,
+    apply_pairwise_mask,
+    sum_masked_values,
+)
 
 
 @dataclass(slots=True)
@@ -38,18 +42,23 @@ def derive_tensor_mask_stream(
     """
     if element_count == 0:
         return []
-    purpose_key = derive_purpose_key(shared_secret, purpose_label, canonical_context, CHACHA20_KEY_LENGTH)
+    purpose_key = derive_purpose_key(
+        shared_secret, purpose_label, canonical_context, CHACHA20_KEY_LENGTH
+    )
     zero_nonce = b"\x00" * CHACHA20_NONCE_LENGTH
     keystream = chacha20_keystream(purpose_key, zero_nonce, 0, element_count * 8)
     return list(struct.unpack(f"<{element_count}Q", keystream))
 
 
-def mask_tensor(encoded_tensor: list[int], peer_streams: list[PeerMaskStream]) -> list[int]:
+def mask_tensor(
+    encoded_tensor: list[int], peer_streams: list[PeerMaskStream]
+) -> list[int]:
     masked = [value & UINT64_MASK for value in encoded_tensor]
     for peer in peer_streams:
         if len(peer.mask_values) != len(encoded_tensor):
             raise ValueError(
-                f"mask_tensor: peer {peer.peer_participant_id!r} mask stream length does not match the "
+                f"mask_tensor: peer {peer.peer_participant_id!r} mask stream "
+                "length does not match the "
                 "tensor's element count"
             )
         for i in range(len(encoded_tensor)):
@@ -59,18 +68,28 @@ def mask_tensor(encoded_tensor: list[int], peer_streams: list[PeerMaskStream]) -
 
 def sum_masked_tensors(per_participant_masked_tensors: list[list[int]]) -> list[int]:
     if not per_participant_masked_tensors:
-        raise ValueError("sum_masked_tensors: at least one participant's masked tensor is required")
+        raise ValueError(
+            "sum_masked_tensors: at least one participant's masked tensor is required"
+        )
     element_count = len(per_participant_masked_tensors[0])
     for tensor in per_participant_masked_tensors:
         if len(tensor) != element_count:
-            raise ValueError("sum_masked_tensors: all participants' masked tensors must have the identical element count")
+            raise ValueError(
+                "sum_masked_tensors: all participants' masked tensors must "
+                "have the identical element count"
+            )
     return [
-        sum_masked_values([tensor[i] for tensor in per_participant_masked_tensors]) for i in range(element_count)
+        sum_masked_values([tensor[i] for tensor in per_participant_masked_tensors])
+        for i in range(element_count)
     ]
 
 
-def derive_weight_mask(shared_secret: bytes, purpose_label: str, canonical_context: str) -> int:
-    return derive_tensor_mask_stream(shared_secret, purpose_label, canonical_context, 1)[0]
+def derive_weight_mask(
+    shared_secret: bytes, purpose_label: str, canonical_context: str
+) -> int:
+    return derive_tensor_mask_stream(
+        shared_secret, purpose_label, canonical_context, 1
+    )[0]
 
 
 __all__ = [

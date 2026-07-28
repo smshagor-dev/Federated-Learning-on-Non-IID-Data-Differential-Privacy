@@ -1,4 +1,3 @@
-import { getDemoOverview, getDemoRunDashboard } from "@/lib/demo-data";
 import type {
   AlgorithmDescriptor,
   AlgorithmSummary,
@@ -17,6 +16,7 @@ import type {
   PrivacyMetricsSnapshot,
   PrivacyProjection,
   Project,
+  ResearchExperimentSummary,
   Run,
   RunAction,
   RunDashboardData,
@@ -60,11 +60,11 @@ async function requestMutableJSON<T>(path: string, init?: RequestInit): Promise<
   return (await response.json()) as T;
 }
 
-export async function getOverviewData(): Promise<OverviewData> {
+export async function getOverviewData(): Promise<OverviewData | undefined> {
   try {
     return await requestJSON<OverviewData>("/api/v1/dashboard/overview");
   } catch {
-    return getDemoOverview();
+    return undefined;
   }
 }
 
@@ -72,7 +72,7 @@ export async function getRunData(runId: string): Promise<RunDashboardData | unde
   try {
     return await getLiveRunData(runId);
   } catch {
-    return getDemoRunDashboard(runId);
+    return undefined;
   }
 }
 
@@ -209,6 +209,24 @@ export async function listAuditEventsWithToken(token: string, limit = 100): Prom
       Authorization: `Bearer ${token}`,
     },
   });
+}
+
+export async function listResearchExperimentsWithToken(token: string): Promise<ResearchExperimentSummary[] | undefined> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/research/experiments`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    const payload = (await response.json()) as { experiments: ResearchExperimentSummary[] };
+    return payload.experiments;
+  } catch {
+    return undefined;
+  }
 }
 
 // --- the Algorithm Expansion phase: algorithm metadata --------------------------------------

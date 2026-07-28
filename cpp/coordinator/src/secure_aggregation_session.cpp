@@ -66,7 +66,8 @@ std::string to_string(SecureAggregationAbortReason reason) {
     return "unknown";
 }
 
-CohortStateMachineError::CohortStateMachineError(const std::string& what) : std::runtime_error(what) {}
+CohortStateMachineError::CohortStateMachineError(const std::string& what)
+    : std::runtime_error(what) {}
 
 namespace {
 
@@ -96,7 +97,8 @@ bool is_allowed_forward_transition(CohortState from, CohortState to) {
 }
 
 bool is_terminal_state(CohortState state) {
-    return state == CohortState::kCompleted || state == CohortState::kAborted || state == CohortState::kFailed;
+    return state == CohortState::kCompleted || state == CohortState::kAborted ||
+           state == CohortState::kFailed;
 }
 
 }  // namespace
@@ -104,41 +106,61 @@ bool is_terminal_state(CohortState state) {
 CohortStateMachine::CohortStateMachine(std::string session_id)
     : session_id_(std::move(session_id)), state_(CohortState::kCohortForming) {}
 
-const std::string& CohortStateMachine::session_id() const { return session_id_; }
+const std::string& CohortStateMachine::session_id() const {
+    return session_id_;
+}
 
-CohortState CohortStateMachine::state() const { return state_; }
+CohortState CohortStateMachine::state() const {
+    return state_;
+}
 
-bool CohortStateMachine::is_terminal() const { return is_terminal_state(state_); }
+bool CohortStateMachine::is_terminal() const {
+    return is_terminal_state(state_);
+}
 
-const std::vector<CohortStateTransition>& CohortStateMachine::history() const { return history_; }
+const std::vector<CohortStateTransition>& CohortStateMachine::history() const {
+    return history_;
+}
 
-SecureAggregationAbortReason CohortStateMachine::abort_reason() const { return abort_reason_; }
+SecureAggregationAbortReason CohortStateMachine::abort_reason() const {
+    return abort_reason_;
+}
 
-const std::string& CohortStateMachine::failure_reason() const { return failure_reason_; }
+const std::string& CohortStateMachine::failure_reason() const {
+    return failure_reason_;
+}
 
-void CohortStateMachine::transition_to(CohortState next, double timestamp_unix_s, const std::string& reason) {
+void CohortStateMachine::transition_to(CohortState next,
+                                       double timestamp_unix_s,
+                                       const std::string& reason) {
     if (!is_allowed_forward_transition(state_, next)) {
-        throw CohortStateMachineError("CohortStateMachine[" + session_id_ + "]: illegal transition from " +
-                                       to_string(state_) + " to " + to_string(next) +
-                                       " (forward progress only, one step at a time, never out of a terminal state)");
+        throw CohortStateMachineError(
+            "CohortStateMachine[" + session_id_ + "]: illegal transition from " +
+            to_string(state_) + " to " + to_string(next) +
+            " (forward progress only, one step at a time, never out of a terminal state)");
     }
     history_.push_back(CohortStateTransition{state_, next, timestamp_unix_s, reason});
     state_ = next;
 }
 
-void CohortStateMachine::abort(SecureAggregationAbortReason reason, double timestamp_unix_s,
-                                const std::string& detail) {
+void CohortStateMachine::abort(SecureAggregationAbortReason reason,
+                               double timestamp_unix_s,
+                               const std::string& detail) {
     if (is_terminal_state(state_)) {
         throw CohortStateMachineError("CohortStateMachine[" + session_id_ +
-                                       "]: cannot abort a session already in terminal state " + to_string(state_));
+                                      "]: cannot abort a session already in terminal state " +
+                                      to_string(state_));
     }
     if (reason == SecureAggregationAbortReason::kNone) {
-        throw CohortStateMachineError("CohortStateMachine[" + session_id_ +
-                                       "]: abort() requires a specific SecureAggregationAbortReason, not kNone");
+        throw CohortStateMachineError(
+            "CohortStateMachine[" + session_id_ +
+            "]: abort() requires a specific SecureAggregationAbortReason, not kNone");
     }
-    history_.push_back(CohortStateTransition{state_, CohortState::kAborted, timestamp_unix_s,
-                                               "abort:" + to_string(reason) +
-                                                   (detail.empty() ? "" : (" - " + detail))});
+    history_.push_back(CohortStateTransition{
+        state_,
+        CohortState::kAborted,
+        timestamp_unix_s,
+        "abort:" + to_string(reason) + (detail.empty() ? "" : (" - " + detail))});
     state_ = CohortState::kAborted;
     abort_reason_ = reason;
 }
@@ -147,7 +169,8 @@ void CohortStateMachine::fail(const std::string& reason, double timestamp_unix_s
     // Deliberately unconditional: a FAILED marking records an
     // unexpected internal error and must never itself be blocked by
     // the state machine's own transition table (Work Package D).
-    history_.push_back(CohortStateTransition{state_, CohortState::kFailed, timestamp_unix_s, reason});
+    history_.push_back(
+        CohortStateTransition{state_, CohortState::kFailed, timestamp_unix_s, reason});
     state_ = CohortState::kFailed;
     failure_reason_ = reason;
 }

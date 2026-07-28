@@ -47,7 +47,8 @@ std::vector<std::string> split(const std::string& value, char delimiter) {
 // non-printable ASCII unit separator) in practice; used only as an
 // in-memory map key, never persisted itself (the persisted record
 // stores the three components separately -- see encode_track below).
-std::string track_key(const std::string& worker_id, const std::string& signing_key_id,
+std::string track_key(const std::string& worker_id,
+                      const std::string& signing_key_id,
                       MessageStream stream) {
     return worker_id + '\x1f' + signing_key_id + '\x1f' + to_string(stream);
 }
@@ -81,16 +82,26 @@ std::string to_string(MessageStream stream) {
 }
 
 MessageStream message_stream_from_string(const std::string& value) {
-    if (value == "control") return MessageStream::kControl;
-    if (value == "heartbeat") return MessageStream::kHeartbeat;
-    if (value == "task_lifecycle") return MessageStream::kTaskLifecycle;
-    if (value == "client_result") return MessageStream::kClientResult;
-    if (value == "privacy_record") return MessageStream::kPrivacyRecord;
-    if (value == "personalization") return MessageStream::kPersonalization;
-    if (value == "key_management") return MessageStream::kKeyManagement;
-    if (value == "security_events") return MessageStream::kSecurityEvents;
-    if (value == "secure_aggregation") return MessageStream::kSecureAggregation;
-    if (value == "secure_aggregation_masked_update") return MessageStream::kSecureAggregationMaskedUpdate;
+    if (value == "control")
+        return MessageStream::kControl;
+    if (value == "heartbeat")
+        return MessageStream::kHeartbeat;
+    if (value == "task_lifecycle")
+        return MessageStream::kTaskLifecycle;
+    if (value == "client_result")
+        return MessageStream::kClientResult;
+    if (value == "privacy_record")
+        return MessageStream::kPrivacyRecord;
+    if (value == "personalization")
+        return MessageStream::kPersonalization;
+    if (value == "key_management")
+        return MessageStream::kKeyManagement;
+    if (value == "security_events")
+        return MessageStream::kSecurityEvents;
+    if (value == "secure_aggregation")
+        return MessageStream::kSecureAggregation;
+    if (value == "secure_aggregation_masked_update")
+        return MessageStream::kSecureAggregationMaskedUpdate;
     throw ReplayProtectionStoreError("unknown message stream: " + value);
 }
 
@@ -202,9 +213,9 @@ ReplayProtectionStore::ReplayProtectionStore(std::string persistence_path,
         throw ReplayProtectionStoreError("replay protection store file missing record_count");
     }
     if (found_count != expected_count) {
-        throw ReplayProtectionStoreError(
-            "replay protection store file truncated: expected " +
-            std::to_string(expected_count) + " records, found " + std::to_string(found_count));
+        throw ReplayProtectionStoreError("replay protection store file truncated: expected " +
+                                         std::to_string(expected_count) + " records, found " +
+                                         std::to_string(found_count));
     }
 }
 
@@ -243,8 +254,8 @@ void ReplayProtectionStore::persist() const {
         file << out.str();
         file.flush();
         if (!file) {
-            throw ReplayProtectionStoreError(
-                "failed to write replay protection store temp file: " + temp_path);
+            throw ReplayProtectionStoreError("failed to write replay protection store temp file: " +
+                                             temp_path);
         }
     }
     std::error_code error_code;
@@ -270,9 +281,10 @@ ReplayDecision ReplayProtectionStore::validate(const ReplayCandidate& candidate)
     if (it != tracks_.end()) {
         for (const auto& entry : it->second.recent_nonce_hashes) {
             if (entry.nonce_hash == nonce_hash && candidate.now_unix_s < entry.expires_at_unix_s) {
-                return {false, ReplayRejectionReason::kDuplicateNonce,
-                       "nonce already used for this worker/signing-key/stream and has not yet "
-                       "expired from replay tracking"};
+                return {false,
+                        ReplayRejectionReason::kDuplicateNonce,
+                        "nonce already used for this worker/signing-key/stream and has not yet "
+                        "expired from replay tracking"};
             }
         }
     }
@@ -280,18 +292,21 @@ ReplayDecision ReplayProtectionStore::validate(const ReplayCandidate& candidate)
     const std::uint64_t last_sequence = (it != tracks_.end()) ? it->second.last_sequence_number : 0;
     if (candidate.sequence_number <= last_sequence) {
         if (candidate.sequence_number == last_sequence && last_sequence != 0) {
-            return {false, ReplayRejectionReason::kDuplicateSequence,
-                   "sequence_number equals the last accepted sequence for this track"};
+            return {false,
+                    ReplayRejectionReason::kDuplicateSequence,
+                    "sequence_number equals the last accepted sequence for this track"};
         }
-        return {false, ReplayRejectionReason::kLowerSequence,
-               "sequence_number is not greater than the last accepted sequence for this track "
-               "(the documented starting value for a new track is 1)"};
+        return {false,
+                ReplayRejectionReason::kLowerSequence,
+                "sequence_number is not greater than the last accepted sequence for this track "
+                "(the documented starting value for a new track is 1)"};
     }
     const std::uint64_t gap = candidate.sequence_number - last_sequence;
     if (gap > max_sequence_gap_) {
-        return {false, ReplayRejectionReason::kSequenceGapExceeded,
-               "sequence_number is more than max_sequence_gap ahead of the last accepted "
-               "sequence for this track"};
+        return {false,
+                ReplayRejectionReason::kSequenceGapExceeded,
+                "sequence_number is more than max_sequence_gap ahead of the last accepted "
+                "sequence for this track"};
     }
 
     return {true, ReplayRejectionReason::kNone, "ok"};
@@ -344,12 +359,13 @@ void ReplayProtectionStore::purge_expired(double now_unix_s) {
     bool changed = false;
     for (auto& [key, track] : tracks_) {
         const auto before = track.recent_nonce_hashes.size();
-        track.recent_nonce_hashes.erase(
-            std::remove_if(track.recent_nonce_hashes.begin(), track.recent_nonce_hashes.end(),
-                           [now_unix_s](const NonceEntry& entry) {
-                               return entry.expires_at_unix_s <= now_unix_s;
-                           }),
-            track.recent_nonce_hashes.end());
+        track.recent_nonce_hashes.erase(std::remove_if(track.recent_nonce_hashes.begin(),
+                                                       track.recent_nonce_hashes.end(),
+                                                       [now_unix_s](const NonceEntry& entry) {
+                                                           return entry.expires_at_unix_s <=
+                                                                  now_unix_s;
+                                                       }),
+                                        track.recent_nonce_hashes.end());
         if (track.recent_nonce_hashes.size() != before) {
             changed = true;
         }

@@ -1,0 +1,40 @@
+{
+  "started_at": "2026-07-28T17:48:10Z",
+  "finished_at": "2026-07-28T17:48:10Z",
+  "counts": {
+    "PASS": 3,
+    "FAIL": 0,
+    "BLOCKED": 0,
+    "DEFERRED": 0,
+    "SKIPPED": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "research-registry.validate-create-start-cancel",
+      "name": "Research registry live write flow stays Python-authoritative and durable",
+      "category": "research-registry",
+      "required": true,
+      "status": "PASS",
+      "detail": "ok",
+      "duration_seconds": 0.078
+    },
+    {
+      "scenario_id": "research-registry.permissions",
+      "name": "Research registry mutation routes enforce viewer/service restrictions",
+      "category": "research-registry",
+      "required": true,
+      "status": "PASS",
+      "detail": "ok",
+      "duration_seconds": 0.074
+    },
+    {
+      "scenario_id": "research-registry.runtime-health",
+      "name": "Research runtime health combines reader and live writer status",
+      "category": "research-registry",
+      "required": true,
+      "status": "PASS",
+      "detail": "ok",
+      "duration_seconds": 0.018
+    }
+  ]
+}

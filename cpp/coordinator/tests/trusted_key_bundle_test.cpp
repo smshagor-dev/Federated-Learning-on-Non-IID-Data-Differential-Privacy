@@ -45,7 +45,7 @@ void run_trusted_key_bundle_tests(const std::string& scratch_dir) {
         check(content.find("\"checksum\"") != std::string::npos,
               "the bundle contains a checksum field");
         check(content.find("private_key") == std::string::npos &&
-                 content.find("private_key_raw") == std::string::npos,
+                  content.find("private_key_raw") == std::string::npos,
               "the bundle never contains any private-key field");
     }
 

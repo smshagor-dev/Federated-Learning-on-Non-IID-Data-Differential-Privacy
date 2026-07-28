@@ -147,7 +147,8 @@ class CoordinatorSigningKeyRegistry {
         const CoordinatorSigningKeyRotationRequest& request);
 
     CoordinatorSigningKeyRecord revoke_key(const std::string& signing_key_id,
-                                           const std::string& reason, double now_unix_s);
+                                           const std::string& reason,
+                                           double now_unix_s);
 
     // Lazily expiry-evaluated, matching SigningKeyRegistry::find.
     [[nodiscard]] std::optional<CoordinatorSigningKeyRecord> find(const std::string& signing_key_id,

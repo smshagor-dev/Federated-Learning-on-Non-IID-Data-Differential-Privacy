@@ -7,3 +7,8 @@ Provides-Extra: dev
 Requires-Dist: pytest<9,>=8.2; extra == "dev"
 Requires-Dist: ruff<1,>=0.6; extra == "dev"
 Requires-Dist: mypy<2,>=1.11; extra == "dev"
+Requires-Dist: grpcio<2,>=1.76; extra == "dev"
+Requires-Dist: protobuf<8,>=7.35.1; extra == "dev"
+Provides-Extra: security
+Requires-Dist: pynacl<2,>=1.5; extra == "security"
+Requires-Dist: cryptography<50,>=42; extra == "security"

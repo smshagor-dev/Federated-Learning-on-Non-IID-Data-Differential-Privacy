@@ -31,7 +31,9 @@ REJECTION_MAGNITUDE_OVERFLOW = "magnitude_overflow"
 REJECTION_ENCODED_VALUE_OVERFLOW = "encoded_value_overflow"
 
 UINT64_MASK = (1 << 64) - 1
-INT64_MAX = (1 << 63) - 1  # signed decoding boundary, matches C++ kSignedDecodingBoundary
+INT64_MAX = (
+    1 << 63
+) - 1  # signed decoding boundary, matches C++ kSignedDecodingBoundary
 INT64_MIN = -(1 << 63)
 
 
@@ -64,8 +66,13 @@ def prove_domain_bounds(profile: FixedPointEncodingProfile) -> DomainBoundsProof
     """
     proof = DomainBoundsProof()
 
-    worst_case_single_encoded_d = math.ceil(profile.max_input_magnitude * profile.scale_factor + 0.5)
-    if not math.isfinite(worst_case_single_encoded_d) or worst_case_single_encoded_d < 0:
+    worst_case_single_encoded_d = math.ceil(
+        profile.max_input_magnitude * profile.scale_factor + 0.5
+    )
+    if (
+        not math.isfinite(worst_case_single_encoded_d)
+        or worst_case_single_encoded_d < 0
+    ):
         proof.computation_overflowed = True
         proof.explanation = (
             "max_input_magnitude * scale_factor does not fit in the domain's own "
@@ -84,19 +91,27 @@ def prove_domain_bounds(profile: FixedPointEncodingProfile) -> DomainBoundsProof
     weighted = worst_case_single_encoded * profile.max_client_weight
     if weighted > UINT64_MASK:
         proof.computation_overflowed = True
-        proof.explanation = "worst_case_single_encoded * max_client_weight overflows a 64-bit accumulator"
+        proof.explanation = (
+            "worst_case_single_encoded * max_client_weight overflows a "
+            "64-bit accumulator"
+        )
         return proof
 
     aggregate = weighted * profile.max_cohort_size
     if aggregate > UINT64_MASK:
         proof.computation_overflowed = True
-        proof.explanation = "weighted_max_magnitude * max_cohort_size overflows a 64-bit accumulator"
+        proof.explanation = (
+            "weighted_max_magnitude * max_cohort_size overflows a 64-bit accumulator"
+        )
         return proof
 
     aggregate_with_margin = aggregate + profile.safety_margin
     if aggregate_with_margin > UINT64_MASK:
         proof.computation_overflowed = True
-        proof.explanation = "worst_case_aggregate_magnitude + safety_margin overflows a 64-bit accumulator"
+        proof.explanation = (
+            "worst_case_aggregate_magnitude + safety_margin overflows a "
+            "64-bit accumulator"
+        )
         return proof
 
     proof.worst_case_aggregate_magnitude = aggregate
@@ -107,15 +122,17 @@ def prove_domain_bounds(profile: FixedPointEncodingProfile) -> DomainBoundsProof
         proof.explanation = (
             f"proven worst-case aggregate magnitude ({aggregate}) plus safety margin "
             f"({profile.safety_margin}) is not strictly less than the signed decoding "
-            f"boundary ({INT64_MAX}) -- this profile's scale_factor/max_input_magnitude/"
-            "max_client_weight/max_cohort_size combination is rejected, not silently "
-            "permitted to risk wrapping a legitimate aggregate into an incorrect decoded value"
+            f"boundary ({INT64_MAX}) -- this profile's "
+            "scale_factor/max_input_magnitude/max_client_weight/"
+            "max_cohort_size combination is rejected, not silently permitted to "
+            "risk wrapping a legitimate aggregate into an incorrect decoded value"
         )
         return proof
 
     proof.safe = True
     proof.explanation = (
-        f"worst-case aggregate magnitude {aggregate} + safety margin {profile.safety_margin} "
+        f"worst-case aggregate magnitude {aggregate} + safety margin "
+        f"{profile.safety_margin} "
         f"< signed decoding boundary {INT64_MAX}"
     )
     return proof

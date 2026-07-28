@@ -95,8 +95,7 @@ void run_security_event_journal_tests(const std::string& scratch_dir) {
         SecurityEventJournal journal(invalid_path);
         SecurityEvent invalid;
         invalid.source_service = "";  // required field missing
-        expect_no_throw([&]() { journal.emit(invalid); },
-                        "emitting an invalid event never throws");
+        expect_no_throw([&]() { journal.emit(invalid); }, "emitting an invalid event never throws");
         check(journal.size() == 0, "an invalid event is dropped, not persisted");
     }
 
@@ -113,10 +112,12 @@ void run_security_event_journal_tests(const std::string& scratch_dir) {
         {
             std::ofstream file(corrupt_path, std::ios::app | std::ios::binary);
             file << "{not valid json at all\n";
-            file << "{\"schema_version\":1,\"event_id\":\"x\"}\n";  // valid JSON, bad checksum/fields
+            file << "{\"schema_version\":1,\"event_id\":\"x\"}\n";  // valid JSON, bad
+                                                                    // checksum/fields
         }
         SecurityEventJournal reloaded(corrupt_path);
-        check(reloaded.size() == 1, "a journal with two corrupt trailing lines keeps the one valid record");
+        check(reloaded.size() == 1,
+              "a journal with two corrupt trailing lines keeps the one valid record");
         check(reloaded.recovered_line_count() == 2,
               "both corrupt lines are counted as recovered, not fatal");
     }
@@ -138,8 +139,9 @@ void run_security_event_journal_tests(const std::string& scratch_dir) {
         check(std::filesystem::exists(rotate_path + ".1"), "rotation produces a .1 rotated file");
         check(!std::filesystem::exists(rotate_path + ".3"),
               "retention count of 2 never keeps a third rotated generation");
-        check(journal.size() < 20,
-              "the active file's in-memory view no longer holds every event once rotation occurred");
+        check(
+            journal.size() < 20,
+            "the active file's in-memory view no longer holds every event once rotation occurred");
     }
 }
 

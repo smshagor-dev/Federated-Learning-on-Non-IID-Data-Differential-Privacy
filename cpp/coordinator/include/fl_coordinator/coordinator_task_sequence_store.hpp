@@ -53,7 +53,8 @@ class CoordinatorTaskSequenceStore {
         std::string signing_key_id;
         std::string worker_id;
         bool operator<(const Key& other) const {
-            if (signing_key_id != other.signing_key_id) return signing_key_id < other.signing_key_id;
+            if (signing_key_id != other.signing_key_id)
+                return signing_key_id < other.signing_key_id;
             return worker_id < other.worker_id;
         }
     };

@@ -59,9 +59,12 @@ struct TrackKey {
     int accountant_type{0};
 
     bool operator<(const TrackKey& other) const {
-        if (run_id != other.run_id) return run_id < other.run_id;
-        if (client_id != other.client_id) return client_id < other.client_id;
-        if (worker_id != other.worker_id) return worker_id < other.worker_id;
+        if (run_id != other.run_id)
+            return run_id < other.run_id;
+        if (client_id != other.client_id)
+            return client_id < other.client_id;
+        if (worker_id != other.worker_id)
+            return worker_id < other.worker_id;
         return accountant_type < other.accountant_type;
     }
 };

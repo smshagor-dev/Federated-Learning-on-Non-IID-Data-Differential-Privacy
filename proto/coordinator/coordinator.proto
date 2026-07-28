@@ -328,6 +328,31 @@ message SecureAggregationTaskBinding {
   uint64 secure_user_level_fixed_weight = 24;
   SecureUserLevelSamplingAssumption secure_user_level_sampling_assumption = 25;
   string secure_user_level_dp_configuration_hash = 26;
+  // Secure Adaptive Clipping with Private Indicator Aggregation slice:
+  // present only when this session's adaptive clipping is active (only
+  // reachable when secure_user_level_dp_active is also true -- adaptive
+  // clipping requires a user-level clipping layer to adapt). When
+  // false/unset, the fields below are all zero-valued and a worker must
+  // treat this round's clip bound as fixed at secure_user_level_clip_norm
+  // above. See docs/secure-adaptive-clipping-semantics.md.
+  bool secure_adaptive_clipping_active = 27;
+  fl.privacy.v1.SecureAdaptiveClippingIndicatorDefinition secure_adaptive_clipping_indicator_definition = 28;
+  // The bound THIS round's clipping and indicator computation must use
+  // -- fixed at task-signing time, never mutated mid-round (see the
+  // semantics doc section 7, "Current-round immutability").
+  double secure_adaptive_clipping_current_bound = 29;
+  double secure_adaptive_clipping_min_bound = 30;
+  double secure_adaptive_clipping_max_bound = 31;
+  double secure_adaptive_clipping_target_quantile = 32;
+  double secure_adaptive_clipping_learning_rate = 33;
+  double secure_adaptive_clipping_indicator_noise_multiplier = 34;
+  // adaptive_clip_controller_->steps() at task-signing time -- this IS
+  // the clip-state version; a worker's binding must echo this value
+  // back so the coordinator can reject a stale-state submission (a
+  // worker holding a task signed against an older clip state than the
+  // one now current). See the semantics doc section 12.
+  uint64 secure_adaptive_clipping_clip_state_step_count = 35;
+  string secure_adaptive_clipping_configuration_hash = 36;
 }
 
 // Secure User-Level Differential Privacy Runtime slice, Work Area B:
@@ -393,6 +418,12 @@ message SignedCoordinatorTask {
   // folded into task_payload_hash, folded into
   // coordinator_task_signing_bytes instead.
   string secure_user_level_dp_configuration_hash = 19;
+  // Secure Adaptive Clipping with Private Indicator Aggregation slice.
+  // A third sibling hash, same convention as
+  // secure_user_level_dp_configuration_hash immediately above -- never
+  // folded into task_payload_hash, folded into
+  // coordinator_task_signing_bytes instead.
+  string secure_adaptive_clipping_configuration_hash = 20;
 }
 
 message TaskProgressRequest {
@@ -1135,6 +1166,16 @@ enum SecureAggregationRejectionReason {
   SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_MISSING = 18;
   SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_INVALID_SIGNATURE = 19;
   SECURE_AGGREGATION_REJECTION_REASON_SAMPLE_RECORD_BINDING_MISMATCH = 20;
+  // Secure Adaptive Clipping with Private Indicator Aggregation slice:
+  // the masked clipping-indicator contribution and its
+  // SignedAdaptiveClippingBinding, carried on MaskedClientUpdate --
+  // mirrors the ATTESTATION_*/SAMPLE_RECORD_* reasons above field-for-
+  // field, for the indicator mechanism's own evidence instead.
+  SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_MISSING = 21;
+  SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_INVALID_SIGNATURE = 22;
+  SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_BINDING_MISMATCH = 23;
+  SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_STALE_CLIP_STATE = 24;
+  SECURE_AGGREGATION_REJECTION_REASON_INDICATOR_CHECKSUM_MISMATCH = 25;
 }
 
 // Mirrors fl::coordinator::FixedPointEncodingProfile
@@ -1214,6 +1255,20 @@ message SecureAggregationSessionConfig {
   uint64 secure_user_level_fixed_weight = 37;
   SecureUserLevelSamplingAssumption secure_user_level_sampling_assumption = 38;
   string secure_user_level_dp_configuration_hash = 39;
+  // Secure Adaptive Clipping with Private Indicator Aggregation slice:
+  // mirrors SecureAggregationTaskBinding's own fields 27-36 field-for-
+  // field -- find_binding_for_participant copies these verbatim, same
+  // as every other session-config field.
+  bool secure_adaptive_clipping_active = 40;
+  fl.privacy.v1.SecureAdaptiveClippingIndicatorDefinition secure_adaptive_clipping_indicator_definition = 41;
+  double secure_adaptive_clipping_current_bound = 42;
+  double secure_adaptive_clipping_min_bound = 43;
+  double secure_adaptive_clipping_max_bound = 44;
+  double secure_adaptive_clipping_target_quantile = 45;
+  double secure_adaptive_clipping_learning_rate = 46;
+  double secure_adaptive_clipping_indicator_noise_multiplier = 47;
+  uint64 secure_adaptive_clipping_clip_state_step_count = 48;
+  string secure_adaptive_clipping_configuration_hash = 49;
 }
 
 // A lightweight pointer to one session, used where a full config would

@@ -65,11 +65,10 @@ struct PeerIdentity {
 // True if `identity` carries a URI SAN of the exact form
 // spiffe://federated-platform/service/{service_name}.
 [[nodiscard]] bool has_service_identity(const PeerIdentity& identity,
-                                         const std::string& service_name);
+                                        const std::string& service_name);
 
 // True if `identity` carries a URI SAN of the exact form
 // spiffe://federated-platform/worker/{worker_id}.
-[[nodiscard]] bool has_worker_identity(const PeerIdentity& identity,
-                                       const std::string& worker_id);
+[[nodiscard]] bool has_worker_identity(const PeerIdentity& identity, const std::string& worker_id);
 
 }  // namespace fl::coordinator

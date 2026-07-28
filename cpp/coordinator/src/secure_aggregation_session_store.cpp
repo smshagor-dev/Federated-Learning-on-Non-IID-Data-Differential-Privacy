@@ -42,7 +42,8 @@ std::string encode_record(const SecureAggregationSessionRecord& record) {
     out << record.schema_version << "\t" << record.session_id << "\t" << record.run_id << "\t"
         << record.round_id << "\t" << record.state << "\t" << std::setprecision(17)
         << record.created_at_unix_s << "\t" << record.updated_at_unix_s << "\t"
-        << record.completed_at_unix_s << "\t" << record.abort_reason << "\t" << record.failure_reason;
+        << record.completed_at_unix_s << "\t" << record.abort_reason << "\t"
+        << record.failure_reason;
     return out.str();
 }
 
@@ -52,7 +53,8 @@ SecureAggregationSessionRecord decode_record(const std::string& line) {
     // split() drops a trailing empty field after the final delimiter --
     // so a record with an empty failure_reason yields 9 fields, not 10.
     if (parts.size() != 10 && parts.size() != 9) {
-        throw SecureAggregationSessionStoreError("malformed secure aggregation session record line");
+        throw SecureAggregationSessionStoreError(
+            "malformed secure aggregation session record line");
     }
     SecureAggregationSessionRecord record;
     try {
@@ -73,8 +75,9 @@ SecureAggregationSessionRecord decode_record(const std::string& line) {
             std::string("secure aggregation session record field parse failure: ") + error.what());
     }
     if (record.schema_version != SecureAggregationSessionRecord::kSchemaVersion) {
-        throw SecureAggregationSessionStoreError("unsupported secure aggregation session record schema version " +
-                                                  std::to_string(record.schema_version));
+        throw SecureAggregationSessionStoreError(
+            "unsupported secure aggregation session record schema version " +
+            std::to_string(record.schema_version));
     }
     return record;
 }
@@ -95,8 +98,8 @@ SecureAggregationSessionStore::SecureAggregationSessionStore(std::string persist
     }
     std::ifstream file(persistence_path_, std::ios::binary);
     if (!file) {
-        throw SecureAggregationSessionStoreError("failed to open secure aggregation session store file: " +
-                                                  persistence_path_);
+        throw SecureAggregationSessionStoreError(
+            "failed to open secure aggregation session store file: " + persistence_path_);
     }
     std::ostringstream buffer;
     buffer << file.rdbuf();
@@ -110,8 +113,10 @@ SecureAggregationSessionStore::SecureAggregationSessionStore(std::string persist
     const std::string body = payload.substr(0, marker + 1);
     std::string checksum_line = payload.substr(marker + 1);
     const auto equals = checksum_line.find('=');
-    std::string checksum_value = equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
-    while (!checksum_value.empty() && (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
+    std::string checksum_value =
+        equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
+    while (!checksum_value.empty() &&
+           (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
         checksum_value.pop_back();
     }
     if (hash_to_hex(fnv1a_hash(body)) != checksum_value) {
@@ -125,7 +130,8 @@ SecureAggregationSessionStore::SecureAggregationSessionStore(std::string persist
     std::size_t expected_count = 0;
     std::size_t found_count = 0;
     while (std::getline(stream, line)) {
-        if (line.empty()) continue;
+        if (line.empty())
+            continue;
         if (line.rfind("record_count=", 0) == 0) {
             expected_count = std::stoull(line.substr(std::string("record_count=").size()));
             has_count = true;
@@ -133,17 +139,19 @@ SecureAggregationSessionStore::SecureAggregationSessionStore(std::string persist
         }
         if (line.rfind("record=", 0) == 0) {
             const auto record = decode_record(line.substr(std::string("record=").size()));
-            records_[record.session_id] = record;  // last record per session_id wins (latest transition)
+            records_[record.session_id] =
+                record;  // last record per session_id wins (latest transition)
             ++found_count;
         }
     }
     if (!has_count) {
-        throw SecureAggregationSessionStoreError("secure aggregation session store file missing record_count");
+        throw SecureAggregationSessionStoreError(
+            "secure aggregation session store file missing record_count");
     }
     if (found_count != expected_count) {
         throw SecureAggregationSessionStoreError(
-            "secure aggregation session store file truncated: expected " + std::to_string(expected_count) +
-            " records, found " + std::to_string(found_count));
+            "secure aggregation session store file truncated: expected " +
+            std::to_string(expected_count) + " records, found " + std::to_string(found_count));
     }
 }
 
@@ -167,8 +175,8 @@ void SecureAggregationSessionStore::persist() const {
     {
         std::ofstream file(temp_path, std::ios::binary | std::ios::trunc);
         if (!file) {
-            throw SecureAggregationSessionStoreError("failed to open secure aggregation session store temp file: " +
-                                                      temp_path);
+            throw SecureAggregationSessionStoreError(
+                "failed to open secure aggregation session store temp file: " + temp_path);
         }
         file << out.str();
         file.flush();
@@ -184,12 +192,14 @@ void SecureAggregationSessionStore::persist() const {
         std::filesystem::rename(temp_path, target, error_code);
         if (error_code) {
             throw SecureAggregationSessionStoreError(
-                "failed to atomically move secure aggregation session store into place: " + error_code.message());
+                "failed to atomically move secure aggregation session store into place: " +
+                error_code.message());
         }
     }
 }
 
-void SecureAggregationSessionStore::record_transition(const SecureAggregationSessionRecord& record) {
+void SecureAggregationSessionStore::record_transition(
+    const SecureAggregationSessionRecord& record) {
     records_[record.session_id] = record;
     persist();
 }
@@ -197,7 +207,8 @@ void SecureAggregationSessionStore::record_transition(const SecureAggregationSes
 std::optional<SecureAggregationSessionRecord> SecureAggregationSessionStore::find(
     const std::string& session_id) const {
     const auto it = records_.find(session_id);
-    if (it == records_.end()) return std::nullopt;
+    if (it == records_.end())
+        return std::nullopt;
     return it->second;
 }
 
@@ -214,7 +225,8 @@ std::vector<SecureAggregationSessionRecord> SecureAggregationSessionStore::all()
 std::vector<std::string> SecureAggregationSessionStore::reconcile_after_restart(double now_unix_s) {
     std::vector<std::string> reconciled;
     for (auto& [session_id, record] : records_) {
-        if (is_terminal_session_state(record.state)) continue;
+        if (is_terminal_session_state(record.state))
+            continue;
         record.state = "ABORTED";
         record.abort_reason = "coordinator_restart";
         record.completed_at_unix_s = now_unix_s;

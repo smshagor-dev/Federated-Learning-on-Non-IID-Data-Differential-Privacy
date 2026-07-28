@@ -61,7 +61,9 @@ struct TrustedKeyBundleWriteResult {
 // "Bundle signature" note above). Temp-file + rename: never leaves a
 // partially-written file observable to a concurrent reader.
 [[nodiscard]] TrustedKeyBundleWriteResult write_trusted_key_bundle(
-    const CoordinatorSigningKeyRegistry& registry, const std::string& path,
-    const std::string& coordinator_identity_label, double now_unix_s);
+    const CoordinatorSigningKeyRegistry& registry,
+    const std::string& path,
+    const std::string& coordinator_identity_label,
+    double now_unix_s);
 
 }  // namespace fl::coordinator

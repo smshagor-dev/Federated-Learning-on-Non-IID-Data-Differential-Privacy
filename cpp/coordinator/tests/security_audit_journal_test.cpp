@@ -71,7 +71,8 @@ void run_security_audit_journal_tests(const std::string& scratch_dir) {
         SecurityAuditJournal::ListFilters by_actor;
         by_actor.actor_id = "go-api";
         const auto by_actor_result = journal.list(by_actor);
-        check(by_actor_result.records.size() == 1 && by_actor_result.records[0].action == "SuspendWorker",
+        check(by_actor_result.records.size() == 1 &&
+                  by_actor_result.records[0].action == "SuspendWorker",
               "actor filter isolates the matching record");
     }
 

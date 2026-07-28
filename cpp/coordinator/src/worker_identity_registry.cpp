@@ -49,14 +49,14 @@ std::vector<std::string> split(const std::string& value, char delimiter) {
 // since each record is confined to exactly one line.
 std::string encode_record(const WorkerIdentityRecord& record) {
     std::ostringstream out;
-    out << record.schema_version << "\t" << record.worker_id << "\t"
-        << record.certificate_identity << "\t" << record.certificate_serial << "\t"
-        << record.certificate_fingerprint << "\t" << record.signing_public_key << "\t"
-        << record.signing_key_id << "\t" << to_string(record.registration_status) << "\t"
-        << record.software_version << "\t" << record.build_id << "\t" << std::setprecision(17)
-        << record.created_at_unix_s << "\t" << record.updated_at_unix_s << "\t"
-        << record.expires_at_unix_s << "\t" << record.suspended_at_unix_s << "\t"
-        << record.revoked_at_unix_s << "\t" << record.revocation_reason;
+    out << record.schema_version << "\t" << record.worker_id << "\t" << record.certificate_identity
+        << "\t" << record.certificate_serial << "\t" << record.certificate_fingerprint << "\t"
+        << record.signing_public_key << "\t" << record.signing_key_id << "\t"
+        << to_string(record.registration_status) << "\t" << record.software_version << "\t"
+        << record.build_id << "\t" << std::setprecision(17) << record.created_at_unix_s << "\t"
+        << record.updated_at_unix_s << "\t" << record.expires_at_unix_s << "\t"
+        << record.suspended_at_unix_s << "\t" << record.revoked_at_unix_s << "\t"
+        << record.revocation_reason;
     return out.str();
 }
 
@@ -89,8 +89,8 @@ WorkerIdentityRecord decode_record(const std::string& line) {
     } catch (const WorkerIdentityRegistryError&) {
         throw;
     } catch (const std::exception& error) {
-        throw WorkerIdentityRegistryError(std::string("worker identity record field parse failure: ") +
-                                          error.what());
+        throw WorkerIdentityRegistryError(
+            std::string("worker identity record field parse failure: ") + error.what());
     }
     if (record.schema_version != WorkerIdentityRecord::kSchemaVersion) {
         throw WorkerIdentityRegistryError("unsupported worker identity record schema version " +
@@ -118,11 +118,16 @@ std::string to_string(WorkerIdentityStatus status) {
 }
 
 WorkerIdentityStatus worker_identity_status_from_string(const std::string& value) {
-    if (value == "pending") return WorkerIdentityStatus::kPending;
-    if (value == "active") return WorkerIdentityStatus::kActive;
-    if (value == "suspended") return WorkerIdentityStatus::kSuspended;
-    if (value == "revoked") return WorkerIdentityStatus::kRevoked;
-    if (value == "expired") return WorkerIdentityStatus::kExpired;
+    if (value == "pending")
+        return WorkerIdentityStatus::kPending;
+    if (value == "active")
+        return WorkerIdentityStatus::kActive;
+    if (value == "suspended")
+        return WorkerIdentityStatus::kSuspended;
+    if (value == "revoked")
+        return WorkerIdentityStatus::kRevoked;
+    if (value == "expired")
+        return WorkerIdentityStatus::kExpired;
     throw WorkerIdentityRegistryError("unknown worker identity status: " + value);
 }
 
@@ -186,9 +191,9 @@ WorkerIdentityRegistry::WorkerIdentityRegistry(std::string persistence_path)
         throw WorkerIdentityRegistryError("worker identity registry file missing record_count");
     }
     if (found_count != expected_count) {
-        throw WorkerIdentityRegistryError(
-            "worker identity registry file truncated: expected " +
-            std::to_string(expected_count) + " records, found " + std::to_string(found_count));
+        throw WorkerIdentityRegistryError("worker identity registry file truncated: expected " +
+                                          std::to_string(expected_count) + " records, found " +
+                                          std::to_string(found_count));
     }
 }
 

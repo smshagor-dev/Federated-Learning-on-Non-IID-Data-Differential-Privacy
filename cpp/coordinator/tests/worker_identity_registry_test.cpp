@@ -21,14 +21,23 @@ void run_worker_identity_registry_tests(const std::string& scratch_dir) {
         WorkerIdentityRegistry registry(registry_path);
         check(registry.list().empty(), "a fresh registry with no file yet starts empty");
 
-        const auto record = registry.register_identity(
-            "worker-1", "spiffe://federated-platform/worker/worker-1", "1002", "fp-worker-1",
-            "pubkey-worker-1", "key-1", "0.1.0", "build-1", /*now=*/100.0,
-            /*expires_at=*/1000.0);
+        const auto record =
+            registry.register_identity("worker-1",
+                                       "spiffe://federated-platform/worker/worker-1",
+                                       "1002",
+                                       "fp-worker-1",
+                                       "pubkey-worker-1",
+                                       "key-1",
+                                       "0.1.0",
+                                       "build-1",
+                                       /*now=*/100.0,
+                                       /*expires_at=*/1000.0);
         check(record.registration_status == WorkerIdentityStatus::kPending,
               "a newly registered identity starts PENDING");
-        check(record.created_at_unix_s == 100.0, "created_at is set from the caller-supplied clock");
-        check(record.updated_at_unix_s == 100.0, "updated_at matches created_at on first registration");
+        check(record.created_at_unix_s == 100.0,
+              "created_at is set from the caller-supplied clock");
+        check(record.updated_at_unix_s == 100.0,
+              "updated_at matches created_at on first registration");
     }
 
     {
@@ -55,11 +64,19 @@ void run_worker_identity_registry_tests(const std::string& scratch_dir) {
         WorkerIdentityRegistry registry(registry_path);
         // Idempotent re-registration refreshes fields rather than
         // creating a duplicate or erroring.
-        const auto refreshed = registry.register_identity(
-            "worker-1", "spiffe://federated-platform/worker/worker-1", "1099", "fp-worker-1-v2",
-            "pubkey-worker-1-v2", "key-2", "0.2.0", "build-2", /*now=*/200.0,
-            /*expires_at=*/2000.0);
-        check(refreshed.certificate_serial == "1099", "re-registration refreshes certificate_serial");
+        const auto refreshed =
+            registry.register_identity("worker-1",
+                                       "spiffe://federated-platform/worker/worker-1",
+                                       "1099",
+                                       "fp-worker-1-v2",
+                                       "pubkey-worker-1-v2",
+                                       "key-2",
+                                       "0.2.0",
+                                       "build-2",
+                                       /*now=*/200.0,
+                                       /*expires_at=*/2000.0);
+        check(refreshed.certificate_serial == "1099",
+              "re-registration refreshes certificate_serial");
         check(refreshed.updated_at_unix_s == 200.0, "re-registration refreshes updated_at");
         check(refreshed.created_at_unix_s == 100.0,
               "re-registration does NOT change the original created_at");
@@ -68,26 +85,41 @@ void run_worker_identity_registry_tests(const std::string& scratch_dir) {
 
     {
         WorkerIdentityRegistry registry(registry_path);
-        registry.register_identity("worker-2", "spiffe://federated-platform/worker/worker-2",
-                                   "2000", "fp-worker-2", "pubkey-worker-2", "key-3", "0.1.0",
-                                   "build-1", 100.0, 1000.0);
+        registry.register_identity("worker-2",
+                                   "spiffe://federated-platform/worker/worker-2",
+                                   "2000",
+                                   "fp-worker-2",
+                                   "pubkey-worker-2",
+                                   "key-3",
+                                   "0.1.0",
+                                   "build-1",
+                                   100.0,
+                                   1000.0);
         expect_throw(
             [&]() {
-                registry.register_identity("worker-3", "spiffe://federated-platform/worker/worker-3",
-                                          "3000", "fp-worker-2", "pubkey-worker-3", "key-4",
-                                          "0.1.0", "build-1", 100.0, 1000.0);
+                registry.register_identity("worker-3",
+                                           "spiffe://federated-platform/worker/worker-3",
+                                           "3000",
+                                           "fp-worker-2",
+                                           "pubkey-worker-3",
+                                           "key-4",
+                                           "0.1.0",
+                                           "build-1",
+                                           100.0,
+                                           1000.0);
             },
-            "registering a certificate_fingerprint already bound to a different worker_id is rejected");
+            "registering a certificate_fingerprint already bound to a different worker_id is "
+            "rejected");
     }
 
     {
         WorkerIdentityRegistry registry(registry_path);
         expect_throw([&]() { registry.suspend("never-registered", "test", 0.0); },
-                    "suspending an unknown worker_id is rejected");
+                     "suspending an unknown worker_id is rejected");
         expect_throw([&]() { registry.activate("never-registered", 0.0); },
-                    "activating an unknown worker_id is rejected");
+                     "activating an unknown worker_id is rejected");
         expect_throw([&]() { registry.revoke("never-registered", "test", 0.0); },
-                    "revoking an unknown worker_id is rejected");
+                     "revoking an unknown worker_id is rejected");
     }
 
     {
@@ -124,9 +156,9 @@ void run_worker_identity_registry_tests(const std::string& scratch_dir) {
         check(revoked.revoked_at_unix_s == 600.0, "revoke() records revoked_at");
 
         expect_throw([&]() { registry.activate("worker-1", 700.0); },
-                    "a revoked worker cannot be activated");
+                     "a revoked worker cannot be activated");
         expect_throw([&]() { registry.suspend("worker-1", "irrelevant", 700.0); },
-                    "a revoked worker cannot be suspended (revocation is terminal)");
+                     "a revoked worker cannot be suspended (revocation is terminal)");
 
         // Idempotent re-revoke does not overwrite the original reason.
         const auto re_revoked = registry.revoke("worker-1", "a different reason", 800.0);
@@ -137,9 +169,16 @@ void run_worker_identity_registry_tests(const std::string& scratch_dir) {
 
         expect_throw(
             [&]() {
-                registry.register_identity("worker-1", "spiffe://federated-platform/worker/worker-1",
-                                          "9999", "fp-worker-1-v3", "pubkey-v3", "key-9", "0.3.0",
-                                          "build-3", 900.0, 9999.0);
+                registry.register_identity("worker-1",
+                                           "spiffe://federated-platform/worker/worker-1",
+                                           "9999",
+                                           "fp-worker-1-v3",
+                                           "pubkey-v3",
+                                           "key-9",
+                                           "0.3.0",
+                                           "build-3",
+                                           900.0,
+                                           9999.0);
             },
             "a revoked worker_id cannot be re-registered under the same identity");
     }
@@ -180,9 +219,16 @@ void run_worker_identity_registry_tests(const std::string& scratch_dir) {
         const std::string corrupt_path = scratch_dir + "/corrupt_registry.dat";
         {
             WorkerIdentityRegistry registry(corrupt_path);
-            registry.register_identity("worker-x", "spiffe://federated-platform/worker/worker-x",
-                                      "1", "fp-x", "pubkey-x", "key-x", "0.1.0", "build-1", 0.0,
-                                      0.0);
+            registry.register_identity("worker-x",
+                                       "spiffe://federated-platform/worker/worker-x",
+                                       "1",
+                                       "fp-x",
+                                       "pubkey-x",
+                                       "key-x",
+                                       "0.1.0",
+                                       "build-1",
+                                       0.0,
+                                       0.0);
         }
         {
             std::ifstream in(corrupt_path, std::ios::binary);
@@ -195,7 +241,7 @@ void run_worker_identity_registry_tests(const std::string& scratch_dir) {
             out << content;
         }
         expect_throw([&]() { WorkerIdentityRegistry registry(corrupt_path); },
-                    "loading a truncated/corrupt registry file throws rather than starting fresh");
+                     "loading a truncated/corrupt registry file throws rather than starting fresh");
     }
 }
 

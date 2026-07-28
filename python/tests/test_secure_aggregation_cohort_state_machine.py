@@ -28,7 +28,9 @@ from fl_platform.secure_aggregation.cohort_state_machine import (
 class CohortStateMachineTests(unittest.TestCase):
     def test_provider_names_communicate_the_limitation(self) -> None:
         self.assertEqual(PROVIDER_NONE, "NONE")
-        self.assertEqual(PROVIDER_SECAGG_NO_DROPOUT_EXPERIMENTAL, "SECAGG_NO_DROPOUT_EXPERIMENTAL")
+        self.assertEqual(
+            PROVIDER_SECAGG_NO_DROPOUT_EXPERIMENTAL, "SECAGG_NO_DROPOUT_EXPERIMENTAL"
+        )
 
     def test_fresh_machine_starts_in_cohort_forming(self) -> None:
         machine = CohortStateMachine("session-1")
@@ -74,7 +76,9 @@ class CohortStateMachineTests(unittest.TestCase):
 
     def test_abort_reachable_from_any_non_terminal_state(self) -> None:
         forming = CohortStateMachine("session-5a")
-        forming.abort(ABORT_REASON_MANUAL_ABORT, 1.0, "operator cancelled before freeze")
+        forming.abort(
+            ABORT_REASON_MANUAL_ABORT, 1.0, "operator cancelled before freeze"
+        )
         self.assertEqual(forming.state, "ABORTED")
         self.assertEqual(forming.abort_reason, ABORT_REASON_MANUAL_ABORT)
 
@@ -82,7 +86,9 @@ class CohortStateMachineTests(unittest.TestCase):
         frozen.transition_to(STATE_KEY_ADVERTISEMENT, 1.0)
         frozen.transition_to(STATE_COHORT_FROZEN, 2.0)
         frozen.transition_to(STATE_MASKED_UPDATE_COLLECTION, 3.0)
-        frozen.abort(ABORT_REASON_DROPOUT, 4.0, "worker-3 did not submit before deadline")
+        frozen.abort(
+            ABORT_REASON_DROPOUT, 4.0, "worker-3 did not submit before deadline"
+        )
         self.assertEqual(frozen.state, "ABORTED")
         self.assertEqual(frozen.abort_reason, ABORT_REASON_DROPOUT)
 
@@ -102,7 +108,10 @@ class CohortStateMachineTests(unittest.TestCase):
         machine.fail("unexpected internal error: manifest hash mismatch mid-round", 2.0)
         self.assertEqual(machine.state, STATE_FAILED)
         self.assertTrue(machine.is_terminal)
-        self.assertEqual(machine.failure_reason, "unexpected internal error: manifest hash mismatch mid-round")
+        self.assertEqual(
+            machine.failure_reason,
+            "unexpected internal error: manifest hash mismatch mid-round",
+        )
 
 
 if __name__ == "__main__":

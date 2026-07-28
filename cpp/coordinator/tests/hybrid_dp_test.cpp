@@ -55,7 +55,8 @@ fl::coordinator::RunConfig make_hybrid_config(const std::string& run_id, std::ui
 }
 
 fl::coordinator::ClientResultSubmission make_result(const fl::coordinator::DispatchedTask& task,
-                                                    double delta_value, double sample_epsilon) {
+                                                    double delta_value,
+                                                    double sample_epsilon) {
     fl::coordinator::ClientResultSubmission submission;
     submission.update.run_id = task.descriptor.run_id;
     submission.update.round_id = task.descriptor.round_id;
@@ -86,7 +87,8 @@ fl::coordinator::ClientResultSubmission make_result(const fl::coordinator::Dispa
     entry.steps = 4;
     entry.accountant = "rdp";
     entry.recorded_at = "2026-01-01T00:00:00Z";
-    entry.entry_id = "entry-" + task.descriptor.client_id + "-" + std::to_string(task.descriptor.round_id);
+    entry.entry_id =
+        "entry-" + task.descriptor.client_id + "-" + std::to_string(task.descriptor.round_id);
     submission.sample_level_privacy = std::move(entry);
 
     return submission;
@@ -111,7 +113,8 @@ void run_hybrid_dp_tests() {
     std::filesystem::remove_all("hybrid_dp_test_scratch");
     CoordinatorConfig coordinator_config;
 
-    RunManager manager(coordinator_config, "hybrid_dp_test_scratch/checkpoints",
+    RunManager manager(coordinator_config,
+                       "hybrid_dp_test_scratch/checkpoints",
                        "hybrid_dp_test_scratch/scaffold");
     manager.create_run(make_hybrid_config("run-hybrid", /*noise_seed=*/321), 0.0);
     auto& run = manager.get("run-hybrid");
@@ -137,10 +140,18 @@ void run_hybrid_dp_tests() {
           "dispatched task carries the configured sample-level accountant");
 
     std::string reason;
-    run.submit_client_result("worker-a", task_a.task_id, task_a.lease_id,
-                             make_result(task_a, 2.0, /*sample_epsilon=*/1.2), now, reason);
-    run.submit_client_result("worker-b", task_b.task_id, task_b.lease_id,
-                             make_result(task_b, 0.0, /*sample_epsilon=*/1.3), now, reason);
+    run.submit_client_result("worker-a",
+                             task_a.task_id,
+                             task_a.lease_id,
+                             make_result(task_a, 2.0, /*sample_epsilon=*/1.2),
+                             now,
+                             reason);
+    run.submit_client_result("worker-b",
+                             task_b.task_id,
+                             task_b.lease_id,
+                             make_result(task_b, 0.0, /*sample_epsilon=*/1.3),
+                             now,
+                             reason);
 
     now += 1.0;
     run.advance(now);
@@ -178,10 +189,18 @@ void run_hybrid_dp_tests() {
     run.advance(now);
     const auto task_a2 = run.acquire_task("worker-a", now).value();
     const auto task_b2 = run.acquire_task("worker-b", now).value();
-    run.submit_client_result("worker-a", task_a2.task_id, task_a2.lease_id,
-                             make_result(task_a2, 3.0, /*sample_epsilon=*/2.1), now, reason);
-    run.submit_client_result("worker-b", task_b2.task_id, task_b2.lease_id,
-                             make_result(task_b2, 1.0, /*sample_epsilon=*/2.2), now, reason);
+    run.submit_client_result("worker-a",
+                             task_a2.task_id,
+                             task_a2.lease_id,
+                             make_result(task_a2, 3.0, /*sample_epsilon=*/2.1),
+                             now,
+                             reason);
+    run.submit_client_result("worker-b",
+                             task_b2.task_id,
+                             task_b2.lease_id,
+                             make_result(task_b2, 1.0, /*sample_epsilon=*/2.2),
+                             now,
+                             reason);
     now += 1.0;
     run.advance(now);
 

@@ -41,8 +41,8 @@ bool is_valid_ed25519_public_key_hex(const std::string& value) {
     if (value.size() != CoordinatorSigningKeyRegistry::kExpectedEd25519PublicKeyHexLength) {
         return false;
     }
-    return std::all_of(value.begin(), value.end(),
-                       [](unsigned char c) { return std::isxdigit(c) != 0; });
+    return std::all_of(
+        value.begin(), value.end(), [](unsigned char c) { return std::isxdigit(c) != 0; });
 }
 
 std::string encode_record(const CoordinatorSigningKeyRecord& record) {
@@ -106,10 +106,14 @@ std::string to_string(CoordinatorSigningKeyStatus status) {
 }
 
 CoordinatorSigningKeyStatus coordinator_signing_key_status_from_string(const std::string& value) {
-    if (value == "active") return CoordinatorSigningKeyStatus::kActive;
-    if (value == "grace_period") return CoordinatorSigningKeyStatus::kGracePeriod;
-    if (value == "revoked") return CoordinatorSigningKeyStatus::kRevoked;
-    if (value == "expired") return CoordinatorSigningKeyStatus::kExpired;
+    if (value == "active")
+        return CoordinatorSigningKeyStatus::kActive;
+    if (value == "grace_period")
+        return CoordinatorSigningKeyStatus::kGracePeriod;
+    if (value == "revoked")
+        return CoordinatorSigningKeyStatus::kRevoked;
+    if (value == "expired")
+        return CoordinatorSigningKeyStatus::kExpired;
     throw CoordinatorSigningKeyRegistryError("unknown coordinator signing-key status: " + value);
 }
 
@@ -162,7 +166,8 @@ CoordinatorSigningKeyRegistry::CoordinatorSigningKeyRegistry(std::string persist
     const std::string body = payload.substr(0, marker + 1);
     std::string checksum_line = payload.substr(marker + 1);
     const auto equals = checksum_line.find('=');
-    std::string checksum_value = equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
+    std::string checksum_value =
+        equals == std::string::npos ? "" : checksum_line.substr(equals + 1);
     while (!checksum_value.empty() &&
            (checksum_value.back() == '\n' || checksum_value.back() == '\r')) {
         checksum_value.pop_back();
@@ -313,49 +318,61 @@ CoordinatorSigningKeyRotationResult CoordinatorSigningKeyRegistry::validate_rota
 
     const auto current_it = records_.find(request.current_signing_key_id);
     if (current_it == records_.end()) {
-        return {false, CoordinatorSigningKeyRotationRejectionReason::kUnknownCurrentKey,
-               "unknown current coordinator signing key '" + request.current_signing_key_id + "'"};
+        return {false,
+                CoordinatorSigningKeyRotationRejectionReason::kUnknownCurrentKey,
+                "unknown current coordinator signing key '" + request.current_signing_key_id + "'"};
     }
     const auto effective_current = effective_record(current_it->second, request.now_unix_s);
     if (effective_current.status != CoordinatorSigningKeyStatus::kActive) {
-        return {false, CoordinatorSigningKeyRotationRejectionReason::kCurrentKeyNotActive,
-               "current coordinator signing key status is '" + to_string(effective_current.status) +
-                   "', not ACTIVE"};
+        return {false,
+                CoordinatorSigningKeyRotationRejectionReason::kCurrentKeyNotActive,
+                "current coordinator signing key status is '" +
+                    to_string(effective_current.status) + "', not ACTIVE"};
     }
 
     if (!is_valid_ed25519_public_key_hex(request.new_public_key_hex)) {
-        return {false, CoordinatorSigningKeyRotationRejectionReason::kInvalidKeyLength,
-               "new_public_key_hex is not a valid Ed25519 public key encoding"};
+        return {false,
+                CoordinatorSigningKeyRotationRejectionReason::kInvalidKeyLength,
+                "new_public_key_hex is not a valid Ed25519 public key encoding"};
     }
 
     for (const auto& [other_id, other_record] : records_) {
         if (other_id == request.new_signing_key_id) {
-            return {false, CoordinatorSigningKeyRotationRejectionReason::kDuplicateNewKeyId,
-                   "new_signing_key_id '" + request.new_signing_key_id + "' is already registered"};
+            return {
+                false,
+                CoordinatorSigningKeyRotationRejectionReason::kDuplicateNewKeyId,
+                "new_signing_key_id '" + request.new_signing_key_id + "' is already registered"};
         }
         if (other_record.public_key_fingerprint == request.new_public_key_fingerprint) {
-            return {false, CoordinatorSigningKeyRotationRejectionReason::kDuplicatePublicKey,
-                   "the new public key is already registered under a different signing_key_id"};
+            return {false,
+                    CoordinatorSigningKeyRotationRejectionReason::kDuplicatePublicKey,
+                    "the new public key is already registered under a different signing_key_id"};
         }
     }
 
-    if (request.grace_period_seconds < 0.0 || request.grace_period_seconds > kMaxGracePeriodSeconds) {
-        return {false, CoordinatorSigningKeyRotationRejectionReason::kExcessiveGracePeriod,
-               "requested grace period " + std::to_string(request.grace_period_seconds) +
-                   "s exceeds the maximum allowed " + std::to_string(kMaxGracePeriodSeconds) + "s"};
+    if (request.grace_period_seconds < 0.0 ||
+        request.grace_period_seconds > kMaxGracePeriodSeconds) {
+        return {false,
+                CoordinatorSigningKeyRotationRejectionReason::kExcessiveGracePeriod,
+                "requested grace period " + std::to_string(request.grace_period_seconds) +
+                    "s exceeds the maximum allowed " + std::to_string(kMaxGracePeriodSeconds) +
+                    "s"};
     }
 
     if (request.new_key_expires_at_unix_s != 0.0 &&
         request.new_key_expires_at_unix_s <= request.now_unix_s) {
-        return {false, CoordinatorSigningKeyRotationRejectionReason::kInvalidExpiry,
-               "new_key_expires_at_unix_s must be a real time strictly after now, or 0 for "
-               "never-expires"};
+        return {false,
+                CoordinatorSigningKeyRotationRejectionReason::kInvalidExpiry,
+                "new_key_expires_at_unix_s must be a real time strictly after now, or 0 for "
+                "never-expires"};
     }
     if (request.new_key_expires_at_unix_s != 0.0 &&
-        request.new_key_expires_at_unix_s - request.now_unix_s > kMaxCoordinatorKeyLifetimeSeconds) {
-        return {false, CoordinatorSigningKeyRotationRejectionReason::kExcessiveKeyLifetime,
-               "requested key lifetime exceeds the maximum allowed " +
-                   std::to_string(kMaxCoordinatorKeyLifetimeSeconds) + "s"};
+        request.new_key_expires_at_unix_s - request.now_unix_s >
+            kMaxCoordinatorKeyLifetimeSeconds) {
+        return {false,
+                CoordinatorSigningKeyRotationRejectionReason::kExcessiveKeyLifetime,
+                "requested key lifetime exceeds the maximum allowed " +
+                    std::to_string(kMaxCoordinatorKeyLifetimeSeconds) + "s"};
     }
 
     return {true, CoordinatorSigningKeyRotationRejectionReason::kNone, "ok", {}, {}};
@@ -394,8 +411,8 @@ CoordinatorSigningKeyRotationResult CoordinatorSigningKeyRegistry::commit_rotati
     records_[request.new_signing_key_id] = new_record;
 
     persist();
-    return {true, CoordinatorSigningKeyRotationRejectionReason::kNone, "ok", new_record,
-           previous_copy};
+    return {
+        true, CoordinatorSigningKeyRotationRejectionReason::kNone, "ok", new_record, previous_copy};
 }
 
 CoordinatorSigningKeyRecord CoordinatorSigningKeyRegistry::revoke_key(

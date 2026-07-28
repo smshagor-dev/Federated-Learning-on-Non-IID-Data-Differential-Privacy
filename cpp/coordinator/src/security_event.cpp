@@ -22,7 +22,9 @@ void append_u_escape(std::string& out, std::uint32_t code_unit) {
     out += kHex[code_unit & 0xF];
 }
 
-std::string json_uint(std::uint64_t value) { return std::to_string(value); }
+std::string json_uint(std::uint64_t value) {
+    return std::to_string(value);
+}
 
 std::uint64_t fnv1a_hash(const std::string& data) {
     std::uint64_t hash = 1469598103934665603ULL;
@@ -359,54 +361,163 @@ std::string to_string(SecurityEventType value) {
             return "SECURE_HYBRID_DP_ROUND_COMPLETED";
         case SecurityEventType::kSecureHybridDpRoundAborted:
             return "SECURE_HYBRID_DP_ROUND_ABORTED";
+        case SecurityEventType::kSecureAdaptiveClippingConfigurationAccepted:
+            return "SECURE_ADAPTIVE_CLIPPING_CONFIGURATION_ACCEPTED";
+        case SecurityEventType::kSecureAdaptiveClippingConfigurationRejected:
+            return "SECURE_ADAPTIVE_CLIPPING_CONFIGURATION_REJECTED";
+        case SecurityEventType::kSecureAdaptiveClippingIndicatorAccepted:
+            return "SECURE_ADAPTIVE_CLIPPING_INDICATOR_ACCEPTED";
+        case SecurityEventType::kSecureAdaptiveClippingIndicatorRejected:
+            return "SECURE_ADAPTIVE_CLIPPING_INDICATOR_REJECTED";
+        case SecurityEventType::kSecureAdaptiveClippingCompleteCohortReconstructed:
+            return "SECURE_ADAPTIVE_CLIPPING_COMPLETE_COHORT_RECONSTRUCTED";
+        case SecurityEventType::kSecureAdaptiveClippingNextStatePublished:
+            return "SECURE_ADAPTIVE_CLIPPING_NEXT_STATE_PUBLISHED";
+        case SecurityEventType::kSecureAdaptiveClippingRoundCompleted:
+            return "SECURE_ADAPTIVE_CLIPPING_ROUND_COMPLETED";
+        case SecurityEventType::kSecureAdaptiveClippingRoundAborted:
+            return "SECURE_ADAPTIVE_CLIPPING_ROUND_ABORTED";
     }
     return "UNKNOWN";
 }
 
 bool security_severity_from_string(const std::string& value, SecuritySeverity& out) {
-    if (value == "INFO") { out = SecuritySeverity::kInfo; return true; }
-    if (value == "WARNING") { out = SecuritySeverity::kWarning; return true; }
-    if (value == "HIGH") { out = SecuritySeverity::kHigh; return true; }
-    if (value == "CRITICAL") { out = SecuritySeverity::kCritical; return true; }
+    if (value == "INFO") {
+        out = SecuritySeverity::kInfo;
+        return true;
+    }
+    if (value == "WARNING") {
+        out = SecuritySeverity::kWarning;
+        return true;
+    }
+    if (value == "HIGH") {
+        out = SecuritySeverity::kHigh;
+        return true;
+    }
+    if (value == "CRITICAL") {
+        out = SecuritySeverity::kCritical;
+        return true;
+    }
     return false;
 }
 
 bool security_outcome_from_string(const std::string& value, SecurityOutcome& out) {
-    if (value == "ACCEPTED") { out = SecurityOutcome::kAccepted; return true; }
-    if (value == "REJECTED") { out = SecurityOutcome::kRejected; return true; }
-    if (value == "COMPLETED") { out = SecurityOutcome::kCompleted; return true; }
-    if (value == "FAILED") { out = SecurityOutcome::kFailed; return true; }
-    if (value == "BLOCKED") { out = SecurityOutcome::kBlocked; return true; }
-    if (value == "CANCELED") { out = SecurityOutcome::kCanceled; return true; }
+    if (value == "ACCEPTED") {
+        out = SecurityOutcome::kAccepted;
+        return true;
+    }
+    if (value == "REJECTED") {
+        out = SecurityOutcome::kRejected;
+        return true;
+    }
+    if (value == "COMPLETED") {
+        out = SecurityOutcome::kCompleted;
+        return true;
+    }
+    if (value == "FAILED") {
+        out = SecurityOutcome::kFailed;
+        return true;
+    }
+    if (value == "BLOCKED") {
+        out = SecurityOutcome::kBlocked;
+        return true;
+    }
+    if (value == "CANCELED") {
+        out = SecurityOutcome::kCanceled;
+        return true;
+    }
     return false;
 }
 
 bool security_actor_type_from_string(const std::string& value, SecurityActorType& out) {
-    if (value == "USER") { out = SecurityActorType::kUser; return true; }
-    if (value == "SERVICE") { out = SecurityActorType::kService; return true; }
-    if (value == "WORKER") { out = SecurityActorType::kWorker; return true; }
-    if (value == "COORDINATOR") { out = SecurityActorType::kCoordinator; return true; }
-    if (value == "SYSTEM") { out = SecurityActorType::kSystem; return true; }
+    if (value == "USER") {
+        out = SecurityActorType::kUser;
+        return true;
+    }
+    if (value == "SERVICE") {
+        out = SecurityActorType::kService;
+        return true;
+    }
+    if (value == "WORKER") {
+        out = SecurityActorType::kWorker;
+        return true;
+    }
+    if (value == "COORDINATOR") {
+        out = SecurityActorType::kCoordinator;
+        return true;
+    }
+    if (value == "SYSTEM") {
+        out = SecurityActorType::kSystem;
+        return true;
+    }
     return false;
 }
 
 bool security_subject_type_from_string(const std::string& value, SecuritySubjectType& out) {
-    if (value == "TRANSPORT") { out = SecuritySubjectType::kTransport; return true; }
-    if (value == "CERTIFICATE") { out = SecuritySubjectType::kCertificate; return true; }
-    if (value == "WORKER_IDENTITY") { out = SecuritySubjectType::kWorkerIdentity; return true; }
-    if (value == "WORKER_SIGNING_KEY") { out = SecuritySubjectType::kWorkerSigningKey; return true; }
-    if (value == "COORDINATOR_SIGNING_KEY") { out = SecuritySubjectType::kCoordinatorSigningKey; return true; }
-    if (value == "CAPABILITY") { out = SecuritySubjectType::kCapability; return true; }
-    if (value == "HEARTBEAT") { out = SecuritySubjectType::kHeartbeat; return true; }
-    if (value == "CLIENT_RESULT") { out = SecuritySubjectType::kClientResult; return true; }
-    if (value == "PRIVACY_RECORD") { out = SecuritySubjectType::kPrivacyRecord; return true; }
-    if (value == "TRAINING_TASK") { out = SecuritySubjectType::kTrainingTask; return true; }
-    if (value == "REPLAY_STATE") { out = SecuritySubjectType::kReplayState; return true; }
-    if (value == "TASK_LEASE") { out = SecuritySubjectType::kTaskLease; return true; }
-    if (value == "AUDIT_QUERY") { out = SecuritySubjectType::kAuditQuery; return true; }
-    if (value == "SECURITY_MUTATION") { out = SecuritySubjectType::kSecurityMutation; return true; }
-    if (value == "WORKER_EVENT_BATCH") { out = SecuritySubjectType::kWorkerEventBatch; return true; }
-    if (value == "SECURE_AGGREGATION_SESSION") { out = SecuritySubjectType::kSecureAggregationSession; return true; }
+    if (value == "TRANSPORT") {
+        out = SecuritySubjectType::kTransport;
+        return true;
+    }
+    if (value == "CERTIFICATE") {
+        out = SecuritySubjectType::kCertificate;
+        return true;
+    }
+    if (value == "WORKER_IDENTITY") {
+        out = SecuritySubjectType::kWorkerIdentity;
+        return true;
+    }
+    if (value == "WORKER_SIGNING_KEY") {
+        out = SecuritySubjectType::kWorkerSigningKey;
+        return true;
+    }
+    if (value == "COORDINATOR_SIGNING_KEY") {
+        out = SecuritySubjectType::kCoordinatorSigningKey;
+        return true;
+    }
+    if (value == "CAPABILITY") {
+        out = SecuritySubjectType::kCapability;
+        return true;
+    }
+    if (value == "HEARTBEAT") {
+        out = SecuritySubjectType::kHeartbeat;
+        return true;
+    }
+    if (value == "CLIENT_RESULT") {
+        out = SecuritySubjectType::kClientResult;
+        return true;
+    }
+    if (value == "PRIVACY_RECORD") {
+        out = SecuritySubjectType::kPrivacyRecord;
+        return true;
+    }
+    if (value == "TRAINING_TASK") {
+        out = SecuritySubjectType::kTrainingTask;
+        return true;
+    }
+    if (value == "REPLAY_STATE") {
+        out = SecuritySubjectType::kReplayState;
+        return true;
+    }
+    if (value == "TASK_LEASE") {
+        out = SecuritySubjectType::kTaskLease;
+        return true;
+    }
+    if (value == "AUDIT_QUERY") {
+        out = SecuritySubjectType::kAuditQuery;
+        return true;
+    }
+    if (value == "SECURITY_MUTATION") {
+        out = SecuritySubjectType::kSecurityMutation;
+        return true;
+    }
+    if (value == "WORKER_EVENT_BATCH") {
+        out = SecuritySubjectType::kWorkerEventBatch;
+        return true;
+    }
+    if (value == "SECURE_AGGREGATION_SESSION") {
+        out = SecuritySubjectType::kSecureAggregationSession;
+        return true;
+    }
     return false;
 }
 
@@ -414,7 +525,8 @@ bool security_event_type_from_string(const std::string& value, SecurityEventType
     static const std::map<std::string, SecurityEventType> kByName = {
         {"TRANSPORT_MTLS_STARTED", SecurityEventType::kTransportMtlsStarted},
         {"TRANSPORT_MTLS_FAILED", SecurityEventType::kTransportMtlsFailed},
-        {"TRANSPORT_INSECURE_DEVELOPMENT_STARTED", SecurityEventType::kTransportInsecureDevelopmentStarted},
+        {"TRANSPORT_INSECURE_DEVELOPMENT_STARTED",
+         SecurityEventType::kTransportInsecureDevelopmentStarted},
         {"PEER_CERTIFICATE_ACCEPTED", SecurityEventType::kPeerCertificateAccepted},
         {"PEER_CERTIFICATE_REJECTED", SecurityEventType::kPeerCertificateRejected},
         {"CERTIFICATE_IDENTITY_MISMATCH", SecurityEventType::kCertificateIdentityMismatch},
@@ -467,8 +579,10 @@ bool security_event_type_from_string(const std::string& value, SecurityEventType
         {"IDEMPOTENCY_REPLAY_ACCEPTED", SecurityEventType::kIdempotencyReplayAccepted},
         {"IDEMPOTENCY_CONFLICT_REJECTED", SecurityEventType::kIdempotencyConflictRejected},
         {"SECURITY_AUDIT_ACCESSED", SecurityEventType::kSecurityAuditAccessed},
-        {"WORKER_SECURITY_EVENT_BATCH_ACCEPTED", SecurityEventType::kWorkerSecurityEventBatchAccepted},
-        {"WORKER_SECURITY_EVENT_BATCH_REJECTED", SecurityEventType::kWorkerSecurityEventBatchRejected},
+        {"WORKER_SECURITY_EVENT_BATCH_ACCEPTED",
+         SecurityEventType::kWorkerSecurityEventBatchAccepted},
+        {"WORKER_SECURITY_EVENT_BATCH_REJECTED",
+         SecurityEventType::kWorkerSecurityEventBatchRejected},
         {"SECURE_AGGREGATION_SESSION_CREATED", SecurityEventType::kSecureAggregationSessionCreated},
         {"SECURE_AGGREGATION_COHORT_FROZEN", SecurityEventType::kSecureAggregationCohortFrozen},
         {"SECURE_AGGREGATION_KEY_ADVERTISEMENT_ACCEPTED",
@@ -477,20 +591,26 @@ bool security_event_type_from_string(const std::string& value, SecurityEventType
          SecurityEventType::kSecureAggregationKeyAdvertisementRejected},
         {"SECURE_AGGREGATION_SESSION_ABORTED", SecurityEventType::kSecureAggregationSessionAborted},
         {"SECURE_AGGREGATION_RESTART_ABORTED", SecurityEventType::kSecureAggregationRestartAborted},
-        {"SECURE_AGGREGATION_MASKED_UPDATE_ACCEPTED", SecurityEventType::kSecureAggregationMaskedUpdateAccepted},
-        {"SECURE_AGGREGATION_MASKED_UPDATE_REJECTED", SecurityEventType::kSecureAggregationMaskedUpdateRejected},
+        {"SECURE_AGGREGATION_MASKED_UPDATE_ACCEPTED",
+         SecurityEventType::kSecureAggregationMaskedUpdateAccepted},
+        {"SECURE_AGGREGATION_MASKED_UPDATE_REJECTED",
+         SecurityEventType::kSecureAggregationMaskedUpdateRejected},
         {"SECURE_AGGREGATION_COMPLETE_COHORT_RECEIVED",
          SecurityEventType::kSecureAggregationCompleteCohortReceived},
-        {"SECURE_AGGREGATION_SESSION_COMPLETED", SecurityEventType::kSecureAggregationSessionCompleted},
+        {"SECURE_AGGREGATION_SESSION_COMPLETED",
+         SecurityEventType::kSecureAggregationSessionCompleted},
         {"SECURE_AGGREGATION_AGGREGATE_VALIDATION_FAILED",
          SecurityEventType::kSecureAggregationAggregateValidationFailed},
         {"SECURE_USER_LEVEL_DP_CONFIGURATION_ACCEPTED",
          SecurityEventType::kSecureUserLevelDpConfigurationAccepted},
         {"SECURE_USER_LEVEL_DP_CONFIGURATION_REJECTED",
          SecurityEventType::kSecureUserLevelDpConfigurationRejected},
-        {"SECURE_USER_LEVEL_DP_BUDGET_RESERVED", SecurityEventType::kSecureUserLevelDpBudgetReserved},
-        {"SECURE_USER_LEVEL_DP_BUDGET_EXHAUSTED", SecurityEventType::kSecureUserLevelDpBudgetExhausted},
-        {"SECURE_USER_LEVEL_DP_CLIPPING_APPLIED", SecurityEventType::kSecureUserLevelDpClippingApplied},
+        {"SECURE_USER_LEVEL_DP_BUDGET_RESERVED",
+         SecurityEventType::kSecureUserLevelDpBudgetReserved},
+        {"SECURE_USER_LEVEL_DP_BUDGET_EXHAUSTED",
+         SecurityEventType::kSecureUserLevelDpBudgetExhausted},
+        {"SECURE_USER_LEVEL_DP_CLIPPING_APPLIED",
+         SecurityEventType::kSecureUserLevelDpClippingApplied},
         {"SECURE_USER_LEVEL_DP_ATTESTATION_ACCEPTED",
          SecurityEventType::kSecureUserLevelDpAttestationAccepted},
         {"SECURE_USER_LEVEL_DP_ATTESTATION_REJECTED",
@@ -498,21 +618,45 @@ bool security_event_type_from_string(const std::string& value, SecurityEventType
         {"SECURE_USER_LEVEL_DP_NOISE_APPLIED", SecurityEventType::kSecureUserLevelDpNoiseApplied},
         {"SECURE_USER_LEVEL_DP_ACCOUNTING_COMMITTED",
          SecurityEventType::kSecureUserLevelDpAccountingCommitted},
-        {"SECURE_USER_LEVEL_DP_ROUND_COMPLETED", SecurityEventType::kSecureUserLevelDpRoundCompleted},
-        {"SECURE_USER_LEVEL_DP_DROPOUT_ABORTED", SecurityEventType::kSecureUserLevelDpDropoutAborted},
+        {"SECURE_USER_LEVEL_DP_ROUND_COMPLETED",
+         SecurityEventType::kSecureUserLevelDpRoundCompleted},
+        {"SECURE_USER_LEVEL_DP_DROPOUT_ABORTED",
+         SecurityEventType::kSecureUserLevelDpDropoutAborted},
         {"SECURE_USER_LEVEL_DP_FINALIZATION_CONFLICT",
          SecurityEventType::kSecureUserLevelDpFinalizationConflict},
         {"SECURE_USER_LEVEL_DP_CHECKPOINT_RECONCILED",
          SecurityEventType::kSecureUserLevelDpCheckpointReconciled},
-        {"SECURE_USER_LEVEL_DP_HEALTH_DEGRADED", SecurityEventType::kSecureUserLevelDpHealthDegraded},
-        {"SECURE_HYBRID_DP_CONFIGURATION_ACCEPTED", SecurityEventType::kSecureHybridDpConfigurationAccepted},
-        {"SECURE_HYBRID_DP_CONFIGURATION_REJECTED", SecurityEventType::kSecureHybridDpConfigurationRejected},
-        {"SECURE_HYBRID_DP_USER_BUDGET_RESERVED", SecurityEventType::kSecureHybridDpUserBudgetReserved},
-        {"SECURE_HYBRID_DP_SAMPLE_RECORD_ACCEPTED", SecurityEventType::kSecureHybridDpSampleRecordAccepted},
-        {"SECURE_HYBRID_DP_SAMPLE_RECORD_REJECTED", SecurityEventType::kSecureHybridDpSampleRecordRejected},
+        {"SECURE_USER_LEVEL_DP_HEALTH_DEGRADED",
+         SecurityEventType::kSecureUserLevelDpHealthDegraded},
+        {"SECURE_HYBRID_DP_CONFIGURATION_ACCEPTED",
+         SecurityEventType::kSecureHybridDpConfigurationAccepted},
+        {"SECURE_HYBRID_DP_CONFIGURATION_REJECTED",
+         SecurityEventType::kSecureHybridDpConfigurationRejected},
+        {"SECURE_HYBRID_DP_USER_BUDGET_RESERVED",
+         SecurityEventType::kSecureHybridDpUserBudgetReserved},
+        {"SECURE_HYBRID_DP_SAMPLE_RECORD_ACCEPTED",
+         SecurityEventType::kSecureHybridDpSampleRecordAccepted},
+        {"SECURE_HYBRID_DP_SAMPLE_RECORD_REJECTED",
+         SecurityEventType::kSecureHybridDpSampleRecordRejected},
         {"SECURE_HYBRID_DP_BINDING_ACCEPTED", SecurityEventType::kSecureHybridDpBindingAccepted},
         {"SECURE_HYBRID_DP_ROUND_COMPLETED", SecurityEventType::kSecureHybridDpRoundCompleted},
         {"SECURE_HYBRID_DP_ROUND_ABORTED", SecurityEventType::kSecureHybridDpRoundAborted},
+        {"SECURE_ADAPTIVE_CLIPPING_CONFIGURATION_ACCEPTED",
+         SecurityEventType::kSecureAdaptiveClippingConfigurationAccepted},
+        {"SECURE_ADAPTIVE_CLIPPING_CONFIGURATION_REJECTED",
+         SecurityEventType::kSecureAdaptiveClippingConfigurationRejected},
+        {"SECURE_ADAPTIVE_CLIPPING_INDICATOR_ACCEPTED",
+         SecurityEventType::kSecureAdaptiveClippingIndicatorAccepted},
+        {"SECURE_ADAPTIVE_CLIPPING_INDICATOR_REJECTED",
+         SecurityEventType::kSecureAdaptiveClippingIndicatorRejected},
+        {"SECURE_ADAPTIVE_CLIPPING_COMPLETE_COHORT_RECONSTRUCTED",
+         SecurityEventType::kSecureAdaptiveClippingCompleteCohortReconstructed},
+        {"SECURE_ADAPTIVE_CLIPPING_NEXT_STATE_PUBLISHED",
+         SecurityEventType::kSecureAdaptiveClippingNextStatePublished},
+        {"SECURE_ADAPTIVE_CLIPPING_ROUND_COMPLETED",
+         SecurityEventType::kSecureAdaptiveClippingRoundCompleted},
+        {"SECURE_ADAPTIVE_CLIPPING_ROUND_ABORTED",
+         SecurityEventType::kSecureAdaptiveClippingRoundAborted},
     };
     const auto it = kByName.find(value);
     if (it == kByName.end()) {
@@ -572,6 +716,9 @@ SecuritySeverity default_severity(SecurityEventType type) {
         case SecurityEventType::kSecureHybridDpConfigurationRejected:
         case SecurityEventType::kSecureHybridDpSampleRecordRejected:
         case SecurityEventType::kSecureHybridDpRoundAborted:
+        case SecurityEventType::kSecureAdaptiveClippingConfigurationRejected:
+        case SecurityEventType::kSecureAdaptiveClippingIndicatorRejected:
+        case SecurityEventType::kSecureAdaptiveClippingRoundAborted:
             return SecuritySeverity::kWarning;
         // HIGH: an aggregate that decoded but failed to actually advance
         // the model -- the disclosed residual-inconsistency window

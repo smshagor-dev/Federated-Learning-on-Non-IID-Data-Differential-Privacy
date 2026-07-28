@@ -78,7 +78,10 @@ class FixedPointEncodingTests(unittest.TestCase):
         self.assertEqual(too_large.reason, REJECTION_MAGNITUDE_OVERFLOW)
 
         at_boundary = encode_value(profile.max_input_magnitude, profile)
-        self.assertTrue(at_boundary.ok, "a value exactly at max_input_magnitude is accepted (inclusive boundary)")
+        self.assertTrue(
+            at_boundary.ok,
+            "a value exactly at max_input_magnitude is accepted (inclusive boundary)",
+        )
 
     def test_quantization_error_is_small_and_non_negative(self) -> None:
         profile = FixedPointEncodingProfile()
@@ -124,7 +127,9 @@ class FixedPointEncodingGoldenFixtureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         if not GOLDEN_FIXTURE_PATH.exists():
-            raise AssertionError(f"golden fixture file not found: {GOLDEN_FIXTURE_PATH}")
+            raise AssertionError(
+                f"golden fixture file not found: {GOLDEN_FIXTURE_PATH}"
+            )
         with GOLDEN_FIXTURE_PATH.open(encoding="utf-8") as handle:
             cls.fixture = json.load(handle)
 
@@ -155,12 +160,18 @@ class FixedPointEncodingGoldenFixtureTests(unittest.TestCase):
 
             result = encode_value(value, profile)
             if case["ok"]:
-                self.assertTrue(result.ok, f"fixture case {case['id']!r} expected ok=True")
+                self.assertTrue(
+                    result.ok, f"fixture case {case['id']!r} expected ok=True"
+                )
                 self.assertEqual(
-                    result.encoded, case["expected_encoded"], f"fixture case {case['id']!r} encoded value mismatch"
+                    result.encoded,
+                    case["expected_encoded"],
+                    f"fixture case {case['id']!r} encoded value mismatch",
                 )
             else:
-                self.assertFalse(result.ok, f"fixture case {case['id']!r} expected ok=False")
+                self.assertFalse(
+                    result.ok, f"fixture case {case['id']!r} expected ok=False"
+                )
                 self.assertEqual(
                     result.reason,
                     case["expected_rejection_reason"],
@@ -171,7 +182,11 @@ class FixedPointEncodingGoldenFixtureTests(unittest.TestCase):
         profile = self._profile_from_fixture()
         for case in self.fixture["decode_cases"]:
             actual = decode_value(case["ring_value"], profile)
-            self.assertEqual(actual, case["expected_value"], f"fixture case {case['id']!r} decode mismatch")
+            self.assertEqual(
+                actual,
+                case["expected_value"],
+                f"fixture case {case['id']!r} decode mismatch",
+            )
 
     def test_domain_bounds_case_matches_the_stored_fixture(self) -> None:
         profile = self._profile_from_fixture()
@@ -179,7 +194,9 @@ class FixedPointEncodingGoldenFixtureTests(unittest.TestCase):
         proof = prove_domain_bounds(profile)
         self.assertEqual(proof.safe, case["expected_safe"])
         self.assertFalse(proof.computation_overflowed)
-        self.assertEqual(proof.worst_case_aggregate_magnitude, case["worst_case_aggregate_magnitude"])
+        self.assertEqual(
+            proof.worst_case_aggregate_magnitude, case["worst_case_aggregate_magnitude"]
+        )
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from fl_platform.datasets.partitioning import (
     create_dirichlet_partition,
     create_iid_partition,
     create_pathological_partition,
+    create_quantity_skew_partition,
 )
 
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -67,6 +68,7 @@ _STRATEGIES: dict[str, Callable[..., PartitionManifestRecord]] = {
     "iid": create_iid_partition,
     "dirichlet": create_dirichlet_partition,
     "pathological": create_pathological_partition,
+    "quantity_skew": create_quantity_skew_partition,
 }
 
 
@@ -136,6 +138,7 @@ class FilesystemDatasetRegistry:
         *,
         alpha: float | None = None,
         classes_per_client: int | None = None,
+        quantity_skew_sigma: float | None = None,
         minimum_client_samples: int = 1,
     ) -> PartitionManifestRecord:
         dataset = self.get(dataset_id)
@@ -157,6 +160,12 @@ class FilesystemDatasetRegistry:
                     "pathological partitioning requires classes_per_client"
                 )
             kwargs["classes_per_client"] = classes_per_client
+        if strategy == "quantity_skew":
+            if quantity_skew_sigma is None:
+                raise DatasetRegistryError(
+                    "quantity_skew partitioning requires quantity_skew_sigma"
+                )
+            kwargs["quantity_skew_sigma"] = quantity_skew_sigma
 
         record = builder(
             dataset_id=dataset_id,
@@ -165,6 +174,8 @@ class FilesystemDatasetRegistry:
             num_classes=dataset.num_classes,
             num_clients=num_clients,
             seed=seed,
+            dataset_version=dataset.version,
+            dataset_checksum=dataset.checksum,
             minimum_client_samples=minimum_client_samples,
             **kwargs,
         )
@@ -180,6 +191,11 @@ class FilesystemDatasetRegistry:
             client_id: {int(label): count for label, count in counts.items()}
             for client_id, counts in payload["label_distribution_summary"].items()
         }
+        if "global_label_histogram" in payload:
+            payload["global_label_histogram"] = {
+                int(label): count
+                for label, count in payload["global_label_histogram"].items()
+            }
         return PartitionManifestRecord(**payload)
 
     def list_partitions(
@@ -205,21 +221,29 @@ class FilesystemDatasetRegistry:
                 f"partition '{record.partition_id}' already exists"
             )
         payload = {
+            "schema_version": record.schema_version,
             "partition_id": record.partition_id,
             "dataset_id": record.dataset_id,
+            "dataset_version": record.dataset_version,
+            "dataset_checksum": record.dataset_checksum,
             "strategy": record.strategy,
             "seed": record.seed,
             "num_clients": record.num_clients,
             "alpha": record.alpha,
             "classes_per_client": record.classes_per_client,
+            "quantity_skew_sigma": record.quantity_skew_sigma,
             "minimum_client_samples": record.minimum_client_samples,
             "client_sample_counts": record.client_sample_counts,
             "client_indices": record.client_indices,
             "manifest_checksum": record.manifest_checksum,
+            "manifest_hash": record.manifest_hash,
+            "partition_configuration": record.partition_configuration,
             "label_distribution_summary": record.label_distribution_summary,
+            "global_label_histogram": record.global_label_histogram,
+            "heterogeneity_metrics": record.heterogeneity_metrics,
         }
         temp_path = path.with_suffix(".json.tmp")
-        temp_path.write_text(json.dumps(payload), encoding="utf-8")
+        temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         os.replace(temp_path, path)
 
     def _transition(

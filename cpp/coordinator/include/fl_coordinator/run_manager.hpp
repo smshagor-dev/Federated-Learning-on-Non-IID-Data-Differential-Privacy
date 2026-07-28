@@ -252,7 +252,9 @@ class RunInstance {
     // dependency on this protobuf-free library (fl::core::PrivacyMode
     // and bool are both already protobuf-free).
     [[nodiscard]] fl::core::PrivacyMode privacy_mode() const { return config_.privacy_mode; }
-    [[nodiscard]] bool adaptive_clipping_enabled() const { return config_.adaptive_clipping_enabled; }
+    [[nodiscard]] bool adaptive_clipping_enabled() const {
+        return config_.adaptive_clipping_enabled;
+    }
     [[nodiscard]] fl::core::AggregationAlgorithm algorithm() const { return config_.algorithm; }
     // Secure User-Level Differential Privacy Runtime slice, Work Areas
     // D/N: two more narrow accessors, same convention as the three
@@ -281,6 +283,31 @@ class RunInstance {
     [[nodiscard]] const fl::core::SampleLevelDPConfig& sample_level_privacy() const {
         return config_.sample_level_privacy;
     }
+    // Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: adaptive_clip_controller_ is constructed if and only if
+    // adaptive_clipping_enabled() AND privacy_mode() is
+    // kUserLevelDp/kHybridDp (see the constructor) -- so
+    // secure_adaptive_clipping_active() is exactly "the controller
+    // exists," matching sample_level_dp_active()'s own
+    // derived-not-stored convention. current_adaptive_clip_bound()/
+    // adaptive_clip_state_step_count()/adaptive_clipping_config()
+    // throw std::logic_error if the controller does not exist --
+    // callers must check secure_adaptive_clipping_active() first, same
+    // "caller already knows this is meaningful" convention as
+    // project_user_level_epsilon_after_one_more_step() above.
+    [[nodiscard]] bool secure_adaptive_clipping_active() const {
+        return adaptive_clip_controller_ != nullptr;
+    }
+    [[nodiscard]] const fl::core::AdaptiveClippingConfig& adaptive_clipping_config() const {
+        return config_.adaptive_clipping;
+    }
+    // The bound THIS round's tasks must be signed with (C_t) -- the
+    // controller's own clip_value() is exactly this, since step() (the
+    // only thing that mutates it) is called strictly after every task
+    // for the current round has already been issued (see the semantics
+    // doc section 7, "Current-round immutability").
+    [[nodiscard]] double current_adaptive_clip_bound() const;
+    [[nodiscard]] std::uint64_t adaptive_clip_state_step_count() const;
     // Work Area N's "reserve" pre-check: a non-mutating projection of
     // what get_epsilon() would read after one more accountant step,
     // exactly like the existing (non-secure) STOP_BEFORE_EXCEEDING
@@ -390,9 +417,26 @@ class RunInstance {
     // already marked COMPLETED before this is ever called -- a known,
     // narrow, disclosed residual-inconsistency window, see
     // docs/known-limitations.md).
-    [[nodiscard]] bool apply_secure_aggregate_and_advance(std::uint64_t round_id,
-                                                           const fl::core::AggregationResult& aggregate,
-                                                           double now_unix_s);
+    // Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: `indicator_over_threshold_count`, when set, is the
+    // already-securely-reconstructed, already-noise-worthy count this
+    // round's caller decoded from the masked indicator sum (never an
+    // individual indicator). When secure_adaptive_clipping_active() and
+    // this is set, adaptive_clip_controller_->step(...) is called
+    // *inside* this same call, immediately alongside the model
+    // mechanism's own user_level_accountant_->step(1) -- both commit
+    // under the identical round-progression idempotency guard, as one
+    // atomic transaction (see the semantics doc section 18, "one atomic
+    // transaction, not two linked ones"). Passing std::nullopt while
+    // secure_adaptive_clipping_active() is true is a caller contract
+    // error (throws std::logic_error) -- the caller must always supply
+    // the reconstructed count when adaptive clipping is active for this
+    // run, never silently skip the clip-state update.
+    [[nodiscard]] bool apply_secure_aggregate_and_advance(
+        std::uint64_t round_id,
+        const fl::core::AggregationResult& aggregate,
+        double now_unix_s,
+        std::optional<std::uint64_t> indicator_over_threshold_count = std::nullopt);
 
     // Persist/restore the full run state (Work Package G). save_checkpoint
     // is also called automatically at the end of every finalize_round.

@@ -384,7 +384,8 @@ RunInstance::RunInstance(RunConfig config,
                                              static_cast<double>(config_.total_clients)
                                        : 0.0;
         user_level_accountant_ = std::make_unique<fl::core::UserLevelAccountant>(
-            config_.user_level_privacy.noise_multiplier, sample_rate,
+            config_.user_level_privacy.noise_multiplier,
+            sample_rate,
             config_.user_level_privacy.target_delta);
         if (config_.privacy_noise_seed != 0) {
             noise_provider_ =
@@ -842,7 +843,8 @@ void RunInstance::finalize_round(double now_unix_s) {
     if (config_.privacy_budget_policy == fl::core::PrivacyBudgetPolicy::kStopBeforeExceeding) {
         std::string exceeded_mechanism;
         if (user_level_accountant_ != nullptr && config_.user_level_privacy.epsilon_budget > 0.0 &&
-            user_level_accountant_->project_epsilon(1) >= config_.user_level_privacy.epsilon_budget) {
+            user_level_accountant_->project_epsilon(1) >=
+                config_.user_level_privacy.epsilon_budget) {
             exceeded_mechanism = "user_level";
         } else if (adaptive_clip_controller_ != nullptr &&
                    config_.adaptive_clipping.epsilon_budget > 0.0 &&
@@ -854,7 +856,8 @@ void RunInstance::finalize_round(double now_unix_s) {
             emit(CoordinatorEventType::kPrivacyBudgetExceeded,
                  "privacy budget would be exceeded by this round; round not released",
                  now_unix_s,
-                 {{"mechanism", exceeded_mechanism}, {"policy", fl::core::to_string(config_.privacy_budget_policy)}});
+                 {{"mechanism", exceeded_mechanism},
+                  {"policy", fl::core::to_string(config_.privacy_budget_policy)}});
             // RunStateMachine has no direct WAITING_FOR_CLIENTS ->
             // COMPLETED transition (see allowed_next_states in
             // coordinator.cpp) — must pass through AGGREGATING ->
@@ -1051,50 +1054,52 @@ void RunInstance::finalize_round(double now_unix_s) {
     // and never reaches this point having exceeded anything.
     bool privacy_budget_stop = false;
     bool privacy_budget_fail = false;
-    const auto check_reactive_budget = [&](const char* mechanism, double budget,
-                                           double current_epsilon) {
-        if (budget <= 0.0) {
-            return;  // unset: no policy applies to this mechanism
-        }
-        if (config_.warning_threshold_fraction > 0.0 && current_epsilon < budget &&
-            current_epsilon >= budget * config_.warning_threshold_fraction) {
-            emit(CoordinatorEventType::kPrivacyBudgetWarning,
+    const auto check_reactive_budget =
+        [&](const char* mechanism, double budget, double current_epsilon) {
+            if (budget <= 0.0) {
+                return;  // unset: no policy applies to this mechanism
+            }
+            if (config_.warning_threshold_fraction > 0.0 && current_epsilon < budget &&
+                current_epsilon >= budget * config_.warning_threshold_fraction) {
+                emit(CoordinatorEventType::kPrivacyBudgetWarning,
+                     "",
+                     now_unix_s,
+                     {{"mechanism", mechanism},
+                      {"policy", fl::core::to_string(config_.privacy_budget_policy)}});
+            }
+            if (current_epsilon < budget) {
+                return;
+            }
+            emit(CoordinatorEventType::kPrivacyBudgetExceeded,
                  "",
                  now_unix_s,
                  {{"mechanism", mechanism},
                   {"policy", fl::core::to_string(config_.privacy_budget_policy)}});
-        }
-        if (current_epsilon < budget) {
-            return;
-        }
-        emit(CoordinatorEventType::kPrivacyBudgetExceeded,
-             "",
-             now_unix_s,
-             {{"mechanism", mechanism},
-              {"policy", fl::core::to_string(config_.privacy_budget_policy)}});
-        switch (config_.privacy_budget_policy) {
-            case fl::core::PrivacyBudgetPolicy::kWarnOnly:
-                break;
-            case fl::core::PrivacyBudgetPolicy::kStopAfterCurrentRound:
-                privacy_budget_stop = true;
-                break;
-            case fl::core::PrivacyBudgetPolicy::kFailRun:
-                privacy_budget_fail = true;
-                break;
-            case fl::core::PrivacyBudgetPolicy::kStopBeforeExceeding:
-                // Defense-in-depth only: the pre-check at the top of this
-                // function should already have prevented this round from
-                // ever reaching this point over budget.
-                privacy_budget_stop = true;
-                break;
-        }
-    };
+            switch (config_.privacy_budget_policy) {
+                case fl::core::PrivacyBudgetPolicy::kWarnOnly:
+                    break;
+                case fl::core::PrivacyBudgetPolicy::kStopAfterCurrentRound:
+                    privacy_budget_stop = true;
+                    break;
+                case fl::core::PrivacyBudgetPolicy::kFailRun:
+                    privacy_budget_fail = true;
+                    break;
+                case fl::core::PrivacyBudgetPolicy::kStopBeforeExceeding:
+                    // Defense-in-depth only: the pre-check at the top of this
+                    // function should already have prevented this round from
+                    // ever reaching this point over budget.
+                    privacy_budget_stop = true;
+                    break;
+            }
+        };
     if (user_level_dp_active) {
-        check_reactive_budget("user_level", config_.user_level_privacy.epsilon_budget,
+        check_reactive_budget("user_level",
+                              config_.user_level_privacy.epsilon_budget,
                               user_level_accountant_->get_epsilon());
     }
     if (adaptive_clip_controller_ != nullptr) {
-        check_reactive_budget("clipping", config_.adaptive_clipping.epsilon_budget,
+        check_reactive_budget("clipping",
+                              config_.adaptive_clipping.epsilon_budget,
                               adaptive_clip_controller_->epsilon());
     }
 
@@ -1112,8 +1117,7 @@ void RunInstance::finalize_round(double now_unix_s) {
     if (current_round_id_ >= config_.max_rounds || privacy_budget_stop || privacy_budget_fail) {
         const auto terminal_state =
             privacy_budget_fail ? fl::core::RunState::kFailed : fl::core::RunState::kCompleted;
-        const std::string reason = privacy_budget_fail
-                                       ? "privacy budget exceeded"
+        const std::string reason = privacy_budget_fail ? "privacy budget exceeded"
                                    : privacy_budget_stop
                                        ? "privacy budget policy stopped the run after this round"
                                        : "max_rounds reached";
@@ -1143,17 +1147,47 @@ double RunInstance::project_user_level_epsilon_after_one_more_step() const {
     return user_level_accountant_->project_epsilon(1);
 }
 
-bool RunInstance::apply_secure_aggregate_and_advance(std::uint64_t round_id,
-                                                      const fl::core::AggregationResult& aggregate,
-                                                      double now_unix_s) {
+double RunInstance::current_adaptive_clip_bound() const {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (adaptive_clip_controller_ == nullptr) {
+        throw std::logic_error(
+            "current_adaptive_clip_bound: this run has no adaptive clip controller -- callers "
+            "must check secure_adaptive_clipping_active() first");
+    }
+    return adaptive_clip_controller_->clip_value();
+}
+
+std::uint64_t RunInstance::adaptive_clip_state_step_count() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (adaptive_clip_controller_ == nullptr) {
+        throw std::logic_error(
+            "adaptive_clip_state_step_count: this run has no adaptive clip controller -- callers "
+            "must check secure_adaptive_clipping_active() first");
+    }
+    return adaptive_clip_controller_->steps();
+}
+
+bool RunInstance::apply_secure_aggregate_and_advance(
+    std::uint64_t round_id,
+    const fl::core::AggregationResult& aggregate,
+    double now_unix_s,
+    std::optional<std::uint64_t> indicator_over_threshold_count) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (adaptive_clip_controller_ != nullptr && !indicator_over_threshold_count.has_value()) {
+        throw std::logic_error(
+            "apply_secure_aggregate_and_advance: this run has adaptive clipping active but no "
+            "indicator_over_threshold_count was supplied -- the caller must always reconstruct "
+            "and pass the indicator count when adaptive clipping is active, never silently skip "
+            "the clip-state update");
+    }
 
     // Safe no-op, not an error: a duplicate SubmitMaskedClientUpdate
     // RPC retry (Work Area O) that arrives after this round has
     // already advanced (or targets a round that is no longer current)
     // must never re-apply -- Work Area AC's finalization-idempotency
     // requirement.
-    if (round_id != current_round_id_ || state_machine_.state() != fl::core::RunState::kWaitingForClients) {
+    if (round_id != current_round_id_ ||
+        state_machine_.state() != fl::core::RunState::kWaitingForClients) {
         return false;
     }
 
@@ -1167,8 +1201,8 @@ bool RunInstance::apply_secure_aggregate_and_advance(std::uint64_t round_id,
             // left unchanged this round, not an error on its own.
             continue;
         }
-        global_model_.assign(
-            fl::core::add(global_model_.at(descriptor.name), aggregate.model_delta.at(descriptor.name)));
+        global_model_.assign(fl::core::add(global_model_.at(descriptor.name),
+                                           aggregate.model_delta.at(descriptor.name)));
     }
 
     model_version_ = "v" + std::to_string(current_round_id_);
@@ -1187,6 +1221,17 @@ bool RunInstance::apply_secure_aggregate_and_advance(std::uint64_t round_id,
     // itself was already added inside finalize() -- this block only
     // commits the accounting and ledger record for a step that already
     // happened to the model.
+    // Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: the bound THIS secure round actually used is the adaptive
+    // controller's current (pre-step) value when adaptive clipping is
+    // active for this run -- config_.user_level_privacy.initial_clipping_bound
+    // was a real, latent bug for the secure path (it would have
+    // recorded the wrong bound in the ledger and, before this slice,
+    // was simply never reachable since AcquireTask unconditionally
+    // rejected adaptive clipping under secure aggregation).
+    const double model_mechanism_clip_bound =
+        adaptive_clip_controller_ != nullptr ? adaptive_clip_controller_->clip_value()
+                                             : config_.user_level_privacy.initial_clipping_bound;
     if ((config_.privacy_mode == fl::core::PrivacyMode::kUserLevelDp ||
          config_.privacy_mode == fl::core::PrivacyMode::kHybridDp) &&
         user_level_accountant_ != nullptr) {
@@ -1197,13 +1242,35 @@ bool RunInstance::apply_secure_aggregate_and_advance(std::uint64_t round_id,
         entry.epsilon = user_level_accountant_->get_epsilon();
         entry.delta = config_.user_level_privacy.target_delta;
         entry.noise_multiplier = config_.user_level_privacy.noise_multiplier;
-        entry.clipping_bound = config_.user_level_privacy.initial_clipping_bound;
+        entry.clipping_bound = model_mechanism_clip_bound;
         entry.num_clients = static_cast<std::uint32_t>(current_cohort_.size());
         entry.committed_at_unix_s = now_unix_s;
         user_level_ledger_.push_back(std::move(entry));
+
+        // One atomic transaction with the model mechanism's commit
+        // above -- see docs/secure-adaptive-clipping-semantics.md
+        // section 18. indicator_over_threshold_count is guaranteed
+        // present here (checked at function entry above whenever
+        // adaptive_clip_controller_ != nullptr).
+        if (adaptive_clip_controller_ != nullptr) {
+            const auto clip_result =
+                adaptive_clip_controller_->step(*indicator_over_threshold_count,
+                                                static_cast<std::uint64_t>(current_cohort_.size()));
+            AdaptiveClippingLedgerEntry clip_entry;
+            clip_entry.run_id = config_.run_id;
+            clip_entry.round_id = current_round_id_;
+            clip_entry.epsilon = clip_result.epsilon;
+            clip_entry.delta = clip_result.delta;
+            clip_entry.clip_value = model_mechanism_clip_bound;
+            clip_entry.noisy_over_threshold_fraction = clip_result.noisy_over_threshold_fraction;
+            adaptive_clipping_ledger_.push_back(std::move(clip_entry));
+        }
     }
     emit(CoordinatorEventType::kAggregationCompleted, "", now_unix_s);
-    emit(CoordinatorEventType::kModelVersionUpdated, "", now_unix_s, {{"model_version", model_version_}});
+    emit(CoordinatorEventType::kModelVersionUpdated,
+         "",
+         now_unix_s,
+         {{"model_version", model_version_}});
 
     transition(fl::core::RunState::kCheckpointing, "", now_unix_s);
     if (current_round_id_ >= config_.max_rounds) {
@@ -1443,9 +1510,9 @@ bool RunInstance::cancel_lease_for_worker(const std::string& worker_id,
     active_leases_.erase(*canceled_client_id);
     worker_registry_->clear_current_task(worker_id);
     emit(CoordinatorEventType::kTaskCanceledByRevocation,
-        reason,
-        now_unix_s,
-        {{"client_id", *canceled_client_id}, {"worker_id", worker_id}});
+         reason,
+         now_unix_s,
+         {{"client_id", *canceled_client_id}, {"worker_id", worker_id}});
     save_checkpoint(now_unix_s);
     return true;
 }

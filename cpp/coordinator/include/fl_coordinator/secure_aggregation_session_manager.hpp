@@ -39,10 +39,10 @@
 // Tier 2 scope. It is real, tested, callable, in-process orchestration
 // logic, not yet reachable over a live gRPC connection.
 
-#include "fl_core/aggregation.hpp"
-#include "fl_core/privacy.hpp"
 #include "fl_coordinator/secure_aggregation_session.hpp"
 #include "fl_coordinator/secure_aggregation_session_store.hpp"
+#include "fl_core/aggregation.hpp"
+#include "fl_core/privacy.hpp"
 
 #include "coordinator/coordinator.pb.h"
 #include "worker/worker.pb.h"
@@ -111,7 +111,8 @@ class SecureAggregationSessionManager {
     // empty. Transitions KEY_ADVERTISEMENT -> COHORT_FROZEN. Throws if
     // the cohort is incomplete or the session is in the wrong state.
     [[nodiscard]] fl::coordinator::v1::FrozenCohortRoster freeze_cohort(
-        const std::string& session_id, double now_unix_s,
+        const std::string& session_id,
+        double now_unix_s,
         const CoordinatorSigningIdentity* signing_identity = nullptr);
 
     // Work Package O (the validation subset expressible without a live
@@ -186,17 +187,41 @@ class SecureAggregationSessionManager {
     // defect; does not and cannot catch a worker that maliciously
     // reports a different weight while masking correctly -- disclosed,
     // not claimed otherwise.
-    [[nodiscard]] fl::core::AggregationResult finalize(const std::string& session_id, double now_unix_s,
-                                                        fl::core::NoiseProvider* noise_provider = nullptr,
-                                                        double noise_std_dev = 0.0,
-                                                        double expected_weight_sum = 0.0);
+    [[nodiscard]] fl::core::AggregationResult finalize(
+        const std::string& session_id,
+        double now_unix_s,
+        fl::core::NoiseProvider* noise_provider = nullptr,
+        double noise_std_dev = 0.0,
+        double expected_weight_sum = 0.0);
+
+    // Secure Adaptive Clipping with Private Indicator Aggregation
+    // slice: a read-only sibling to finalize(), called by the caller
+    // BEFORE finalize() itself (while the session is still in
+    // MASKED_UPDATE_COLLECTION with the complete cohort's contributions
+    // present) -- see docs/secure-adaptive-clipping-semantics.md
+    // section 17. Sums every contribution's masked_clipping_indicator
+    // in the finite ring (pairwise masks cancel for a complete cohort,
+    // exactly like the tensor/weight sums finalize() itself decodes),
+    // then interprets the result directly as an unsigned count --
+    // deliberately NOT run through decode_value()'s fixed-point/
+    // scale-factor division, since the indicator was never fixed-point
+    // encoded in the first place (a raw {0,1} value cast directly into
+    // the ring, see the semantics doc section 14). Throws if the
+    // session is unknown, not in MASKED_UPDATE_COLLECTION, the cohort
+    // is incomplete, or the decoded count exceeds cohort_size (a
+    // real mask-cancellation failure or tampering -- never silently
+    // clamped). Never decodes or exposes an individual indicator; only
+    // the final aggregate count is ever returned.
+    [[nodiscard]] std::uint64_t decode_secure_adaptive_clipping_indicator_count(
+        const std::string& session_id) const;
 
     // Work Package R/S/W: any non-terminal session can be aborted, for
     // any specific reason (never SecureAggregationAbortReason
     // UNSPECIFIED). Throws if the session is unknown or already
     // terminal.
     [[nodiscard]] fl::coordinator::v1::SecureAggregationSessionStatus abort(
-        const std::string& session_id, fl::coordinator::v1::SecureAggregationAbortReason reason,
+        const std::string& session_id,
+        fl::coordinator::v1::SecureAggregationAbortReason reason,
         double now_unix_s);
 
     [[nodiscard]] std::optional<fl::coordinator::v1::SecureAggregationSessionStatus> find(
@@ -215,8 +240,10 @@ class SecureAggregationSessionManager {
     // "no binding" is an ordinary, expected outcome for the vast
     // majority of tasks (secure aggregation disabled, or this worker
     // not selected for this round's cohort).
-    [[nodiscard]] std::optional<fl::coordinator::v1::SecureAggregationTaskBinding> find_binding_for_participant(
-        const std::string& run_id, std::uint64_t round_id, const std::string& worker_id) const;
+    [[nodiscard]] std::optional<fl::coordinator::v1::SecureAggregationTaskBinding>
+    find_binding_for_participant(const std::string& run_id,
+                                 std::uint64_t round_id,
+                                 const std::string& worker_id) const;
 
     // Work item 3: true if a session (in any state, including already
     // frozen/completed/aborted) has ever been created for this exact
@@ -225,7 +252,8 @@ class SecureAggregationSessionManager {
     // already exists (successfully or not) -- a session is created at
     // most once per round, on the first AcquireTask call that round
     // sees.
-    [[nodiscard]] bool has_session_for_run_round(const std::string& run_id, std::uint64_t round_id) const;
+    [[nodiscard]] bool has_session_for_run_round(const std::string& run_id,
+                                                 std::uint64_t round_id) const;
 
     // Masked Update Runtime and No-Dropout Secure FedAvg Finalization
     // slice, Work Area P: the same lookup as has_session_for_run_round,
@@ -275,7 +303,8 @@ class SecureAggregationSessionManager {
     struct SessionRecord {
         fl::coordinator::v1::SecureAggregationSessionConfig config;
         CohortStateMachine state_machine{"uninitialized"};
-        std::map<std::string, fl::worker::v1::SecureAggregationKeyAdvertisement> advertisements_by_worker;
+        std::map<std::string, fl::worker::v1::SecureAggregationKeyAdvertisement>
+            advertisements_by_worker;
         fl::coordinator::v1::FrozenCohortRoster frozen_roster;
         bool frozen = false;
         std::map<std::string, fl::worker::v1::MaskedClientUpdate> contributions_by_worker;
@@ -305,7 +334,8 @@ class SecureAggregationSessionManager {
     // recursive by design, matching every other store in this
     // codebase's established convention of non-recursive locking).
     [[nodiscard]] SessionRecord& require_session(const std::string& session_id);
-    [[nodiscard]] fl::coordinator::v1::SecureAggregationSessionStatus status_of(const SessionRecord& record) const;
+    [[nodiscard]] fl::coordinator::v1::SecureAggregationSessionStatus status_of(
+        const SessionRecord& record) const;
     void persist_transition(const SessionRecord& record) const;
 };
 

@@ -41,8 +41,7 @@ PeerIdentity extract_peer_identity(const grpc::ServerContext& context) {
     // parameter is const because callers should never need (and must
     // never use) this to influence the connection, only to read what
     // already happened.
-    auto auth_context =
-        const_cast<grpc::ServerContext&>(context).auth_context();  // NOLINT
+    auto auth_context = const_cast<grpc::ServerContext&>(context).auth_context();  // NOLINT
     if (!auth_context || !auth_context->IsPeerAuthenticated()) {
         return identity;  // authenticated stays false -- no client cert presented/verified.
     }
@@ -59,14 +58,12 @@ PeerIdentity extract_peer_identity(const grpc::ServerContext& context) {
         identity.uri_sans.push_back(property_value_to_string(value));
     }
 
-    const auto common_name_values =
-        auth_context->FindPropertyValues(GRPC_X509_CN_PROPERTY_NAME);
+    const auto common_name_values = auth_context->FindPropertyValues(GRPC_X509_CN_PROPERTY_NAME);
     if (!common_name_values.empty()) {
         identity.subject_common_name = property_value_to_string(common_name_values.front());
     }
 
-    const auto pem_cert_values =
-        auth_context->FindPropertyValues(GRPC_X509_PEM_CERT_PROPERTY_NAME);
+    const auto pem_cert_values = auth_context->FindPropertyValues(GRPC_X509_PEM_CERT_PROPERTY_NAME);
     if (!pem_cert_values.empty()) {
         identity.certificate_fingerprint_sha256 =
             sha256_hex(property_value_to_string(pem_cert_values.front()));

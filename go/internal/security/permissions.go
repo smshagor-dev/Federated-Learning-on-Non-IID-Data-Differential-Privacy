@@ -57,6 +57,19 @@ const (
 	PermSecureUserDPRoundsRead Permission = "security.secure_user_dp.rounds.read"
 	PermSecureUserDPRoundRead  Permission = "security.secure_user_dp.round.detail"
 	PermSecureUserDPBudgetRead Permission = "security.secure_user_dp.budget.read"
+
+	PermResearchExperimentsRead     Permission = "research.experiments.read"
+	PermResearchExperimentsList     Permission = "research.experiments.list"
+	PermResearchExperimentsValidate Permission = "research.experiments.validate"
+	PermResearchExperimentsCreate   Permission = "research.experiments.create"
+	PermResearchExperimentsStart    Permission = "research.experiments.start"
+	PermResearchExperimentsCancel   Permission = "research.experiments.cancel"
+	PermResearchExperimentsRetry    Permission = "research.experiments.retry"
+	PermResearchRunsRead            Permission = "research.experiments.runs.read"
+	PermResearchMetricsRead         Permission = "research.experiments.metrics.read"
+	PermResearchEventsRead          Permission = "research.experiments.events.read"
+	PermResearchArtifactsRead       Permission = "research.experiments.artifacts.read"
+	PermResearchRuntimeHealthRead   Permission = "research.runtime.health.read"
 )
 
 // rolePermissions is the fixed, per-role default grant. ADMIN gets
@@ -75,6 +88,13 @@ var rolePermissions = map[auth.Role]map[Permission]bool{
 		PermOverviewRead: true, PermEventSourcesRead: true,
 		PermSecureUserDPStatusRead: true, PermSecureUserDPHealthRead: true,
 		PermSecureUserDPRoundsRead: true, PermSecureUserDPRoundRead: true, PermSecureUserDPBudgetRead: true,
+		PermResearchExperimentsRead: true, PermResearchExperimentsList: true,
+		PermResearchExperimentsValidate: true, PermResearchExperimentsCreate: true,
+		PermResearchExperimentsStart: true, PermResearchExperimentsCancel: true,
+		PermResearchExperimentsRetry: true,
+		PermResearchRunsRead:         true, PermResearchMetricsRead: true,
+		PermResearchEventsRead: true, PermResearchArtifactsRead: true,
+		PermResearchRuntimeHealthRead: true,
 	},
 	auth.RoleResearcher: {
 		PermTransportRead: true, PermTrustRead: true,
@@ -83,6 +103,12 @@ var rolePermissions = map[auth.Role]map[Permission]bool{
 		PermOverviewRead: true, PermEventSourcesRead: true,
 		PermSecureUserDPStatusRead: true, PermSecureUserDPHealthRead: true,
 		PermSecureUserDPRoundsRead: true, PermSecureUserDPRoundRead: true, PermSecureUserDPBudgetRead: true,
+		PermResearchExperimentsRead: true, PermResearchExperimentsList: true,
+		PermResearchExperimentsValidate: true, PermResearchExperimentsCreate: true,
+		PermResearchExperimentsStart: true, PermResearchExperimentsCancel: true,
+		PermResearchRunsRead: true, PermResearchMetricsRead: true,
+		PermResearchEventsRead: true, PermResearchArtifactsRead: true,
+		PermResearchRuntimeHealthRead: true,
 	},
 	auth.RoleViewer: {
 		PermTransportRead: true, PermTrustRead: true,
@@ -93,6 +119,10 @@ var rolePermissions = map[auth.Role]map[Permission]bool{
 		// detail (epsilon history) is withheld from VIEWER, same split
 		// as PermWorkerKeysRead being ADMIN/RESEARCHER-only.
 		PermSecureUserDPStatusRead: true, PermSecureUserDPHealthRead: true,
+		PermResearchExperimentsRead: true, PermResearchExperimentsList: true,
+		PermResearchRunsRead: true, PermResearchMetricsRead: true,
+		PermResearchEventsRead: true, PermResearchArtifactsRead: true,
+		PermResearchRuntimeHealthRead: true,
 	},
 	// auth.RoleService: intentionally absent (empty default) -- see
 	// HasScope for the explicit-scope escape hatch the specification
