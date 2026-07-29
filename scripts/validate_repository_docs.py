@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
@@ -39,12 +40,25 @@ def main() -> int:
         normalized = target.split("#", 1)[0]
         if not normalized:
             continue
-        candidate = (README.parent / normalized).resolve()
+        normalized = unquote(normalized)
+        line_match = re.match(r"^(.*?)(:\d+)?$", normalized)
+        path_target = line_match.group(1) if line_match else normalized
+        candidate = (README.parent / path_target).resolve()
         try:
             candidate.relative_to(ROOT.resolve())
         except ValueError:
-            errors.append(f"README link escapes repository root: {target}")
-            continue
+            marker = f"{ROOT.name}/"
+            if marker in path_target:
+                suffix = path_target.split(marker, 1)[1]
+                candidate = (ROOT / suffix).resolve()
+                try:
+                    candidate.relative_to(ROOT.resolve())
+                except ValueError:
+                    errors.append(f"README link escapes repository root: {target}")
+                    continue
+            else:
+                errors.append(f"README link escapes repository root: {target}")
+                continue
         if not candidate.exists():
             errors.append(f"README link target does not exist: {target}")
 

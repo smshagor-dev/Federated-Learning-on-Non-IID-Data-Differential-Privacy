@@ -19,6 +19,9 @@ prometheus_client>=0.20.0
 # Secure worker/coordinator gRPC path: tests and the optional real
 # GrpcCoordinatorClient runtime import grpc directly.
 grpcio>=1.76,<2
+# CI and local proto regeneration need grpc_tools.protoc for Python
+# message + service stub generation.
+grpcio-tools>=1.76,<2
 # Generated Python protobuf bindings import google.protobuf directly and
 # currently target protobuf 7.35.1.
 protobuf>=7.35.1,<8

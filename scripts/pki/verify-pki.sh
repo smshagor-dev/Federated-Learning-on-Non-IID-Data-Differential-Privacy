@@ -55,7 +55,7 @@ section() {
 }
 
 section "1. Generating temporary development CA at ${WORK_DIR}"
-if "${SCRIPT_DIR}/generate-dev-ca.sh" "${WORK_DIR}" >"${LOG_DIR}/ca.log" 2>&1; then
+if bash "${SCRIPT_DIR}/generate-dev-ca.sh" "${WORK_DIR}" >"${LOG_DIR}/ca.log" 2>&1; then
     pass "generate-dev-ca.sh succeeded"
 else
     fail "generate-dev-ca.sh failed"
@@ -70,10 +70,10 @@ else
 fi
 
 section "2. Issuing coordinator, go-api, and two worker certificates"
-"${SCRIPT_DIR}/issue-service-cert.sh" coordinator "${CA_DIR}" "${WORK_DIR}/services/coordinator" >"${LOG_DIR}/issue-coordinator.log" 2>&1
-"${SCRIPT_DIR}/issue-service-cert.sh" go-api "${CA_DIR}" "${WORK_DIR}/services/go-api" >"${LOG_DIR}/issue-go-api.log" 2>&1
-"${SCRIPT_DIR}/issue-worker-cert.sh" worker-1 "${CA_DIR}" "${WORK_DIR}/workers/worker-1" >"${LOG_DIR}/issue-worker-1.log" 2>&1
-"${SCRIPT_DIR}/issue-worker-cert.sh" worker-2 "${CA_DIR}" "${WORK_DIR}/workers/worker-2" >"${LOG_DIR}/issue-worker-2.log" 2>&1
+bash "${SCRIPT_DIR}/issue-service-cert.sh" coordinator "${CA_DIR}" "${WORK_DIR}/services/coordinator" >"${LOG_DIR}/issue-coordinator.log" 2>&1
+bash "${SCRIPT_DIR}/issue-service-cert.sh" go-api "${CA_DIR}" "${WORK_DIR}/services/go-api" >"${LOG_DIR}/issue-go-api.log" 2>&1
+bash "${SCRIPT_DIR}/issue-worker-cert.sh" worker-1 "${CA_DIR}" "${WORK_DIR}/workers/worker-1" >"${LOG_DIR}/issue-worker-1.log" 2>&1
+bash "${SCRIPT_DIR}/issue-worker-cert.sh" worker-2 "${CA_DIR}" "${WORK_DIR}/workers/worker-2" >"${LOG_DIR}/issue-worker-2.log" 2>&1
 
 COORD_CERT="${WORK_DIR}/services/coordinator/tls.cert.pem"
 GOAPI_CERT="${WORK_DIR}/services/go-api/tls.cert.pem"
@@ -117,7 +117,7 @@ for cert_path in "${COORD_CERT}" "${GOAPI_CERT}" "${WORKER1_CERT}" "${WORKER2_CE
 done
 
 section "5. Revoking worker-2 and regenerating the CRL"
-if "${SCRIPT_DIR}/revoke-cert.sh" "${WORKER2_CERT}" keyCompromise "${CA_DIR}" >"${LOG_DIR}/revoke.log" 2>&1; then
+if bash "${SCRIPT_DIR}/revoke-cert.sh" "${WORKER2_CERT}" keyCompromise "${CA_DIR}" >"${LOG_DIR}/revoke.log" 2>&1; then
     pass "revoke-cert.sh succeeded"
 else
     fail "revoke-cert.sh failed"

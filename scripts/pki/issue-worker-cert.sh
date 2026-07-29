@@ -10,4 +10,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER_ID="${1:?usage: issue-worker-cert.sh <worker-id> [ca_dir] [output_dir] [days]}"
 shift
 
-exec "${SCRIPT_DIR}/issue-service-cert.sh" "worker/${WORKER_ID}" "$@"
+exec bash "${SCRIPT_DIR}/issue-service-cert.sh" "worker/${WORKER_ID}" "$@"

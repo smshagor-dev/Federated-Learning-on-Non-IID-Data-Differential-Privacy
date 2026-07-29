@@ -187,6 +187,10 @@ jobs:
         run: python -m pip install -e "python[dev]"
       - name: Install legacy prototype requirements (torch, for compat tests)
         run: python -m pip install -r requirements.txt
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Generate protobuf bindings
+        run: bash scripts/generate_protos.sh generated
       - name: Build C++ core (needed for golden/compat parity tests)
         run: |
           cmake -S cpp -B build/cpp-debug -DCMAKE_BUILD_TYPE=Debug
@@ -210,9 +214,6 @@ jobs:
   # ------------------------------------------------------------------ #
   go:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: go
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -226,7 +227,16 @@ jobs:
           go-version: "1.25"
           cache: true
           cache-dependency-path: go/go.sum
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Install Go protobuf plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+      - name: Generate protobuf bindings
+        run: bash scripts/generate_protos.sh generated
       - name: gofmt check
+        working-directory: go
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
@@ -234,12 +244,16 @@ jobs:
             exit 1
           fi
       - name: go vet
+        working-directory: go
         run: go vet ./...
       - name: go test
+        working-directory: go
         run: go test ./...
       - name: go test -race
+        working-directory: go
         run: go test -race ./...
       - name: go build
+        working-directory: go
         run: go build ./...
 
   # ------------------------------------------------------------------ #
@@ -301,10 +315,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: docker compose config
-        run: docker compose config
+        run: docker compose -f infra/compose/docker-compose.dev.yml config
       - name: docker compose build
         continue-on-error: true  # optional: base-image pulls can be flaky/slow in CI
-        run: docker compose build api coordinator python-worker research-writer
+        run: docker compose -f infra/compose/docker-compose.dev.yml build api coordinator python-worker research-writer
 
   # ------------------------------------------------------------------ #
   # Security runtime validation (PR subset) -- Security Runtime

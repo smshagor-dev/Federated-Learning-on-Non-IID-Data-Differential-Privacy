@@ -16,6 +16,9 @@ dev = [
     # Worker-entrypoint wiring and gRPC compatibility tests import grpc
     # directly, so the dev extra must provide the runtime client package.
     "grpcio>=1.76,<2",
+    # Regeneration in CI and local validation uses grpc_tools.protoc to
+    # emit both Python message modules and gRPC service stubs.
+    "grpcio-tools>=1.76,<2",
     # Generated *_pb2.py modules import google.protobuf directly and the
     # checked-in gencode currently targets protobuf 7.35.1.
     "protobuf>=7.35.1,<8",

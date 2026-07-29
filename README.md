@@ -1,18 +1,12 @@
 # Federated Learning on Non-IID Data with Differential Privacy
 
-## 1. Project Title
-
 Federated Learning on Non-IID Data with Differential Privacy: a research-oriented desktop experiment system with auxiliary privacy, personalization, and secure aggregation subsystems.
-
-## 2. Abstract
 
 This repository studies federated optimization under heterogeneous client data distributions, emphasizing the interaction between non-IID partitioning, local optimization, server-side aggregation, and privacy mechanisms. The active root workflow is a desktop-first research application launched through `python main.py`, where a PySide6 dashboard manages experiments, writes runtime configuration snapshots, launches the federated simulator as a local child process, and visualizes metrics from real output artifacts. The active simulator implements GroupNorm-based image classification on MNIST and CIFAR-10, Dirichlet and pathological non-IID partitioning, local client training, sample-count-weighted FedAvg, FedProx, SCAFFOLD, client-level update clipping with Gaussian noise, RDP-based privacy accounting, and artifact generation for reproducibility. The repository also contains additional subsystem implementations for FedSAM, Ditto, Per-FedAvg, C++ FedOpt variants, sample-level Opacus accounting, adaptive clipping, and secure aggregation primitives, but those components are not all exercised by the current root desktop runtime. The platform is research-oriented, not production-certified.
 
-## 3. Research Motivation
-
 Centralized machine learning is often unsuitable when raw data cannot leave local devices or institutional boundaries, when medical or financial records are legally constrained, when clients differ substantially in label distributions and sample counts, and when communication or compute resources are unevenly distributed. Federated learning addresses data locality, but under non-IID conditions it introduces slower convergence, client drift, unstable aggregation, and sensitivity to optimizer choice. Privacy mechanisms improve disclosure resistance, but clipping and Gaussian perturbation impose a measurable privacy-utility trade-off. This repository is organized around those tensions rather than around a generic software deployment story.
 
-## 4. Research Problem
+## 4. Problem Formulation
 
 Assume \(K\) federated clients. Client \(k\) owns local data
 
@@ -38,11 +32,11 @@ The global objective is
 F(w) = \sum_{k=1}^{K} p_k F_k(w), \qquad p_k = \frac{n_k}{N}.
 \]
 
-Variables:
+Core symbols:
 
 - \(w\): global model parameters.
-- \(F_k\): client-local empirical risk.
-- \(F\): weighted federated objective.
+- \(F_k(w)\): client-local empirical risk.
+- \(F(w)\): weighted federated objective.
 - \(n_k\): client sample count.
 - \(N\): total sample count.
 - \(p_k\): sample-proportional aggregation weight.
@@ -63,7 +57,7 @@ In the active root simulator, this objective is approximated by repeated communi
 
 - How does stronger non-IID heterogeneity alter convergence and final accuracy?
 - When does FedProx reduce instability relative to FedAvg?
-- How does SCAFFOLD’s control-variate correction change drift behavior?
+- How does SCAFFOLD's control-variate correction change drift behavior?
 - What utility cost is induced by client-level update clipping and Gaussian noise?
 - Which metrics in the current codebase are global-only versus client-heterogeneity diagnostics?
 - Which algorithms and privacy mechanisms are active in the root desktop workflow, and which exist only in auxiliary subsystems?
@@ -73,7 +67,7 @@ In the active root simulator, this objective is approximated by repeated communi
 - A root federated simulator for MNIST/CIFAR-10 with real non-IID partitioning, real local optimization, and artifact generation.
 - A modular PySide6 desktop shell that manages experiments locally through `QProcess`.
 - Exact code paths for weighted FedAvg, FedProx, and SCAFFOLD.
-- A client-level RDP moments accountant implemented in [federated/dp_accountant.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/dp_accountant.py:1).
+- A client-level RDP moments accountant implemented in [federated/dp_accountant.py](federated/dp_accountant.py:1).
 - Auxiliary implementations for FedSAM, Ditto, Per-FedAvg, Opacus-backed sample-level DP, adaptive clipping, fairness metrics, and secure aggregation primitives under `python/src/fl_platform/` and `cpp/`.
 
 ## 8. System Scope
@@ -82,13 +76,13 @@ The repository contains multiple layers. They are not all part of the same activ
 
 ### Active root workflow
 
-- Entry point: [main.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/main.py:1)
-- Core runtime: [experiment_runtime.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/experiment_runtime.py:1)
-- Local training: [federated/client.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/client.py:1)
-- Aggregation: [federated/server.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/server.py:1)
-- Partitioning: [data/partitioner.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/data/partitioner.py:1)
-- Metrics and plots: [utils/metrics.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/utils/metrics.py:1), [utils/logger.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/utils/logger.py:1)
-- Desktop UI: [desktop/](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/desktop)
+- Entry point: [main.py](main.py:1)
+- Core runtime: [experiment_runtime.py](experiment_runtime.py:1)
+- Local training: [federated/client.py](federated/client.py:1)
+- Aggregation: [federated/server.py](federated/server.py:1)
+- Partitioning: [data/partitioner.py](data/partitioner.py:1)
+- Metrics and plots: [utils/metrics.py](utils/metrics.py:1), [utils/logger.py](utils/logger.py:1)
+- Desktop UI: [desktop/](desktop)
 
 ### Auxiliary subsystem scope
 
@@ -137,13 +131,25 @@ At round \(t\), the server model is \(w_t\). A cohort \(S_t \subseteq \{1,\dots,
 \Delta_k = w_{t,E}^{k} - w_t.
 \]
 
+Each selected client is initialized from the current global model:
+
+\[
+w_{t,0}^{k} = w_t.
+\]
+
+Ignoring optional FedProx and SCAFFOLD corrections, the local SGD update is
+
+\[
+w_{t,e+1}^{k} = w_{t,e}^{k} - \eta \nabla \ell(w_{t,e}^{k}; B_e).
+\]
+
 The active root runtime uses:
 
 - sample-count-weighted averaging for `fedavg`,
 - the same server aggregation for `fedprox`,
 - uniform cohort averaging plus control-variate updates for `scaffold`.
 
-The server-side global update is implemented in [federated/server.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/server.py:1) by `Server.aggregate`, `Server._aggregate_weighted`, and `Server._aggregate_scaffold`.
+The server-side global update is implemented in [federated/server.py](federated/server.py:1) by `Server.aggregate`, `Server._aggregate_weighted`, and `Server._aggregate_scaffold`.
 
 ## 11. Non-IID Data Modeling
 
@@ -159,19 +165,7 @@ The server-side global update is implemented in [federated/server.py](/E:/Final%
 
 ## 12. Local Client Optimization
 
-Each selected client starts from
-
-\[
-w_{t,0}^{k} = w_t.
-\]
-
-Ignoring optional FedProx and SCAFFOLD corrections, the local update is standard SGD:
-
-\[
-w_{t,e+1}^{k} = w_{t,e}^{k} - \eta \nabla \ell(w_{t,e}^{k}; B_e).
-\]
-
-In the active root simulator this loop is implemented in `Client.train` in [federated/client.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/client.py:1). Local clients are simulated sequentially inside one Python process, not concurrently across devices.
+In the active root simulator this loop is implemented in `Client.train` in [federated/client.py](federated/client.py:1). Local clients are simulated sequentially inside one Python process, not concurrently across devices.
 
 ## 13. Federated Aggregation Algorithms
 
@@ -211,7 +205,7 @@ This is implemented in `Server._aggregate_scaffold`.
 
 ### Auxiliary FedOpt implementations in the repository
 
-The C++ aggregation core includes FedAdagrad, FedAdam, and FedYogi in [cpp/core/src/aggregation.cpp](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/cpp/core/src/aggregation.cpp:1), but those server optimizers are not exercised by the current root desktop runtime.
+The C++ aggregation core includes FedAdagrad, FedAdam, and FedYogi in [cpp/core/src/aggregation.cpp](cpp/core/src/aggregation.cpp:1), but those server optimizers are not exercised by the current root desktop runtime.
 
 ## 14. Differential Privacy Mathematics
 
@@ -233,7 +227,7 @@ Interpretation:
 
 ### Active root runtime
 
-The active root runtime uses a client-level RDP moments accountant in [federated/dp_accountant.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/dp_accountant.py:1). One communication round is treated as one step of a subsampled Gaussian mechanism at client level. The accountant uses:
+The active root runtime uses a client-level RDP moments accountant in [federated/dp_accountant.py](federated/dp_accountant.py:1). One communication round is treated as one step of a subsampled Gaussian mechanism at client level. The accountant uses:
 
 \[
 \epsilon(\delta) = \min_{\alpha} \left[T \cdot \epsilon_{\mathrm{RDP}}(\alpha) + \frac{\log(1/\delta)}{\alpha-1}\right].
@@ -253,7 +247,7 @@ Those are equal only up to rounding.
 
 The auxiliary `fl_platform` package contains:
 
-- `SampleLevelAccountant` in [python/src/fl_platform/privacy/accounting.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/privacy/accounting.py:1), which wraps Opacus for per-sample accounting.
+- `SampleLevelAccountant` in [python/src/fl_platform/privacy/accounting.py](python/src/fl_platform/privacy/accounting.py:1), which wraps Opacus for per-sample accounting.
 - `UserLevelAccountant`, which reuses the root moments accountant for client-level privacy.
 - `AdaptiveClippingAccountant` for privatized clipping-statistic accounting.
 
@@ -261,7 +255,7 @@ The auxiliary `fl_platform` package contains:
 
 Secure aggregation is **not part of the active root desktop runtime**. The repository does contain experimental secure aggregation primitives in `python/src/fl_platform/secure_aggregation/` and related C++ components.
 
-The inspected pairwise-masking rule in [python/src/fl_platform/secure_aggregation/pairwise_mask.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/secure_aggregation/pairwise_mask.py:1) is ring-based additive masking:
+The inspected pairwise-masking rule in [python/src/fl_platform/secure_aggregation/pairwise_mask.py](python/src/fl_platform/secure_aggregation/pairwise_mask.py:1) is ring-based additive masking:
 
 \[
 \widetilde{x}_k = x_k + \sum_{j>k} r_{k,j} - \sum_{j<k} r_{j,k} \pmod{2^{64}}.
@@ -287,7 +281,7 @@ Personalization is **not part of the active root desktop runtime**, but auxiliar
 
 ### Ditto
 
-The personalized objective implemented in [python/src/fl_platform/algorithms/ditto.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/algorithms/ditto.py:1) is
+The personalized objective implemented in [python/src/fl_platform/algorithms/ditto.py](python/src/fl_platform/algorithms/ditto.py:1) is
 
 \[
 \min_{v_k} F_k(v_k) + \frac{\lambda}{2}\|v_k - w\|_2^2.
@@ -297,7 +291,7 @@ The global-training model still submits a FedAvg-shaped delta; the personalized 
 
 ### Per-FedAvg
 
-The first-order Per-FedAvg implementation in [python/src/fl_platform/algorithms/per_fedavg.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/algorithms/per_fedavg.py:1) performs support-set adaptation followed by query-loss meta-updates:
+The first-order Per-FedAvg implementation in [python/src/fl_platform/algorithms/per_fedavg.py](python/src/fl_platform/algorithms/per_fedavg.py:1) performs support-set adaptation followed by query-loss meta-updates:
 
 \[
 w' = w - \alpha \nabla F_k^{\text{support}}(w),
@@ -339,7 +333,7 @@ The active root runtime exposes heterogeneity diagnostics but not a full fairnes
 
 ### Auxiliary fairness metrics
 
-The personalization subsystem in [python/src/fl_platform/personalization/metrics.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/personalization/metrics.py:1) implements:
+The personalization subsystem in [python/src/fl_platform/personalization/metrics.py](python/src/fl_platform/personalization/metrics.py:1) implements:
 
 - worst-client accuracy,
 - best-client accuracy,
@@ -464,13 +458,13 @@ sequenceDiagram
 
 The desktop architecture is intentionally thin:
 
-- [main.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/main.py:1): lazy-selects GUI or CLI.
-- [desktop/app.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/desktop/app.py:1): builds paths, applies theme, creates `QApplication`, controller, and main window.
-- [desktop/main_window.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/desktop/main_window.py:1): left navigation, `QStackedWidget`, periodic refresh.
-- [desktop/controllers/runtime_controller.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/desktop/controllers/runtime_controller.py:1): orchestration across config, results, DB, and subprocess control.
-- [desktop/services/experiment_service.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/desktop/services/experiment_service.py:1): `QProcess` wrapper.
-- [desktop/services/results_service.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/desktop/services/results_service.py:1): filesystem-backed metric/artifact loading.
-- [desktop/services/database_service.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/desktop/services/database_service.py:1): SQLite run-history persistence.
+- [main.py](main.py:1): lazy-selects GUI or CLI.
+- [desktop/app.py](desktop/app.py:1): builds paths, applies theme, creates `QApplication`, controller, and main window.
+- [desktop/main_window.py](desktop/main_window.py:1): left navigation, `QStackedWidget`, periodic refresh.
+- [desktop/controllers/runtime_controller.py](desktop/controllers/runtime_controller.py:1): orchestration across config, results, DB, and subprocess control.
+- [desktop/services/experiment_service.py](desktop/services/experiment_service.py:1): `QProcess` wrapper.
+- [desktop/services/results_service.py](desktop/services/results_service.py:1): filesystem-backed metric/artifact loading.
+- [desktop/services/database_service.py](desktop/services/database_service.py:1): SQLite run-history persistence.
 
 ```mermaid
 flowchart LR
@@ -529,7 +523,7 @@ The current desktop app persists run history only in SQLite.
 ### Implemented database
 
 - Path builder: `desktop/app.py`
-- Schema: [desktop/database/schema.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/desktop/database/schema.py:1)
+- Schema: [desktop/database/schema.py](desktop/database/schema.py:1)
 - Access layer: `DatabaseService`
 
 ```mermaid
@@ -601,7 +595,7 @@ docs/
 
 ## 29. Configuration Reference
 
-Defaults are read from [config.yaml](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/config.yaml:1).
+Defaults are read from [config.yaml](config.yaml:1).
 
 | Configuration | Type | Default | Valid Range | Mathematical Role |
 |---|---|---:|---|---|
@@ -662,7 +656,7 @@ If `PySide6` is missing, `python main.py` exits with an explicit dependency mess
 
 The active root runtime includes the following reproducibility controls:
 
-- `set_seed` in [experiment_runtime.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/experiment_runtime.py:1) seeds `random`, `numpy`, `torch`, and CUDA generators.
+- `set_seed` in [experiment_runtime.py](experiment_runtime.py:1) seeds `random`, `numpy`, `torch`, and CUDA generators.
 - `torch.backends.cudnn.deterministic = True`
 - `torch.backends.cudnn.benchmark = False`
 - the same seed is reused for partition generation and algorithm comparisons,
@@ -794,24 +788,24 @@ Those should be treated as subsystem implementations, not as automatic guarantee
 
 | Mathematical Concept | Equation / Definition | Source File | Function / Class | Responsibility |
 |---|---|---|---|---|
-| Global objective | \(F(w)=\sum_k p_k F_k(w)\) | [experiment_runtime.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/experiment_runtime.py:1) | `run_experiment` | Orchestrates the weighted federated experiment loop |
-| Client local training | \(w_{t,e+1}^k = w_{t,e}^k - \eta \nabla \ell\) | [federated/client.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/client.py:1) | `Client.train` | Local SGD and algorithm-specific corrections |
-| FedAvg server step | \(\sum_k \frac{n_k}{\sum_j n_j}\Delta_k\) | [federated/server.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/server.py:1) | `Server._aggregate_weighted` | Sample-count-weighted delta averaging |
-| FedProx proximal loss | \(F_k(w)+\frac{\mu}{2}\|w-w_t\|_2^2\) | [federated/client.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/client.py:1) | `Client.train` | Adds proximal penalty locally |
-| SCAFFOLD correction | \(g \leftarrow g + c - c_k\) | [federated/client.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/client.py:1) | `Client.train` | Applies control-variate correction before optimizer step |
-| SCAFFOLD control update | \(c_k^+ = c_k - c - \Delta_k/(K\eta)\) | [federated/client.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/client.py:1) | `Client.train` | Updates per-client control state |
-| Dirichlet non-IID partition | \(\pi_c \sim \mathrm{Dirichlet}(\alpha \mathbf{1})\) | [data/partitioner.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/data/partitioner.py:1) | `partition_dirichlet` | Generates label-skew client splits |
-| Pathological partition | shard-based restricted-class split | [data/partitioner.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/data/partitioner.py:1) | `partition_pathological` | Generates few-classes-per-client splits |
-| Update clipping and Gaussian noise | \(\bar{\Delta}_k = \Delta_k \min(1,C/\|\Delta_k\|_2)\), then add \( \mathcal{N}(0,\sigma^2 C^2 I)\) | [federated/client.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/client.py:1) | `Client.train` | Bounds and privatizes transmitted client delta |
-| Client-level accountant | \(\epsilon=\mathcal{A}(q,\sigma,T,\delta)\) | [federated/dp_accountant.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/federated/dp_accountant.py:1) | `MomentsAccountant` | Tracks cumulative client-level privacy |
-| Global loss / accuracy | cross-entropy and top-1 accuracy | [utils/metrics.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/utils/metrics.py:1) | `evaluate_global` | Global held-out evaluation |
-| Client drift | \(\frac{1}{m}\sum_i \|\Delta_i-\bar{\Delta}\|_2\) | [utils/metrics.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/utils/metrics.py:1) | `compute_client_drift` | Update-divergence diagnostic |
-| Weight variance | mean coordinate-wise variance across local states | [utils/metrics.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/utils/metrics.py:1) | `compute_weight_variance` | Local-state disagreement diagnostic |
-| FedSAM perturbation | \(\epsilon(w)=\rho g/(\|g\|_2+\xi)\) | [python/src/fl_platform/algorithms/fedsam.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/algorithms/fedsam.py:1) | `FedSamAlgorithm.train` | Auxiliary sharpness-aware local training |
-| Ditto personalized objective | \(F_k(v_k)+\frac{\lambda}{2}\|v_k-w\|_2^2\) | [python/src/fl_platform/algorithms/ditto.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/algorithms/ditto.py:1) | `DittoAlgorithm.train` | Auxiliary personalized local training |
-| Per-FedAvg first-order meta-step | support/query adaptation and outer step | [python/src/fl_platform/algorithms/per_fedavg.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/algorithms/per_fedavg.py:1) | `PerFedAvgAlgorithm.train` | Auxiliary first-order meta-learning |
-| FedAdam / FedAdagrad / FedYogi | moment-based server updates | [cpp/core/src/aggregation.cpp](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/cpp/core/src/aggregation.cpp:1) | `FedAdamOptimizer`, `FedAdagradOptimizer`, `FedYogiOptimizer` | Auxiliary C++ server optimizers |
-| Pairwise mask cancellation | additive mask cancellation in \(2^{64}\) ring | [python/src/fl_platform/secure_aggregation/pairwise_mask.py](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/python/src/fl_platform/secure_aggregation/pairwise_mask.py:1) | `resolve_pairwise_mask_sign`, `mask_encoded_value` | Auxiliary secure aggregation primitive |
+| Global objective | \(F(w)=\sum_k p_k F_k(w)\) | [experiment_runtime.py](experiment_runtime.py:1) | `run_experiment` | Orchestrates the weighted federated experiment loop |
+| Client local training | \(w_{t,e+1}^k = w_{t,e}^k - \eta \nabla \ell\) | [federated/client.py](federated/client.py:1) | `Client.train` | Local SGD and algorithm-specific corrections |
+| FedAvg server step | \(\sum_k \frac{n_k}{\sum_j n_j}\Delta_k\) | [federated/server.py](federated/server.py:1) | `Server._aggregate_weighted` | Sample-count-weighted delta averaging |
+| FedProx proximal loss | \(F_k(w)+\frac{\mu}{2}\|w-w_t\|_2^2\) | [federated/client.py](federated/client.py:1) | `Client.train` | Adds proximal penalty locally |
+| SCAFFOLD correction | \(g \leftarrow g + c - c_k\) | [federated/client.py](federated/client.py:1) | `Client.train` | Applies control-variate correction before optimizer step |
+| SCAFFOLD control update | \(c_k^+ = c_k - c - \Delta_k/(K\eta)\) | [federated/client.py](federated/client.py:1) | `Client.train` | Updates per-client control state |
+| Dirichlet non-IID partition | \(\pi_c \sim \mathrm{Dirichlet}(\alpha \mathbf{1})\) | [data/partitioner.py](data/partitioner.py:1) | `partition_dirichlet` | Generates label-skew client splits |
+| Pathological partition | shard-based restricted-class split | [data/partitioner.py](data/partitioner.py:1) | `partition_pathological` | Generates few-classes-per-client splits |
+| Update clipping and Gaussian noise | \(\bar{\Delta}_k = \Delta_k \min(1,C/\|\Delta_k\|_2)\), then add \( \mathcal{N}(0,\sigma^2 C^2 I)\) | [federated/client.py](federated/client.py:1) | `Client.train` | Bounds and privatizes transmitted client delta |
+| Client-level accountant | \(\epsilon=\mathcal{A}(q,\sigma,T,\delta)\) | [federated/dp_accountant.py](federated/dp_accountant.py:1) | `MomentsAccountant` | Tracks cumulative client-level privacy |
+| Global loss / accuracy | cross-entropy and top-1 accuracy | [utils/metrics.py](utils/metrics.py:1) | `evaluate_global` | Global held-out evaluation |
+| Client drift | \(\frac{1}{m}\sum_i \|\Delta_i-\bar{\Delta}\|_2\) | [utils/metrics.py](utils/metrics.py:1) | `compute_client_drift` | Update-divergence diagnostic |
+| Weight variance | mean coordinate-wise variance across local states | [utils/metrics.py](utils/metrics.py:1) | `compute_weight_variance` | Local-state disagreement diagnostic |
+| FedSAM perturbation | \(\epsilon(w)=\rho g/(\|g\|_2+\xi)\) | [python/src/fl_platform/algorithms/fedsam.py](python/src/fl_platform/algorithms/fedsam.py:1) | `FedSamAlgorithm.train` | Auxiliary sharpness-aware local training |
+| Ditto personalized objective | \(F_k(v_k)+\frac{\lambda}{2}\|v_k-w\|_2^2\) | [python/src/fl_platform/algorithms/ditto.py](python/src/fl_platform/algorithms/ditto.py:1) | `DittoAlgorithm.train` | Auxiliary personalized local training |
+| Per-FedAvg first-order meta-step | support/query adaptation and outer step | [python/src/fl_platform/algorithms/per_fedavg.py](python/src/fl_platform/algorithms/per_fedavg.py:1) | `PerFedAvgAlgorithm.train` | Auxiliary first-order meta-learning |
+| FedAdam / FedAdagrad / FedYogi | moment-based server updates | [cpp/core/src/aggregation.cpp](cpp/core/src/aggregation.cpp:1) | `FedAdamOptimizer`, `FedAdagradOptimizer`, `FedYogiOptimizer` | Auxiliary C++ server optimizers |
+| Pairwise mask cancellation | additive mask cancellation in \(2^{64}\) ring | [python/src/fl_platform/secure_aggregation/pairwise_mask.py](python/src/fl_platform/secure_aggregation/pairwise_mask.py:1) | `resolve_pairwise_mask_sign`, `mask_encoded_value` | Auxiliary secure aggregation primitive |
 
 ## 38. Citation
 
@@ -831,4 +825,5 @@ Example BibTeX template:
 
 ## 39. License
 
-This repository is licensed under the Apache License 2.0. See [LICENSE](/E:/Final%20Project/Federated%20Learning%20on%20Non-IID%20Data%20&%20Differential%20Privacy/federated_dp_research/LICENSE:1).
+This repository is licensed under the Apache License 2.0. See [LICENSE](LICENSE:1).
+

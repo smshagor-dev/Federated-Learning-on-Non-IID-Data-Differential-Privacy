@@ -13,7 +13,7 @@ pki-verify:
 
 proto:
 	$(PYTHON) scripts/verify_proto_contracts.py
-	@if command -v protoc >/dev/null 2>&1; then scripts/generate_protos.sh generated; else echo "protoc unavailable; generation skipped after compatibility verification"; fi
+	@if command -v protoc >/dev/null 2>&1; then bash scripts/generate_protos.sh generated; else echo "protoc unavailable; generation skipped after compatibility verification"; fi
 
 proto-check:
 	$(PYTHON) scripts/verify_proto_contracts.py
