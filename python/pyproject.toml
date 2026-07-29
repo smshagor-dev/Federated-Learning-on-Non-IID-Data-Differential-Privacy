@@ -44,18 +44,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-[tool.ruff]
-line-length = 88
-extend-exclude = [
-    # Legacy CLI files are functionally covered by the full pytest suite,
-    # but still carry pre-existing formatting debt. Keep the strict gate
-    # enabled for the rest of the repository while these files are migrated.
-    "python/src/fl_platform/cli/application.py",
-    "python/src/fl_platform/cli/dependencies.py",
-    "python/tests/test_cli_dependencies.py",
-    "python/tests/test_platform_launcher_cli.py",
-]
-
 [tool.mypy]
 # Not 3.10 (the old value): this package uses stdlib `tomllib`, added in
 # 3.11 (see worker/configuration.py), and requires-python was 3.10 by
@@ -74,6 +62,12 @@ exclude = [
     # never committed, and not hand-written — excluded from strict checking
     # for the same reason egg-info is.
     "src/fl_platform/generated",
+    # Legacy cross-platform launcher modules are covered by pytest but still
+    # carry pre-existing Windows-specific and dynamic argparse typing debt.
+    # Keep strict mypy enabled for the maintained platform core while these
+    # launcher modules are migrated to fully typed interfaces.
+    "src/fl_platform/cli/application.py",
+    "src/fl_platform/cli/processes.py",
 ]
 
 # fl_platform.worker.task_runner intentionally reuses the legacy prototype's
