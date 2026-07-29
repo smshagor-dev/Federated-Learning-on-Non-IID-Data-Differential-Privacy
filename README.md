@@ -6,10 +6,6 @@ A desktop-first federated learning research platform for studying heterogeneous 
 
 ## Documentation Status
 
-This README was regenerated from the implementation on the repository's `main` branch, reviewed at commit:
-
-```text
-f0d975fabe32fea96e330716e60bd24e9aef0409
 ```
 
 The document distinguishes four different kinds of claims:
@@ -328,9 +324,9 @@ The configuration validator requires `model.group_norm_groups` to:
 
 For every class $c$, the partitioner draws client proportions from
 
-$$ \boldsymbol{\pi}_c \sim \operatorname{Dirichlet}(\alpha\mathbf{1}_K). $$
+$$ \pi_c \sim \mathrm{Dirichlet}(\alpha\mathbf{1}_K). $$
 
-The shuffled samples of class $c$ are split according to $\boldsymbol{\pi}_c$ and assigned to the $K$ clients.
+The shuffled samples of class $c$ are split according to $\pi_c$ and assigned to the $K$ clients.
 
 Interpretation of $\alpha$:
 
@@ -347,9 +343,9 @@ The pathological partition follows a shard-based construction:
 1. Sort all training indices by label.
 2. Divide the sorted sequence into
 
-$$ K \times C_{\text{client}} $$
+$$ K \times C_{\mathrm{client}} $$
 
-shards, where $C_{\text{client}}$ is `classes_per_client`.
+shards, where $C_{\mathrm{client}}$ is `classes_per_client`.
 3. Randomly permute the shard identifiers.
 4. Give each client `classes_per_client` shards.
 
@@ -520,7 +516,7 @@ $$ \Pr(k\in S_t)=q. $$
 
 The realized cohort size is random:
 
-$$ m_t\sim\operatorname{Binomial}(K,q). $$
+$$ m_t\sim\mathrm{Binomial}(K,q). $$
 
 An empty cohort is possible. In that case the server performs no model update, but the round is still evaluated, logged, and counted by the current privacy accountant.
 
@@ -528,7 +524,7 @@ An empty cohort is possible. In that case the server performs no model update, b
 
 For `fixed_without_replacement`, the runtime computes
 
-$$ m=\operatorname{round}(qK) $$
+$$ m=\mathrm{round}(qK) $$
 
 and samples $m$ unique clients.
 
@@ -655,7 +651,7 @@ $$ \varepsilon_{\mathrm{RDP}}^{(T)}(\alpha) = T\varepsilon_{\mathrm{RDP}}^{(1)}(
 
 Conversion to an $(\epsilon,\delta)$ estimate is
 
-$$ \epsilon(\delta) = \min_{\alpha>1} \left[ \varepsilon_{\mathrm{RDP}}^{(T)}(\alpha) + \frac{\log(1/\delta)}{\alpha-1} \right]. $$
+$$ \epsilon(\delta) = \min_{\alpha \gt 1} \left[ \varepsilon_{\mathrm{RDP}}^{(T)}(\alpha) + \frac{\log(1/\delta)}{\alpha-1} \right]. $$
 
 The implementation searches integer orders:
 
@@ -709,7 +705,7 @@ $$ \hat{y}_i = \arg\max_c f_w(x_i)_c. $$
 
 Global test accuracy is
 
-$$ \operatorname{Acc}(w) = \frac{1}{N_{\mathrm{test}}} \sum_{i=1}^{N_{\mathrm{test}}} \mathbf{1}\!\left[\hat{y}_i=y_i\right]. $$
+$$ \mathrm{Acc}(w) = \frac{1}{N_{\mathrm{test}}} \sum_{i=1}^{N_{\mathrm{test}}} \mathbf{1}\!\left[\hat{y}_i=y_i\right]. $$
 
 The CSV field `test_acc` stores this value in the interval $[0,1]$. Plots and summaries convert it to a percentage.
 
@@ -717,7 +713,7 @@ The CSV field `test_acc` stores this value in the interval $[0,1]$. Plots and su
 
 The implementation calculates cross-entropy with `reduction="sum"` for each test batch, accumulates the total, and divides by the number of test examples:
 
-$$ \operatorname{TestLoss}(w) = \frac{1}{N_{\mathrm{test}}} \sum_{i=1}^{N_{\mathrm{test}}} \ell_{\mathrm{CE}}(w;x_i,y_i). $$
+$$ \mathrm{TestLoss}(w) = \frac{1}{N_{\mathrm{test}}} \sum_{i=1}^{N_{\mathrm{test}}} \ell_{\mathrm{CE}}(w;x_i,y_i). $$
 
 This is a per-example mean loss, not a mean of batch means.
 
@@ -735,7 +731,7 @@ $$ \bar{w}_{t,j} = \frac{1}{m_t} \sum_{k\in S_t}w_{t,j}^{k}. $$
 
 The implementation computes the population variance for each coordinate and then averages over all coordinates:
 
-$$ \operatorname{WeightVariance}_t = \frac{1}{P} \sum_{j=1}^{P} \left[ \frac{1}{m_t} \sum_{k\in S_t} \left(w_{t,j}^{k}-\bar{w}_{t,j}\right)^2 \right]. $$
+$$ \mathrm{WeightVariance}_t = \frac{1}{P} \sum_{j=1}^{P} \left[ \frac{1}{m_t} \sum_{k\in S_t} \left(w_{t,j}^{k}-\bar{w}_{t,j}\right)^2 \right]. $$
 
 This metric uses `ddof=0` and is unweighted by client sample count.
 
@@ -749,7 +745,7 @@ $$ \bar{\Delta}_t^{\mathrm{raw}} = \frac{1}{m_t} \sum_{k\in S_t} \Delta_k^{\math
 
 Raw client drift is
 
-$$ \operatorname{RawDrift}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{raw}} - \bar{\Delta}_t^{\mathrm{raw}} \right\rVert_2. $$
+$$ \mathrm{RawDrift}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{raw}} - \bar{\Delta}_t^{\mathrm{raw}} \right\rVert_2. $$
 
 It measures disagreement before privacy clipping.
 
@@ -761,13 +757,13 @@ $$ \bar{\Delta}_t^{\mathrm{clip}} = \frac{1}{m_t} \sum_{k\in S_t} \Delta_k^{\mat
 
 Clipped client drift is
 
-$$ \operatorname{ClippedDrift}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{clip}} - \bar{\Delta}_t^{\mathrm{clip}} \right\rVert_2. $$
+$$ \mathrm{ClippedDrift}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{clip}} - \bar{\Delta}_t^{\mathrm{clip}} \right\rVert_2. $$
 
 Comparing raw and clipped drift shows how much the privacy clipping operation compresses client disagreement.
 
 ### Mean unclipped update norm
 
-$$ \operatorname{MeanUpdateNorm}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{raw}} \right\rVert_2. $$
+$$ \mathrm{MeanUpdateNorm}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{raw}} \right\rVert_2. $$
 
 This indicates the typical client movement before privacy clipping.
 
@@ -775,7 +771,7 @@ This indicates the typical client movement before privacy clipping.
 
 For clipping factors $a_k$:
 
-$$ \operatorname{MeanClippingFactor}_t = \frac{1}{m_t} \sum_{k\in S_t}a_k. $$
+$$ \mathrm{MeanClippingFactor}_t = \frac{1}{m_t} \sum_{k\in S_t}a_k. $$
 
 Interpretation:
 
@@ -786,7 +782,7 @@ When DP is disabled, every stored clipping factor is `1.0`.
 
 ### Fraction of clients clipped
 
-$$ \operatorname{FractionClipped}_t = \frac{1}{m_t} \sum_{k\in S_t} \mathbf{1}[a_k<1]. $$
+$$ \mathrm{FractionClipped}_t = \frac{1}{m_t} \sum_{k\in S_t} \mathbf{1}[a_k \lt 1]. $$
 
 When DP is disabled, this metric is `0.0`.
 
@@ -794,7 +790,7 @@ When DP is disabled, this metric is `0.0`.
 
 For the single server-side Gaussian noise draw $Z_t$:
 
-$$ \operatorname{AggregateNoiseNorm}_t = \lVert Z_t\rVert_2. $$
+$$ \mathrm{AggregateNoiseNorm}_t = \lVert Z_t\rVert_2. $$
 
 This is the norm of the noise added to the aggregate sum before division by cohort size. It is not the norm of the final averaged noise contribution, which would be $\lVert Z_t/m_t\rVert_2$.
 
@@ -802,7 +798,7 @@ This is the norm of the noise added to the aggregate sum before division by coho
 
 Each selected client reports its mean local mini-batch loss. The root runtime then takes an unweighted mean across selected clients:
 
-$$ \operatorname{AvgClientLoss}_t = \frac{1}{m_t} \sum_{k\in S_t} \overline{\ell}_k. $$
+$$ \mathrm{AvgClientLoss}_t = \frac{1}{m_t} \sum_{k\in S_t} \overline{\ell}_k. $$
 
 Important interpretation:
 
@@ -813,7 +809,7 @@ Important interpretation:
 
 ### Cohort size and participation rate
 
-$$ \operatorname{CohortSize}_t=m_t, \qquad \operatorname{ParticipationRate}_t=\frac{m_t}{K}. $$
+$$ \mathrm{CohortSize}_t=m_t, \qquad \mathrm{ParticipationRate}_t=\frac{m_t}{K}. $$
 
 For Poisson sampling, participation varies around $q$ rather than being exactly equal to it every round.
 
@@ -980,11 +976,11 @@ If a normal split produces an empty query set, the implementation reuses the sup
 
 Pre-adaptation evaluation uses the global model directly:
 
-$$ \operatorname{Acc}_{k}^{\mathrm{pre}} = \operatorname{Acc}(w_t;\mathcal{D}_k). $$
+$$ \mathrm{Acc}_{k}^{\mathrm{pre}} = \mathrm{Acc}(w_t;\mathcal{D}_k). $$
 
 Post-adaptation evaluation creates a fresh copy of the global model, applies `adaptation_steps_eval` local SGD steps on the client's evaluation partition, and then computes:
 
-$$ \operatorname{Acc}_{k}^{\mathrm{post}} = \operatorname{Acc}(w_{t,k}^{\mathrm{adapted}};\mathcal{D}_k). $$
+$$ \mathrm{Acc}_{k}^{\mathrm{post}} = \mathrm{Acc}(w_{t,k}^{\mathrm{adapted}};\mathcal{D}_k). $$
 
 Per-FedAvg does not persist a separate personalized checkpoint; adaptation is repeated from the current global model during evaluation.
 
@@ -1035,7 +1031,7 @@ $$ u_t = \eta_s \frac{\widehat{m}_t}{\sqrt{\widehat{v}_t}+\tau}. $$
 
 The first moment follows the same update as FedAdam. The second moment uses a signed adjustment:
 
-$$ v_t = v_{t-1} - (1-\beta_2) \operatorname{sign} \left( v_{t-1}-\bar{\Delta}_t^2 \right) \bar{\Delta}_t^2. $$
+$$ v_t = v_{t-1} - (1-\beta_2) \mathrm{sign} \left( v_{t-1}-\bar{\Delta}_t^2 \right) \bar{\Delta}_t^2. $$
 
 The implementation then applies the same style of bias correction and normalized server update.
 
@@ -1047,7 +1043,7 @@ Source: [`python/src/fl_platform/secure_aggregation/pairwise_mask.py`](python/sr
 
 The pairwise mask sign is determined by a canonical participant ordering. For participant $k$:
 
-$$ \widetilde{x}_k = x_k + \sum_{j>k}r_{k,j} - \sum_{j<k}r_{j,k} \pmod{2^{64}}. $$
+$$ \widetilde{x}_k = x_k + \sum_{j \gt k}r_{k,j} - \sum_{j \lt k}r_{j,k} \pmod{2^{64}}. $$
 
 For a complete cohort:
 
@@ -1713,7 +1709,7 @@ Do not only add its name to the root configuration. Also reconcile:
 | Configuration normalization | Legacy clipping migration and defaults | [`experiment_runtime.py`](experiment_runtime.py) | `_normalize_config` |
 | Configuration constraints | DP, sampling, weighting, model validation | [`experiment_runtime.py`](experiment_runtime.py) | `validate_config` |
 | Poisson client sampling | $\Pr(k\in S_t)=q$ | [`experiment_runtime.py`](experiment_runtime.py) | `_sample_client_ids` |
-| Fixed client sampling | $m=\operatorname{round}(qK)$ | [`experiment_runtime.py`](experiment_runtime.py) | `_sample_client_ids` |
+| Fixed client sampling | $m=\mathrm{round}(qK)$ | [`experiment_runtime.py`](experiment_runtime.py) | `_sample_client_ids` |
 | Global experiment loop | Sample, train, aggregate, evaluate, log | [`experiment_runtime.py`](experiment_runtime.py) | `run_experiment` |
 | Local SGD | $w\leftarrow w-\eta\nabla\ell$ | [`federated/client.py`](federated/client.py) | `Client.train` |
 | FedProx | $F_k(w)+\frac{\mu}{2}\lVert w-w_t\rVert^2$ | [`federated/client.py`](federated/client.py) | `Client.train` |
@@ -1727,7 +1723,7 @@ Do not only add its name to the root configuration. Also reconcile:
 | RDP per step | Poisson-subsampled Gaussian finite sum | [`federated/dp_accountant.py`](federated/dp_accountant.py) | `_compute_rdp_single_step` |
 | RDP composition | Per-step RDP multiplied by steps | [`federated/dp_accountant.py`](federated/dp_accountant.py) | `compute_rdp`, `MomentsAccountant` |
 | RDP to DP | $\epsilon=\min_\alpha[\epsilon_{RDP}+\log(1/\delta)/(\alpha-1)]$ | [`federated/dp_accountant.py`](federated/dp_accountant.py) | `rdp_to_epsilon` |
-| Dirichlet partition | $\pi_c\sim\operatorname{Dirichlet}(\alpha\mathbf{1})$ | [`data/partitioner.py`](data/partitioner.py) | `partition_dirichlet` |
+| Dirichlet partition | $\pi_c\sim\mathrm{Dirichlet}(\alpha\mathbf{1})$ | [`data/partitioner.py`](data/partitioner.py) | `partition_dirichlet` |
 | Pathological partition | Sorted-label random shard assignment | [`data/partitioner.py`](data/partitioner.py) | `partition_pathological` |
 | GroupNorm CNN | Conv/GN/ReLU architecture | [`models/networks.py`](models/networks.py) | `GroupNormCNN` |
 | Global accuracy/loss | Per-example accuracy and summed CE divided by samples | [`utils/metrics.py`](utils/metrics.py) | `evaluate_global` |
