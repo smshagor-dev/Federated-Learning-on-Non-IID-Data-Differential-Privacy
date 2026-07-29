@@ -2,6 +2,68 @@
 
 A desktop-first federated learning research platform for studying heterogeneous client data, optimization drift, personalization, server aggregation, and differential privacy.
 
+![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=cplusplus)
+![Go](https://img.shields.io/badge/Go-Control%20Plane-00ADD8?style=for-the-badge&logo=go)
+![Python](https://img.shields.io/badge/Python-PySide6%20Dashboard-3776AB?style=for-the-badge&logo=python)
+![PyTorch](https://img.shields.io/badge/PyTorch-ML%20Runtime-EE4C2C?style=for-the-badge&logo=pytorch)
+![CMake](https://img.shields.io/badge/CMake-Build%20System-064F8C?style=for-the-badge&logo=cmake)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker)
+
+[![CI](https://github.com/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy?style=flat-square)](LICENSE)
+
+![Federated Learning](https://img.shields.io/badge/Federated-Learning-2563EB?style=flat-square)
+![Non-IID Data](https://img.shields.io/badge/Non--IID-Data%20Heterogeneity-7C3AED?style=flat-square)
+![Differential Privacy](https://img.shields.io/badge/Differential-Privacy-0F766E?style=flat-square)
+![Client-Level DP](https://img.shields.io/badge/Client--Level-Differential%20Privacy-059669?style=flat-square)
+![RDP Accounting](https://img.shields.io/badge/RDP-Privacy%20Accounting-0891B2?style=flat-square)
+![Secure Aggregation](https://img.shields.io/badge/Secure-Aggregation-334155?style=flat-square)
+![Personalized FL](https://img.shields.io/badge/Personalized-Federated%20Learning-C026D3?style=flat-square)
+![Distributed Systems](https://img.shields.io/badge/Distributed-Federated%20Runtime-4B5563?style=flat-square)
+![gRPC](https://img.shields.io/badge/gRPC-Protocol%20Buffers-244C5A?style=flat-square)
+![Experiment Tracking](https://img.shields.io/badge/Experiment-Reproducibility-0369A1?style=flat-square)
+
+![FedAvg](https://img.shields.io/badge/FedAvg-Supported-16A34A?style=flat-square)
+![FedProx](https://img.shields.io/badge/FedProx-Supported-16A34A?style=flat-square)
+![SCAFFOLD](https://img.shields.io/badge/SCAFFOLD-Supported-16A34A?style=flat-square)
+![Per-FedAvg](https://img.shields.io/badge/Per--FedAvg-Auxiliary-F59E0B?style=flat-square)
+![FedSAM](https://img.shields.io/badge/FedSAM-Auxiliary-F59E0B?style=flat-square)
+![Ditto](https://img.shields.io/badge/Ditto-Auxiliary-F59E0B?style=flat-square)
+
+![MNIST](https://img.shields.io/badge/Dataset-MNIST-0284C7?style=flat-square)
+![CIFAR-10](https://img.shields.io/badge/Dataset-CIFAR--10-0284C7?style=flat-square)
+![Dirichlet Partition](https://img.shields.io/badge/Partition-Dirichlet%20Label%20Skew-EA580C?style=flat-square)
+![Pathological Partition](https://img.shields.io/badge/Partition-Pathological%20Shards-EA580C?style=flat-square)
+![Poisson Sampling](https://img.shields.io/badge/Sampling-Poisson-9333EA?style=flat-square)
+![Fixed Sampling](https://img.shields.io/badge/Sampling-Fixed%20Without%20Replacement-9333EA?style=flat-square)
+
+![Desktop Simulation](https://img.shields.io/badge/Desktop-Simulation%20Ready-blue?style=flat-square)
+![Local Validation](https://img.shields.io/badge/Local%20Validation-Environment%20Dependent-yellow?style=flat-square)
+![Multi-Device](https://img.shields.io/badge/Multi--Device%20Deployment-Not%20Validated-orange?style=flat-square)
+![Security Audit](https://img.shields.io/badge/Formal%20Security%20Audit-Not%20Completed-orange?style=flat-square)
+![Production Certification](https://img.shields.io/badge/Production%20Certification-Not%20Certified-red?style=flat-square)
+![Research Status](https://img.shields.io/badge/Status-Research%20Platform-yellow?style=flat-square)
+
+> **Open-source license notice**
+> Copyright (c) 2026 Md Shahanur Islam Shagor. This repository is released
+> under the Apache License 2.0. Use, modification, reproduction, and
+> redistribution are permitted only when the license conditions and required
+> notices are preserved. See [LICENSE](LICENSE).
+
+> **Research and validation notice**  
+> This repository is an advanced research and engineering platform for federated learning on heterogeneous and Non-IID data with differential privacy. It is intended for controlled experiments, algorithm evaluation, privacy analysis, reproducibility studies, and software architecture research. It is **not formally security audited**, **not production certified**, and **not evidence of legal or regulatory privacy compliance**.
+
+> **Active runtime scope notice**  
+> The default application launched through `python main.py` is a single-machine federated learning simulation with a PySide6 desktop interface and a root CLI runtime. The active root workflow runs **FedAvg, FedProx, and SCAFFOLD** on **MNIST or CIFAR-10**. Additional personalization algorithms, secure aggregation components, C++ services, and Go control-plane modules are auxiliary subsystems with separate execution paths.
+
+> **Differential privacy notice**  
+> Reported privacy guarantees depend on the configured threat model, client-sampling assumptions, clipping threshold, noise multiplier, number of rounds, privacy accountant, and correctness of the experiment configuration. Privacy values must not be interpreted independently of these assumptions.
+
+> **CI scope notice**
+> The GitHub Actions badge above represents repository validation for Python tests, Ruff linting and formatting, mypy type checking, C++ builds and tests, Go validation, Protocol Buffer generation, sanitizer checks, PKI verification, infrastructure validation, terminology checks, and tracked-secret scanning. It does **not** represent formal privacy certification, production security approval, regulatory compliance, or validated real-world multi-device deployment.
+
+This repository was developed through a structured **research engineering lifecycle** spanning federated learning foundations, heterogeneous data simulation, distributed optimization, client sampling, differential privacy, privacy accounting, personalization, secure aggregation, cross-language runtime engineering, experiment tracking, reproducibility, testing, documentation, and continuous integration hardening.
+
 > **Primary scope:** The default application launched through `python main.py` is a single-machine simulation with a PySide6 desktop interface and a root CLI runtime. It actively runs **FedAvg, FedProx, and SCAFFOLD** on **MNIST or CIFAR-10**. Other algorithms and security components in `python/src/fl_platform/`, `cpp/`, and `go/` are auxiliary subsystems and must not be interpreted as automatically active in the root desktop workflow.
 
 ## Documentation Status
