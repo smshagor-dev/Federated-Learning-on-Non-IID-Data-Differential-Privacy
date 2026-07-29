@@ -328,11 +328,7 @@ The configuration validator requires `model.group_norm_groups` to:
 
 For every class $c$, the partitioner draws client proportions from
 
-$$
-\boldsymbol{\pi}_c
-\sim
-\operatorname{Dirichlet}(\alpha\mathbf{1}_K).
-$$
+$$ \boldsymbol{\pi}_c \sim \operatorname{Dirichlet}(\alpha\mathbf{1}_K). $$
 
 The shuffled samples of class $c$ are split according to $\boldsymbol{\pi}_c$ and assigned to the $K$ clients.
 
@@ -351,9 +347,7 @@ The pathological partition follows a shard-based construction:
 1. Sort all training indices by label.
 2. Divide the sorted sequence into
 
-$$
-K \times C_{\text{client}}
-$$
+$$ K \times C_{\text{client}} $$
 
 shards, where $C_{\text{client}}$ is `classes_per_client`.
 3. Randomly permute the shard identifiers.
@@ -396,21 +390,11 @@ This produces clients whose local data are restricted to a small subset of label
 
 Client $k$ owns
 
-$$
-\mathcal{D}_k
-=
-\{(x_i,y_i)\}_{i=1}^{n_k}.
-$$
+$$ \mathcal{D}_k = \{(x_i,y_i)\}_{i=1}^{n_k}. $$
 
 Its empirical objective is
 
-$$
-F_k(w)
-=
-\frac{1}{n_k}
-\sum_{(x_i,y_i)\in\mathcal{D}_k}
-\ell(w;x_i,y_i),
-$$
+$$ F_k(w) = \frac{1}{n_k} \sum_{(x_i,y_i)\in\mathcal{D}_k} \ell(w;x_i,y_i), $$
 
 where $\ell$ is cross-entropy loss in the active root runtime.
 
@@ -418,13 +402,7 @@ where $\ell$ is cross-entropy loss in the active root runtime.
 
 The conventional sample-weighted global objective is
 
-$$
-F(w)
-=
-\sum_{k=1}^{K}p_kF_k(w),
-\qquad
-p_k=\frac{n_k}{N}.
-$$
+$$ F(w) = \sum_{k=1}^{K}p_kF_k(w), \qquad p_k=\frac{n_k}{N}. $$
 
 The root implementation may use either sample-count or uniform aggregation, so the actual round update can differ from this population objective when uniform weighting is selected.
 
@@ -432,27 +410,15 @@ The root implementation may use either sample-count or uniform aggregation, so t
 
 At the beginning of round $t$, the server broadcasts $w_t$. Every selected client initializes
 
-$$
-w_{t,0}^{k}=w_t.
-$$
+$$ w_{t,0}^{k}=w_t. $$
 
 For a local mini-batch $B_s$, plain local SGD follows
 
-$$
-w_{t,s+1}^{k}
-=
-w_{t,s}^{k}
--
-\eta\nabla_w\ell(w_{t,s}^{k};B_s).
-$$
+$$ w_{t,s+1}^{k} = w_{t,s}^{k} - \eta\nabla_w\ell(w_{t,s}^{k};B_s). $$
 
 After local training, the raw client update is
 
-$$
-\Delta_k^{\mathrm{raw}}
-=
-w_{t,\tau_k}^{k}-w_t.
-$$
+$$ \Delta_k^{\mathrm{raw}} = w_{t,\tau_k}^{k}-w_t. $$
 
 When differential privacy is disabled, this raw update is transmitted directly. When root differential privacy is enabled, the final transmitted update is the clipped version defined later in this document.
 
@@ -468,54 +434,25 @@ FedAvg performs ordinary local SGD and aggregates the resulting client deltas.
 
 For sample-count weighting:
 
-$$
-\bar{\Delta}_t
-=
-\sum_{k\in S_t}
-\frac{n_k}{\sum_{j\in S_t}n_j}
-\Delta_k.
-$$
+$$ \bar{\Delta}_t = \sum_{k\in S_t} \frac{n_k}{\sum_{j\in S_t}n_j} \Delta_k. $$
 
 For uniform weighting:
 
-$$
-\bar{\Delta}_t
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}\Delta_k.
-$$
+$$ \bar{\Delta}_t = \frac{1}{m_t} \sum_{k\in S_t}\Delta_k. $$
 
 The server applies
 
-$$
-w_{t+1}
-=
-w_t+\eta_s\bar{\Delta}_t.
-$$
+$$ w_{t+1} = w_t+\eta_s\bar{\Delta}_t. $$
 
 ### FedProx
 
 FedProx adds a proximal term that discourages each local model from moving too far from the broadcast global model:
 
-$$
-F_k^{\mathrm{prox}}(w;w_t)
-=
-F_k(w)
-+
-\frac{\mu}{2}
-\lVert w-w_t\rVert_2^2.
-$$
+$$ F_k^{\mathrm{prox}}(w;w_t) = F_k(w) + \frac{\mu}{2} \lVert w-w_t\rVert_2^2. $$
 
 For a mini-batch, the implemented loss is
 
-$$
-\ell_{\mathrm{FedProx}}
-=
-\ell_{\mathrm{CE}}
-+
-\frac{\mu}{2}
-\sum_j(w_j-w_{t,j})^2.
-$$
+$$ \ell_{\mathrm{FedProx}} = \ell_{\mathrm{CE}} + \frac{\mu}{2} \sum_j(w_j-w_{t,j})^2. $$
 
 The proximal term affects local training only. Server aggregation remains FedAvg-shaped.
 
@@ -529,62 +466,27 @@ Expected behavior:
 
 SCAFFOLD maintains a global control variate $c$ and one local control variate $c_k$ per client. The local gradient is corrected as
 
-$$
-g_{k,s}^{\mathrm{corr}}
-=
-g_{k,s}+c-c_k.
-$$
+$$ g_{k,s}^{\mathrm{corr}} = g_{k,s}+c-c_k. $$
 
 The client optimizer step is therefore
 
-$$
-w_{t,s+1}^{k}
-=
-w_{t,s}^{k}
--
-\eta\left(g_{k,s}+c-c_k\right).
-$$
+$$ w_{t,s+1}^{k} = w_{t,s}^{k} - \eta\left(g_{k,s}+c-c_k\right). $$
 
 After local training, the implementation computes
 
-$$
-c_k^{+}
-=
-c_k-c-
-\frac{\Delta_k}{\tau_k\eta},
-$$
+$$ c_k^{+} = c_k-c- \frac{\Delta_k}{\tau_k\eta}, $$
 
 and
 
-$$
-\Delta c_k=c_k^{+}-c_k.
-$$
+$$ \Delta c_k=c_k^{+}-c_k. $$
 
 The model delta is aggregated uniformly:
 
-$$
-\bar{\Delta}_t
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}\Delta_k.
-$$
+$$ \bar{\Delta}_t = \frac{1}{m_t} \sum_{k\in S_t}\Delta_k. $$
 
 The global control variate update implemented by the server is
 
-$$
-c^{+}
-=
-c+
-\frac{m_t}{K}
-\left(
-\frac{1}{m_t}
-\sum_{k\in S_t}\Delta c_k
-\right)
-=
-c+
-\frac{1}{K}
-\sum_{k\in S_t}\Delta c_k.
-$$
+$$ c^{+} = c+ \frac{m_t}{K} \left( \frac{1}{m_t} \sum_{k\in S_t}\Delta c_k \right) = c+ \frac{1}{K} \sum_{k\in S_t}\Delta c_k. $$
 
 Important root semantics:
 
@@ -614,15 +516,11 @@ Each algorithm resets the configured Python, NumPy, and PyTorch seed before its 
 
 For `federated.sampling_strategy: poisson`, every client is included independently with probability $q$:
 
-$$
-\Pr(k\in S_t)=q.
-$$
+$$ \Pr(k\in S_t)=q. $$
 
 The realized cohort size is random:
 
-$$
-m_t\sim\operatorname{Binomial}(K,q).
-$$
+$$ m_t\sim\operatorname{Binomial}(K,q). $$
 
 An empty cohort is possible. In that case the server performs no model update, but the round is still evaluated, logged, and counted by the current privacy accountant.
 
@@ -630,9 +528,7 @@ An empty cohort is possible. In that case the server performs no model update, b
 
 For `fixed_without_replacement`, the runtime computes
 
-$$
-m=\operatorname{round}(qK)
-$$
+$$ m=\operatorname{round}(qK) $$
 
 and samples $m$ unique clients.
 
@@ -647,9 +543,7 @@ This strategy is not accepted when root DP is enabled because the implemented ac
 
 #### Uniform
 
-$$
-a_k=\frac{1}{m_t}.
-$$
+$$ a_k=\frac{1}{m_t}. $$
 
 Used when:
 
@@ -659,11 +553,7 @@ Used when:
 
 #### Sample count
 
-$$
-a_k
-=
-\frac{n_k}{\sum_{j\in S_t}n_j}.
-$$
+$$ a_k = \frac{n_k}{\sum_{j\in S_t}n_j}. $$
 
 Supported only for FedAvg and FedProx when DP is disabled.
 
@@ -697,37 +587,19 @@ Trusted-server assumptions:
 
 For raw client delta $\Delta_k^{\mathrm{raw}}$, define
 
-$$
-r_k
-=
-\left\lVert\Delta_k^{\mathrm{raw}}\right\rVert_2.
-$$
+$$ r_k = \left\lVert\Delta_k^{\mathrm{raw}}\right\rVert_2. $$
 
 The clipping factor is
 
-$$
-a_k
-=
-\min\left(
-1,
-\frac{C}{r_k+10^{-12}}
-\right).
-$$
+$$ a_k = \min\left( 1, \frac{C}{r_k+10^{-12}} \right). $$
 
 The transmitted client update is
 
-$$
-\Delta_k^{\mathrm{clip}}
-=
-a_k\Delta_k^{\mathrm{raw}}.
-$$
+$$ \Delta_k^{\mathrm{clip}} = a_k\Delta_k^{\mathrm{raw}}. $$
 
 Therefore
 
-$$
-\left\lVert\Delta_k^{\mathrm{clip}}\right\rVert_2
-\le C
-$$
+$$ \left\lVert\Delta_k^{\mathrm{clip}}\right\rVert_2 \le C $$
 
 up to floating-point precision.
 
@@ -737,40 +609,19 @@ The clipping norm includes all floating-point entries used in the client delta.
 
 The server first sums clipped client updates:
 
-$$
-U_t
-=
-\sum_{k\in S_t}
-\Delta_k^{\mathrm{clip}}.
-$$
+$$ U_t = \sum_{k\in S_t} \Delta_k^{\mathrm{clip}}. $$
 
 It samples one independent Gaussian noise tensor collection
 
-$$
-Z_t
-\sim
-\mathcal{N}
-\left(
-0,
-\sigma^2C^2I
-\right).
-$$
+$$ Z_t \sim \mathcal{N} \left( 0, \sigma^2C^2I \right). $$
 
 The released average update is
 
-$$
-\widetilde{\Delta}_t
-=
-\frac{U_t+Z_t}{m_t}.
-$$
+$$ \widetilde{\Delta}_t = \frac{U_t+Z_t}{m_t}. $$
 
 The next global model is
 
-$$
-w_{t+1}
-=
-w_t+\eta_s\widetilde{\Delta}_t.
-$$
+$$ w_{t+1} = w_t+\eta_s\widetilde{\Delta}_t. $$
 
 Noise is added once to the aggregate sum, not independently on each client.
 
@@ -796,42 +647,15 @@ The accountant treats each communication round as a Poisson-subsampled Gaussian 
 
 For integer Rényi order $\alpha\ge2$, the implementation computes the one-step RDP value
 
-$$
-\varepsilon_{\mathrm{RDP}}^{(1)}(\alpha)
-=
-\frac{1}{\alpha-1}
-\log
-\left[
-\sum_{j=0}^{\alpha}
-\binom{\alpha}{j}
-(1-q)^{\alpha-j}
-q^j
-\exp\left(
-\frac{j(j-1)}{2\sigma^2}
-\right)
-\right].
-$$
+$$ \varepsilon_{\mathrm{RDP}}^{(1)}(\alpha) = \frac{1}{\alpha-1} \log \left[ \sum_{j=0}^{\alpha} \binom{\alpha}{j} (1-q)^{\alpha-j} q^j \exp\left( \frac{j(j-1)}{2\sigma^2} \right) \right]. $$
 
 After $T$ accounted rounds:
 
-$$
-\varepsilon_{\mathrm{RDP}}^{(T)}(\alpha)
-=
-T\varepsilon_{\mathrm{RDP}}^{(1)}(\alpha).
-$$
+$$ \varepsilon_{\mathrm{RDP}}^{(T)}(\alpha) = T\varepsilon_{\mathrm{RDP}}^{(1)}(\alpha). $$
 
 Conversion to an $(\epsilon,\delta)$ estimate is
 
-$$
-\epsilon(\delta)
-=
-\min_{\alpha>1}
-\left[
-\varepsilon_{\mathrm{RDP}}^{(T)}(\alpha)
-+
-\frac{\log(1/\delta)}{\alpha-1}
-\right].
-$$
+$$ \epsilon(\delta) = \min_{\alpha>1} \left[ \varepsilon_{\mathrm{RDP}}^{(T)}(\alpha) + \frac{\log(1/\delta)}{\alpha-1} \right]. $$
 
 The implementation searches integer orders:
 
@@ -849,12 +673,7 @@ Special cases:
 
 When `algorithm: all` is used with DP, each algorithm run releases a separate sequence of models and metrics. The generated summary adds the final RDP curves and reports a composed epsilon for all released outputs:
 
-$$
-\varepsilon_{\mathrm{RDP}}^{\mathrm{all}}(\alpha)
-=
-\sum_{a\in\{\mathrm{FedAvg,FedProx,SCAFFOLD}\}}
-\varepsilon_{\mathrm{RDP}}^{(a)}(\alpha).
-$$
+$$ \varepsilon_{\mathrm{RDP}}^{\mathrm{all}}(\alpha) = \sum_{a\in\{\mathrm{FedAvg,FedProx,SCAFFOLD}\}} \varepsilon_{\mathrm{RDP}}^{(a)}(\alpha). $$
 
 ### Privacy status labels
 
@@ -882,29 +701,15 @@ The root runtime evaluates the current global model after every communication ro
 
 Let the held-out test set be
 
-$$
-\mathcal{D}_{\mathrm{test}}
-=
-\{(x_i,y_i)\}_{i=1}^{N_{\mathrm{test}}}.
-$$
+$$ \mathcal{D}_{\mathrm{test}} = \{(x_i,y_i)\}_{i=1}^{N_{\mathrm{test}}}. $$
 
 The predicted class is
 
-$$
-\hat{y}_i
-=
-\arg\max_c f_w(x_i)_c.
-$$
+$$ \hat{y}_i = \arg\max_c f_w(x_i)_c. $$
 
 Global test accuracy is
 
-$$
-\operatorname{Acc}(w)
-=
-\frac{1}{N_{\mathrm{test}}}
-\sum_{i=1}^{N_{\mathrm{test}}}
-\mathbf{1}\!\left[\hat{y}_i=y_i\right].
-$$
+$$ \operatorname{Acc}(w) = \frac{1}{N_{\mathrm{test}}} \sum_{i=1}^{N_{\mathrm{test}}} \mathbf{1}\!\left[\hat{y}_i=y_i\right]. $$
 
 The CSV field `test_acc` stores this value in the interval $[0,1]$. Plots and summaries convert it to a percentage.
 
@@ -912,13 +717,7 @@ The CSV field `test_acc` stores this value in the interval $[0,1]$. Plots and su
 
 The implementation calculates cross-entropy with `reduction="sum"` for each test batch, accumulates the total, and divides by the number of test examples:
 
-$$
-\operatorname{TestLoss}(w)
-=
-\frac{1}{N_{\mathrm{test}}}
-\sum_{i=1}^{N_{\mathrm{test}}}
-\ell_{\mathrm{CE}}(w;x_i,y_i).
-$$
+$$ \operatorname{TestLoss}(w) = \frac{1}{N_{\mathrm{test}}} \sum_{i=1}^{N_{\mathrm{test}}} \ell_{\mathrm{CE}}(w;x_i,y_i). $$
 
 This is a per-example mean loss, not a mean of batch means.
 
@@ -928,32 +727,15 @@ If the test loader contains zero samples, both loss and accuracy are returned as
 
 For $m_t$ participating client model states, flatten all floating-point coordinates into vectors
 
-$$
-w_t^k\in\mathbb{R}^{P}.
-$$
+$$ w_t^k\in\mathbb{R}^{P}. $$
 
 The unweighted cohort mean state is
 
-$$
-\bar{w}_{t,j}
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}w_{t,j}^{k}.
-$$
+$$ \bar{w}_{t,j} = \frac{1}{m_t} \sum_{k\in S_t}w_{t,j}^{k}. $$
 
 The implementation computes the population variance for each coordinate and then averages over all coordinates:
 
-$$
-\operatorname{WeightVariance}_t
-=
-\frac{1}{P}
-\sum_{j=1}^{P}
-\left[
-\frac{1}{m_t}
-\sum_{k\in S_t}
-\left(w_{t,j}^{k}-\bar{w}_{t,j}\right)^2
-\right].
-$$
+$$ \operatorname{WeightVariance}_t = \frac{1}{P} \sum_{j=1}^{P} \left[ \frac{1}{m_t} \sum_{k\in S_t} \left(w_{t,j}^{k}-\bar{w}_{t,j}\right)^2 \right]. $$
 
 This metric uses `ddof=0` and is unweighted by client sample count.
 
@@ -963,27 +745,11 @@ If fewer than two client states are available, it returns `0.0`.
 
 Let
 
-$$
-\bar{\Delta}_t^{\mathrm{raw}}
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}
-\Delta_k^{\mathrm{raw}}.
-$$
+$$ \bar{\Delta}_t^{\mathrm{raw}} = \frac{1}{m_t} \sum_{k\in S_t} \Delta_k^{\mathrm{raw}}. $$
 
 Raw client drift is
 
-$$
-\operatorname{RawDrift}_t
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}
-\left\lVert
-\Delta_k^{\mathrm{raw}}
--
-\bar{\Delta}_t^{\mathrm{raw}}
-\right\rVert_2.
-$$
+$$ \operatorname{RawDrift}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{raw}} - \bar{\Delta}_t^{\mathrm{raw}} \right\rVert_2. $$
 
 It measures disagreement before privacy clipping.
 
@@ -991,41 +757,17 @@ It measures disagreement before privacy clipping.
 
 Let
 
-$$
-\bar{\Delta}_t^{\mathrm{clip}}
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}
-\Delta_k^{\mathrm{clip}}.
-$$
+$$ \bar{\Delta}_t^{\mathrm{clip}} = \frac{1}{m_t} \sum_{k\in S_t} \Delta_k^{\mathrm{clip}}. $$
 
 Clipped client drift is
 
-$$
-\operatorname{ClippedDrift}_t
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}
-\left\lVert
-\Delta_k^{\mathrm{clip}}
--
-\bar{\Delta}_t^{\mathrm{clip}}
-\right\rVert_2.
-$$
+$$ \operatorname{ClippedDrift}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{clip}} - \bar{\Delta}_t^{\mathrm{clip}} \right\rVert_2. $$
 
 Comparing raw and clipped drift shows how much the privacy clipping operation compresses client disagreement.
 
 ### Mean unclipped update norm
 
-$$
-\operatorname{MeanUpdateNorm}_t
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}
-\left\lVert
-\Delta_k^{\mathrm{raw}}
-\right\rVert_2.
-$$
+$$ \operatorname{MeanUpdateNorm}_t = \frac{1}{m_t} \sum_{k\in S_t} \left\lVert \Delta_k^{\mathrm{raw}} \right\rVert_2. $$
 
 This indicates the typical client movement before privacy clipping.
 
@@ -1033,12 +775,7 @@ This indicates the typical client movement before privacy clipping.
 
 For clipping factors $a_k$:
 
-$$
-\operatorname{MeanClippingFactor}_t
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}a_k.
-$$
+$$ \operatorname{MeanClippingFactor}_t = \frac{1}{m_t} \sum_{k\in S_t}a_k. $$
 
 Interpretation:
 
@@ -1049,13 +786,7 @@ When DP is disabled, every stored clipping factor is `1.0`.
 
 ### Fraction of clients clipped
 
-$$
-\operatorname{FractionClipped}_t
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}
-\mathbf{1}[a_k<1].
-$$
+$$ \operatorname{FractionClipped}_t = \frac{1}{m_t} \sum_{k\in S_t} \mathbf{1}[a_k<1]. $$
 
 When DP is disabled, this metric is `0.0`.
 
@@ -1063,11 +794,7 @@ When DP is disabled, this metric is `0.0`.
 
 For the single server-side Gaussian noise draw $Z_t$:
 
-$$
-\operatorname{AggregateNoiseNorm}_t
-=
-\lVert Z_t\rVert_2.
-$$
+$$ \operatorname{AggregateNoiseNorm}_t = \lVert Z_t\rVert_2. $$
 
 This is the norm of the noise added to the aggregate sum before division by cohort size. It is not the norm of the final averaged noise contribution, which would be $\lVert Z_t/m_t\rVert_2$.
 
@@ -1075,13 +802,7 @@ This is the norm of the noise added to the aggregate sum before division by coho
 
 Each selected client reports its mean local mini-batch loss. The root runtime then takes an unweighted mean across selected clients:
 
-$$
-\operatorname{AvgClientLoss}_t
-=
-\frac{1}{m_t}
-\sum_{k\in S_t}
-\overline{\ell}_k.
-$$
+$$ \operatorname{AvgClientLoss}_t = \frac{1}{m_t} \sum_{k\in S_t} \overline{\ell}_k. $$
 
 Important interpretation:
 
@@ -1092,11 +813,7 @@ Important interpretation:
 
 ### Cohort size and participation rate
 
-$$
-\operatorname{CohortSize}_t=m_t,
-\qquad
-\operatorname{ParticipationRate}_t=\frac{m_t}{K}.
-$$
+$$ \operatorname{CohortSize}_t=m_t, \qquad \operatorname{ParticipationRate}_t=\frac{m_t}{K}. $$
 
 For Poisson sampling, participation varies around $q$ rather than being exactly equal to it every round.
 
@@ -1142,36 +859,21 @@ FedSAM performs two forward/backward passes for each local batch.
 
 First-pass gradient:
 
-$$
-g
-=
-\nabla_w\ell(w;B).
-$$
+$$ g = \nabla_w\ell(w;B). $$
 
 Standard SAM perturbation:
 
-$$
-e(w)
-=
-\rho
-\frac{g}{\lVert g\rVert_2+10^{-12}}.
-$$
+$$ e(w) = \rho \frac{g}{\lVert g\rVert_2+10^{-12}}. $$
 
 For adaptive mode, the direction is additionally scaled elementwise by $\lvert w\rvert$.
 
 The perturbed point is
 
-$$
-w^{\mathrm{adv}}=w+e(w).
-$$
+$$ w^{\mathrm{adv}}=w+e(w). $$
 
 The second loss is evaluated at $w^{\mathrm{adv}}$:
 
-$$
-\ell_{\mathrm{adv}}
-=
-\ell(w^{\mathrm{adv}};B).
-$$
+$$ \ell_{\mathrm{adv}} = \ell(w^{\mathrm{adv}};B). $$
 
 The implementation restores the original parameters in a `finally` block and applies the base optimizer using the second-pass gradients. The returned global update is a FedAvg-shaped model delta.
 
@@ -1186,13 +888,7 @@ Ditto trains two models per participating client:
 
 The personalized objective is
 
-$$
-\min_{v_k}
-F_k(v_k)
-+
-\frac{\lambda}{2}
-\lVert v_k-w_t\rVert_2^2.
-$$
+$$ \min_{v_k} F_k(v_k) + \frac{\lambda}{2} \lVert v_k-w_t\rVert_2^2. $$
 
 The global-training branch uses plain local SGD. The personalized branch can warm-start from a previous client checkpoint or cold-start from the global model. Only scalar personalization metrics and the managed personalized checkpoint leave the algorithm boundary; the personalized parameters are not aggregated into the global model.
 
@@ -1213,14 +909,7 @@ Each client's local indices are deterministically shuffled using the task seed a
 
 The split point is
 
-$$
-\max\left(
-1,
-\left\lfloor
-r\lvert\mathcal{D}_k\rvert
-\right\rfloor
-\right),
-$$
+$$ \max\left( 1, \left\lfloor r\lvert\mathcal{D}_k\rvert \right\rfloor \right), $$
 
 where $r$ is `support_query_split_ratio`.
 
@@ -1228,21 +917,11 @@ where $r$ is `support_query_split_ratio`.
 
 At outer meta-step $r$, let the current client meta-model be $\theta_{k,r}$. The algorithm creates an adapted copy:
 
-$$
-\phi_{k,r}^{(0)}=\theta_{k,r}.
-$$
+$$ \phi_{k,r}^{(0)}=\theta_{k,r}. $$
 
 For `inner_steps` support updates:
 
-$$
-\phi_{k,r}^{(s+1)}
-=
-\phi_{k,r}^{(s)}
--
-\alpha
-\nabla_{\phi}
-F_k^{S}\!\left(\phi_{k,r}^{(s)}\right),
-$$
+$$ \phi_{k,r}^{(s+1)} = \phi_{k,r}^{(s)} - \alpha \nabla_{\phi} F_k^{S}\!\left(\phi_{k,r}^{(s)}\right), $$
 
 where $\alpha$ is `inner_learning_rate`.
 
@@ -1250,28 +929,15 @@ where $\alpha$ is `inner_learning_rate`.
 
 The query objective is evaluated at the adapted parameters:
 
-$$
-F_k^{Q}\!\left(\phi_{k,r}^{(S)}\right).
-$$
+$$ F_k^{Q}\!\left(\phi_{k,r}^{(S)}\right). $$
 
 The implementation computes
 
-$$
-g_{k,r}^{Q}
-=
-\nabla_{\phi}
-F_k^{Q}\!\left(\phi_{k,r}^{(S)}\right).
-$$
+$$ g_{k,r}^{Q} = \nabla_{\phi} F_k^{Q}\!\left(\phi_{k,r}^{(S)}\right). $$
 
 It then copies this gradient onto the original meta-model parameters and applies
 
-$$
-\theta_{k,r+1}
-=
-\theta_{k,r}
--
-\beta g_{k,r}^{Q},
-$$
+$$ \theta_{k,r+1} = \theta_{k,r} - \beta g_{k,r}^{Q}, $$
 
 where $\beta$ is `outer_learning_rate`.
 
@@ -1279,38 +945,11 @@ where $\beta$ is `outer_learning_rate`.
 
 The exact meta-gradient would include differentiation through the support adaptation trajectory:
 
-$$
-\nabla_{\theta}
-F_k^{Q}
-\left(
-\phi_k^{(S)}(\theta)
-\right)
-=
-\left(
-\frac{\partial\phi_k^{(S)}}{\partial\theta}
-\right)^{\!\top}
-\nabla_{\phi}
-F_k^{Q}
-\left(
-\phi_k^{(S)}
-\right).
-$$
+$$ \nabla_{\theta} F_k^{Q} \left( \phi_k^{(S)}(\theta) \right) = \left( \frac{\partial\phi_k^{(S)}}{\partial\theta} \right)^{\!\top} \nabla_{\phi} F_k^{Q} \left( \phi_k^{(S)} \right). $$
 
 The implementation omits the Jacobian/Hessian path through the inner loop and uses only the query gradient at the adapted copy:
 
-$$
-\nabla_{\theta}
-F_k^{Q}
-\left(
-\phi_k^{(S)}(\theta)
-\right)
-\approx
-\nabla_{\phi}
-F_k^{Q}
-\left(
-\phi_k^{(S)}
-\right).
-$$
+$$ \nabla_{\theta} F_k^{Q} \left( \phi_k^{(S)}(\theta) \right) \approx \nabla_{\phi} F_k^{Q} \left( \phi_k^{(S)} \right). $$
 
 No second-order derivative is computed.
 
@@ -1318,11 +957,7 @@ No second-order derivative is computed.
 
 The support adaptation and query update are repeated `meta_steps` times. After the last meta-step, the submitted update is
 
-$$
-\Delta_k^{\mathrm{PerFedAvg}}
-=
-\theta_{k,R}-w_t.
-$$
+$$ \Delta_k^{\mathrm{PerFedAvg}} = \theta_{k,R}-w_t. $$
 
 This update is aggregated through a FedAvg-shaped weighted aggregator in the auxiliary C++ aggregation mapping.
 
@@ -1345,19 +980,11 @@ If a normal split produces an empty query set, the implementation reuses the sup
 
 Pre-adaptation evaluation uses the global model directly:
 
-$$
-\operatorname{Acc}_{k}^{\mathrm{pre}}
-=
-\operatorname{Acc}(w_t;\mathcal{D}_k).
-$$
+$$ \operatorname{Acc}_{k}^{\mathrm{pre}} = \operatorname{Acc}(w_t;\mathcal{D}_k). $$
 
 Post-adaptation evaluation creates a fresh copy of the global model, applies `adaptation_steps_eval` local SGD steps on the client's evaluation partition, and then computes:
 
-$$
-\operatorname{Acc}_{k}^{\mathrm{post}}
-=
-\operatorname{Acc}(w_{t,k}^{\mathrm{adapted}};\mathcal{D}_k).
-$$
+$$ \operatorname{Acc}_{k}^{\mathrm{post}} = \operatorname{Acc}(w_{t,k}^{\mathrm{adapted}};\mathcal{D}_k). $$
 
 Per-FedAvg does not persist a separate personalized checkpoint; adaptation is repeated from the current global model during evaluation.
 
@@ -1384,84 +1011,31 @@ Let $\bar{\Delta}_t$ be the weighted average client delta.
 
 #### FedAdagrad
 
-$$
-m_t
-=
-\beta_1m_{t-1}
-+
-(1-\beta_1)\bar{\Delta}_t,
-$$
+$$ m_t = \beta_1m_{t-1} + (1-\beta_1)\bar{\Delta}_t, $$
 
-$$
-v_t
-=
-v_{t-1}
-+
-\bar{\Delta}_t^2,
-$$
+$$ v_t = v_{t-1} + \bar{\Delta}_t^2, $$
 
-$$
-u_t
-=
-\eta_s
-\frac{m_t}{\sqrt{v_t}+\tau}.
-$$
+$$ u_t = \eta_s \frac{m_t}{\sqrt{v_t}+\tau}. $$
 
 #### FedAdam
 
-$$
-m_t
-=
-\beta_1m_{t-1}
-+
-(1-\beta_1)\bar{\Delta}_t,
-$$
+$$ m_t = \beta_1m_{t-1} + (1-\beta_1)\bar{\Delta}_t, $$
 
-$$
-v_t
-=
-\beta_2v_{t-1}
-+
-(1-\beta_2)\bar{\Delta}_t^2.
-$$
+$$ v_t = \beta_2v_{t-1} + (1-\beta_2)\bar{\Delta}_t^2. $$
 
 The implementation applies bias correction:
 
-$$
-\widehat{m}_t
-=
-\frac{m_t}{1-\beta_1^t},
-\qquad
-\widehat{v}_t
-=
-\frac{v_t}{1-\beta_2^t},
-$$
+$$ \widehat{m}_t = \frac{m_t}{1-\beta_1^t}, \qquad \widehat{v}_t = \frac{v_t}{1-\beta_2^t}, $$
 
 and returns
 
-$$
-u_t
-=
-\eta_s
-\frac{\widehat{m}_t}{\sqrt{\widehat{v}_t}+\tau}.
-$$
+$$ u_t = \eta_s \frac{\widehat{m}_t}{\sqrt{\widehat{v}_t}+\tau}. $$
 
 #### FedYogi
 
 The first moment follows the same update as FedAdam. The second moment uses a signed adjustment:
 
-$$
-v_t
-=
-v_{t-1}
--
-(1-\beta_2)
-\operatorname{sign}
-\left(
- v_{t-1}-\bar{\Delta}_t^2
-\right)
-\bar{\Delta}_t^2.
-$$
+$$ v_t = v_{t-1} - (1-\beta_2) \operatorname{sign} \left( v_{t-1}-\bar{\Delta}_t^2 \right) \bar{\Delta}_t^2. $$
 
 The implementation then applies the same style of bias correction and normalized server update.
 
@@ -1473,25 +1047,11 @@ Source: [`python/src/fl_platform/secure_aggregation/pairwise_mask.py`](python/sr
 
 The pairwise mask sign is determined by a canonical participant ordering. For participant $k$:
 
-$$
-\widetilde{x}_k
-=
-x_k
-+
-\sum_{j>k}r_{k,j}
--
-\sum_{j<k}r_{j,k}
-\pmod{2^{64}}.
-$$
+$$ \widetilde{x}_k = x_k + \sum_{j>k}r_{k,j} - \sum_{j<k}r_{j,k} \pmod{2^{64}}. $$
 
 For a complete cohort:
 
-$$
-\sum_k\widetilde{x}_k
-=
-\sum_kx_k
-\pmod{2^{64}},
-$$
+$$ \sum_k\widetilde{x}_k = \sum_kx_k \pmod{2^{64}}, $$
 
 because every pairwise mask appears once with a positive sign and once with a negative sign.
 
