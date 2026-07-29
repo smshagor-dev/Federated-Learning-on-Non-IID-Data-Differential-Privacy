@@ -1,0 +1,205 @@
+QWidget {{
+    background: {BACKGROUND};
+    color: {PRIMARY_TEXT};
+    font-family: "Segoe UI";
+    font-size: 12px;
+}}
+
+QMainWindow {{
+    background: {BACKGROUND};
+}}
+
+QFrame#AppSurface {{
+    background: {BACKGROUND};
+}}
+
+QFrame[card="true"] {{
+    background: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+}}
+
+QFrame[raised="true"] {{
+    background: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+}}
+
+QFrame[sidebar="true"] {{
+    background: {SURFACE};
+    border-right: 1px solid {BORDER};
+}}
+
+QFrame[summaryCard="true"] {{
+    background: {SURFACE_ALTERNATIVE};
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+}}
+
+QLabel[heroTitle="true"] {{
+    font-size: 21px;
+    font-weight: 600;
+    color: {PRIMARY_TEXT};
+}}
+
+QLabel[pageTitle="true"] {{
+    font-size: 19px;
+    font-weight: 600;
+    color: {PRIMARY_TEXT};
+}}
+
+QLabel[sectionTitle="true"] {{
+    font-size: 15px;
+    font-weight: 600;
+    color: {PRIMARY_TEXT};
+}}
+
+QLabel[metricLabel="true"] {{
+    font-size: 11px;
+    color: {SECONDARY_TEXT};
+    font-weight: 500;
+    text-transform: uppercase;
+}}
+
+QLabel[metricValue="true"] {{
+    font-size: 22px;
+    font-weight: 600;
+    color: {PRIMARY_TEXT};
+}}
+
+QLabel[muted="true"] {{
+    color: {SECONDARY_TEXT};
+}}
+
+QLabel[pill="true"] {{
+    background: {SURFACE_ALTERNATIVE};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    padding: 4px 10px;
+    color: {PRIMARY_TEXT};
+    font-size: 11px;
+    font-weight: 600;
+}}
+
+QPushButton {{
+    background: {SURFACE_ALTERNATIVE};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: {PRIMARY_TEXT};
+}}
+
+QPushButton:hover {{
+    border-color: {PRIMARY_ACCENT};
+}}
+
+QPushButton[primary="true"] {{
+    background: {PRIMARY_ACCENT};
+    color: #ffffff;
+    border-color: {PRIMARY_ACCENT};
+    font-weight: 600;
+}}
+
+QPushButton[secondaryAccent="true"] {{
+    background: {SECONDARY_ACCENT};
+    color: #ffffff;
+    border-color: {SECONDARY_ACCENT};
+    font-weight: 600;
+}}
+
+QPushButton[navButton="true"] {{
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    text-align: left;
+    padding: 8px 10px;
+    color: {SECONDARY_TEXT};
+}}
+
+QPushButton[navButton="true"]:hover {{
+    background: {SURFACE_ALTERNATIVE};
+    border-color: {BORDER};
+    color: {PRIMARY_TEXT};
+}}
+
+QPushButton[navButton="true"][active="true"] {{
+    background: rgba(25, 144, 129, 0.16);
+    border-color: rgba(25, 144, 129, 0.28);
+    color: {PRIMARY_ACCENT};
+    font-weight: 600;
+}}
+
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget {{
+    background: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 5px 8px;
+    selection-background-color: {PRIMARY_ACCENT};
+    selection-color: #ffffff;
+}}
+
+QPlainTextEdit[logViewer="true"], QTextEdit[logViewer="true"] {{
+    background: {LOG_SURFACE};
+    color: {LOG_TEXT};
+    font-family: "Consolas";
+    font-size: 11px;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+}}
+
+QComboBox::drop-down {{
+    border: 0px;
+}}
+
+QHeaderView::section {{
+    background: {SURFACE_ALTERNATIVE};
+    color: {PRIMARY_TEXT};
+    border: 0px;
+    border-bottom: 1px solid {BORDER};
+    padding: 6px 8px;
+    font-weight: 600;
+}}
+
+QTableWidget {{
+    gridline-color: {BORDER};
+}}
+
+QTableWidget::item {{
+    padding: 4px;
+}}
+
+QProgressBar {{
+    background: {SURFACE_ALTERNATIVE};
+    border: 1px solid {BORDER};
+    border-radius: 7px;
+    text-align: center;
+}}
+
+QProgressBar::chunk {{
+    background: {PRIMARY_ACCENT};
+    border-radius: 6px;
+}}
+
+QScrollBar:vertical {{
+    background: transparent;
+    width: 10px;
+    margin: 2px;
+}}
+
+QScrollBar::handle:vertical {{
+    background: #486077;
+    border-radius: 4px;
+    min-height: 24px;
+}}
+
+QToolTip {{
+    background: {SURFACE};
+    color: {PRIMARY_TEXT};
+    border: 1px solid {BORDER};
+    padding: 6px 8px;
+}}
+
+QStatusBar {{
+    background: {SURFACE};
+    border-top: 1px solid {BORDER};
+}}
