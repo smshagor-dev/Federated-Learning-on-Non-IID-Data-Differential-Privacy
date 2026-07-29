@@ -1,0 +1,35 @@
+system:
+  seed: 42
+  device: auto
+  results_dir: results/readme_smoke
+data:
+  dataset: MNIST
+  data_root: ./data_raw
+  partition: dirichlet
+  alpha: 0.1
+  classes_per_client: 2
+  min_partition_size: 10
+federated:
+  num_clients: 2
+  sample_rate: 1.0
+  rounds: 1
+  local_epochs: 1
+  batch_size: 16
+  server_lr: 1.0
+optimizer:
+  lr: 0.01
+  momentum: 0.9
+  weight_decay: 0.0005
+algorithm:
+  name: fedavg
+  mu: 0.01
+dp:
+  enabled: false
+  max_grad_norm: 1.5
+  noise_multiplier: 0.8
+  target_delta: 1.0e-05
+model:
+  name: cnn
+  group_norm_groups: 2
+evaluation:
+  eval_batch_size: 64

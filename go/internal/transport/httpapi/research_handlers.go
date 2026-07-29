@@ -1,9 +1,12 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/application"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/auth"
@@ -149,6 +152,8 @@ func (s *Server) handleResearchRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 	experimentID := parts[0]
 	switch {
+	case len(parts) == 1 && parts[0] == "stream" && r.Method == http.MethodGet:
+		s.handleResearchExperimentsStream(w, r)
 	case len(parts) == 1 && parts[0] == "validate" && r.Method == http.MethodPost:
 		s.handleResearchValidate(w, r)
 	case len(parts) == 1 && r.Method == http.MethodGet:
@@ -157,6 +162,8 @@ func (s *Server) handleResearchRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleResearchStart(w, r, experimentID)
 	case len(parts) == 2 && parts[1] == "cancel" && r.Method == http.MethodPost:
 		s.handleResearchCancel(w, r, experimentID)
+	case len(parts) == 2 && parts[1] == "stream" && r.Method == http.MethodGet:
+		s.handleResearchExperimentDetailStream(w, r, experimentID)
 	case len(parts) == 2 && parts[1] == "runs" && r.Method == http.MethodGet:
 		s.handleResearchRuns(w, r, experimentID)
 	case len(parts) == 3 && parts[1] == "runs" && r.Method == http.MethodGet:
@@ -169,6 +176,57 @@ func (s *Server) handleResearchRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleResearchArtifacts(w, r, experimentID)
 	default:
 		writeError(w, http.StatusNotFound, "route not found")
+	}
+}
+
+func (s *Server) handleResearchExperimentsStream(w http.ResponseWriter, r *http.Request) {
+	session, ok := s.requirePermission(w, r, security.PermResearchExperimentsList)
+	if !ok {
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+
+	writeSSEHeaders(w)
+	flusher.Flush()
+
+	ctx := r.Context()
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	streamID := 0
+	sendSnapshot := func() bool {
+		items, err := s.services.Research.ListExperiments(ctx)
+		if err != nil {
+			writeSSEErrorFrame(w, flusher, "research-error", err.Error())
+			return false
+		}
+		views := make([]any, 0, len(items))
+		for _, item := range items {
+			views = append(views, projectExperimentView(session.User.Role, item))
+		}
+		streamID++
+		return writeSSEJSONFrame(w, flusher, fmt.Sprintf("research-experiments-%d", streamID), "snapshot", map[string]any{
+			"experiments":  views,
+			"generated_at": time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+
+	if !sendSnapshot() {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !sendSnapshot() {
+				return
+			}
+		}
 	}
 }
 
@@ -416,6 +474,91 @@ func (s *Server) handleResearchExperimentDetail(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, projectExperimentView(session.User.Role, item))
 }
 
+func (s *Server) handleResearchExperimentDetailStream(w http.ResponseWriter, r *http.Request, experimentID string) {
+	session, ok := s.requirePermission(w, r, security.PermResearchExperimentsRead)
+	if !ok {
+		return
+	}
+	if _, ok := s.requirePermission(w, r, security.PermResearchRunsRead); !ok {
+		return
+	}
+	if _, ok := s.requirePermission(w, r, security.PermResearchMetricsRead); !ok {
+		return
+	}
+	if _, ok := s.requirePermission(w, r, security.PermResearchEventsRead); !ok {
+		return
+	}
+	if _, ok := s.requirePermission(w, r, security.PermResearchArtifactsRead); !ok {
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+
+	writeSSEHeaders(w)
+	flusher.Flush()
+
+	ctx := r.Context()
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	streamID := 0
+	sendSnapshot := func() bool {
+		experiment, err := s.services.Research.GetExperiment(ctx, experimentID)
+		if err != nil {
+			writeSSEErrorFrame(w, flusher, "research-error", err.Error())
+			return false
+		}
+		runs, err := s.services.Research.ListRuns(ctx, experimentID)
+		if err != nil {
+			writeSSEErrorFrame(w, flusher, "research-error", err.Error())
+			return false
+		}
+		metrics, recoveredMetrics, err := s.services.Research.ListMetrics(ctx, experimentID)
+		if err != nil {
+			writeSSEErrorFrame(w, flusher, "research-error", err.Error())
+			return false
+		}
+		events, recoveredEvents, err := s.services.Research.ListEvents(ctx, experimentID)
+		if err != nil {
+			writeSSEErrorFrame(w, flusher, "research-error", err.Error())
+			return false
+		}
+		artifacts, err := s.services.Research.ListArtifacts(ctx, experimentID)
+		if err != nil {
+			writeSSEErrorFrame(w, flusher, "research-error", err.Error())
+			return false
+		}
+		streamID++
+		return writeSSEJSONFrame(w, flusher, fmt.Sprintf("research-detail-%s-%d", experimentID, streamID), "snapshot", map[string]any{
+			"experiment":              projectExperimentView(session.User.Role, experiment),
+			"runs":                    runs,
+			"metrics":                 metrics,
+			"events":                  events,
+			"artifacts":               artifacts,
+			"recovered_metric_count":  recoveredMetrics,
+			"recovered_event_count":   recoveredEvents,
+			"generated_at":            time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+
+	if !sendSnapshot() {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !sendSnapshot() {
+				return
+			}
+		}
+	}
+}
+
 func (s *Server) handleResearchRuns(w http.ResponseWriter, r *http.Request, experimentID string) {
 	if _, ok := s.requirePermission(w, r, security.PermResearchRunsRead); !ok {
 		return
@@ -507,4 +650,27 @@ func (s *Server) handleResearchRuntimeHealth(w http.ResponseWriter, r *http.Requ
 		response["overall_status"] = "DEGRADED"
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func writeSSEHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+}
+
+func writeSSEErrorFrame(w http.ResponseWriter, flusher http.Flusher, eventType, message string) {
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, jsonString(message))
+	flusher.Flush()
+}
+
+func writeSSEJSONFrame(w http.ResponseWriter, flusher http.Flusher, id, eventType string, payload any) bool {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		writeSSEErrorFrame(w, flusher, "research-error", err.Error())
+		return false
+	}
+	fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\n\n", id, eventType, body)
+	flusher.Flush()
+	return true
 }

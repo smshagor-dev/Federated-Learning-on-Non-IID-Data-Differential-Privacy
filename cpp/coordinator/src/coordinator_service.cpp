@@ -445,12 +445,16 @@ std::optional<grpc::Status> reject_if_worker_identity_mismatch(grpc::ServerConte
 // other identity check in this file, so coordinator_service_test.cpp's
 // existing direct-call test pattern keeps working for these new RPCs
 // too.
-std::optional<grpc::Status> reject_if_not_go_api_service_identity(grpc::ServerContext* context) {
+std::optional<grpc::Status> reject_if_not_go_api_service_identity(grpc::ServerContext* context,
+                                                                 TransportMode transport_mode) {
     if (context == nullptr) {
         return std::nullopt;
     }
     const auto peer_identity = extract_peer_identity(*context);
     if (!peer_identity.authenticated) {
+        if (transport_mode == TransportMode::kInsecureDevelopment) {
+            return std::nullopt;
+        }
         return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
                             "administration RPCs require an authenticated service certificate");
     }
@@ -2799,7 +2803,7 @@ grpc::Status CoordinatorServiceImpl::GetWorkerIdentity(
     grpc::ServerContext* context,
     const fl::coordinator::v1::GetWorkerIdentityRequest* request,
     fl::coordinator::v1::WorkerIdentitySummary* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         return *rejection;
     }
     if (identity_registry_ == nullptr) {
@@ -2819,7 +2823,7 @@ grpc::Status CoordinatorServiceImpl::ListWorkerIdentities(
     grpc::ServerContext* context,
     const fl::coordinator::v1::ListWorkerIdentitiesRequest*,
     fl::coordinator::v1::ListWorkerIdentitiesResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         return *rejection;
     }
     if (identity_registry_ == nullptr) {
@@ -2836,7 +2840,7 @@ grpc::Status CoordinatorServiceImpl::SuspendWorker(
     grpc::ServerContext* context,
     const fl::coordinator::v1::SuspendWorkerRequest* request,
     fl::coordinator::v1::WorkerLifecycleResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(security_event_journal_, context, "SuspendWorker");
         return *rejection;
     }
@@ -2876,7 +2880,7 @@ grpc::Status CoordinatorServiceImpl::ActivateWorker(
     grpc::ServerContext* context,
     const fl::coordinator::v1::ActivateWorkerRequest* request,
     fl::coordinator::v1::WorkerLifecycleResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(security_event_journal_, context, "ActivateWorker");
         return *rejection;
     }
@@ -2915,7 +2919,7 @@ grpc::Status CoordinatorServiceImpl::RevokeWorker(
     grpc::ServerContext* context,
     const fl::coordinator::v1::RevokeWorkerRequest* request,
     fl::coordinator::v1::WorkerLifecycleResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(security_event_journal_, context, "RevokeWorker");
         return *rejection;
     }
@@ -3142,7 +3146,7 @@ grpc::Status CoordinatorServiceImpl::GetWorkerSigningKeys(
     grpc::ServerContext* context,
     const fl::coordinator::v1::GetWorkerSigningKeysRequest* request,
     fl::coordinator::v1::GetWorkerSigningKeysResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         return *rejection;
     }
     if (signing_key_registry_ == nullptr) {
@@ -3160,7 +3164,7 @@ grpc::Status CoordinatorServiceImpl::RevokeWorkerSigningKey(
     grpc::ServerContext* context,
     const fl::coordinator::v1::RevokeWorkerSigningKeyRequest* request,
     fl::coordinator::v1::RevokeWorkerSigningKeyResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(security_event_journal_, context, "RevokeWorkerSigningKey");
         return *rejection;
     }
@@ -3249,7 +3253,7 @@ grpc::Status CoordinatorServiceImpl::GetCoordinatorSigningKeys(
     const fl::coordinator::v1::GetCoordinatorSigningKeysRequest* request,
     fl::coordinator::v1::GetCoordinatorSigningKeysResponse* response) {
     (void)request;
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         return *rejection;
     }
     if (coordinator_signing_key_registry_ == nullptr) {
@@ -3267,7 +3271,7 @@ grpc::Status CoordinatorServiceImpl::GetTransportSecurityStatus(
     const fl::coordinator::v1::GetTransportSecurityStatusRequest* request,
     fl::coordinator::v1::TransportSecurityStatusResponse* response) {
     (void)request;
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         return *rejection;
     }
     response->set_transport_mode(to_string(transport_mode_));
@@ -3281,7 +3285,7 @@ grpc::Status CoordinatorServiceImpl::GetSecurityTrustModel(
     const fl::coordinator::v1::GetSecurityTrustModelRequest* request,
     fl::coordinator::v1::SecurityTrustModelResponse* response) {
     (void)request;
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         return *rejection;
     }
     const double now = now_unix_s();
@@ -3337,7 +3341,7 @@ grpc::Status CoordinatorServiceImpl::RotateCoordinatorSigningKey(
     grpc::ServerContext* context,
     const fl::coordinator::v1::RotateCoordinatorSigningKeyRequest* request,
     fl::coordinator::v1::RotateCoordinatorSigningKeyResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(
             security_event_journal_, context, "RotateCoordinatorSigningKey");
         return *rejection;
@@ -3553,7 +3557,7 @@ grpc::Status CoordinatorServiceImpl::RevokeCoordinatorSigningKey(
     grpc::ServerContext* context,
     const fl::coordinator::v1::RevokeCoordinatorSigningKeyRequest* request,
     fl::coordinator::v1::RevokeCoordinatorSigningKeyResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(
             security_event_journal_, context, "RevokeCoordinatorSigningKey");
         return *rejection;
@@ -3715,7 +3719,7 @@ grpc::Status CoordinatorServiceImpl::ListSecurityEvents(
     grpc::ServerContext* context,
     const fl::coordinator::v1::ListSecurityEventsRequest* request,
     fl::coordinator::v1::ListSecurityEventsResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(security_event_journal_, context, "ListSecurityEvents");
         return *rejection;
     }
@@ -3763,7 +3767,7 @@ grpc::Status CoordinatorServiceImpl::GetSecurityEventSourceHealth(
     const fl::coordinator::v1::GetSecurityEventSourceHealthRequest* request,
     fl::coordinator::v1::GetSecurityEventSourceHealthResponse* response) {
     (void)request;
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(
             security_event_journal_, context, "GetSecurityEventSourceHealth");
         return *rejection;
@@ -5252,7 +5256,7 @@ grpc::Status CoordinatorServiceImpl::AbortSecureAggregationSession(
     response->set_accepted(false);
     // ADMIN_CONTROL, same gate as SuspendWorker/RevokeWorker -- manual
     // abort is an administrative action, not a worker-initiated one.
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(
             security_event_journal_, context, "AbortSecureAggregationSession");
         return *rejection;
@@ -5323,7 +5327,7 @@ grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyHealth(
     const fl::coordinator::v1::GetSecureUserLevelPrivacyHealthRequest* request,
     fl::coordinator::v1::SecureUserLevelPrivacyHealthResponse* response) {
     (void)request;
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(
             security_event_journal_, context, "GetSecureUserLevelPrivacyHealth");
         return *rejection;
@@ -5397,7 +5401,7 @@ grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyBudget(
     grpc::ServerContext* context,
     const fl::coordinator::v1::GetSecureUserLevelPrivacyBudgetRequest* request,
     fl::coordinator::v1::SecureUserLevelPrivacyBudgetResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(
             security_event_journal_, context, "GetSecureUserLevelPrivacyBudget");
         return *rejection;
@@ -5460,7 +5464,7 @@ grpc::Status CoordinatorServiceImpl::ListSecureUserLevelPrivacyRounds(
     grpc::ServerContext* context,
     const fl::coordinator::v1::ListSecureUserLevelPrivacyRoundsRequest* request,
     fl::coordinator::v1::ListSecureUserLevelPrivacyRoundsResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(
             security_event_journal_, context, "ListSecureUserLevelPrivacyRounds");
         return *rejection;
@@ -5517,7 +5521,7 @@ grpc::Status CoordinatorServiceImpl::GetSecureUserLevelPrivacyRound(
     grpc::ServerContext* context,
     const fl::coordinator::v1::GetSecureUserLevelPrivacyRoundRequest* request,
     fl::coordinator::v1::GetSecureUserLevelPrivacyRoundResponse* response) {
-    if (const auto rejection = reject_if_not_go_api_service_identity(context)) {
+    if (const auto rejection = reject_if_not_go_api_service_identity(context, transport_mode_)) {
         emit_permission_denied_event(
             security_event_journal_, context, "GetSecureUserLevelPrivacyRound");
         return *rejection;

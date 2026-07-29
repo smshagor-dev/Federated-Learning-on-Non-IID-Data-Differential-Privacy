@@ -21,6 +21,17 @@ import (
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/observability"
 )
 
+func grpcStatusMessage(st *status.Status, fallback string) string {
+	message := st.Message()
+	if message != "" {
+		return message
+	}
+	if fallback != "" {
+		return fallback
+	}
+	return st.Code().String()
+}
+
 // TransportSecurityStatus mirrors fl.coordinator.v1.TransportSecurityStatusResponse.
 type TransportSecurityStatus struct {
 	TransportMode     string  `json:"transport_mode"`
@@ -227,15 +238,15 @@ func mapSecurityGrpcError(err error) error {
 	}
 	switch st.Code() {
 	case codes.Unavailable, codes.DeadlineExceeded, codes.Canceled:
-		return fmt.Errorf("%w: %s", ErrUnavailable, st.Message())
+		return fmt.Errorf("%w: %s", ErrUnavailable, grpcStatusMessage(st, "security coordinator RPC unavailable"))
 	case codes.PermissionDenied, codes.Unauthenticated:
-		return fmt.Errorf("%w: %s", ErrPermissionDenied, st.Message())
+		return fmt.Errorf("%w: %s", ErrPermissionDenied, grpcStatusMessage(st, "security coordinator RPC permission denied"))
 	case codes.NotFound:
-		return fmt.Errorf("%w: %s", ErrNotFound, st.Message())
+		return fmt.Errorf("%w: %s", ErrNotFound, grpcStatusMessage(st, "security resource not found"))
 	case codes.FailedPrecondition:
-		return fmt.Errorf("%w: %s", ErrFailedPrecondition, st.Message())
+		return fmt.Errorf("%w: %s", ErrFailedPrecondition, grpcStatusMessage(st, "security feature is not configured on this deployment"))
 	default:
-		return &RejectedError{Reason: st.Message()}
+		return &RejectedError{Reason: grpcStatusMessage(st, "security coordinator RPC failed")}
 	}
 }
 

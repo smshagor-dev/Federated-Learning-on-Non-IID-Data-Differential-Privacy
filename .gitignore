@@ -14,8 +14,6 @@ coordinator_test_scratch/
 node_modules/
 .next/
 *.tsbuildinfo
-web/.coverage/
-web/coverage/
 
 # Secure Transport and Worker Identity Hardening slice: development PKI
 # output (scripts/pki/*.sh, *.ps1) -- private keys, CSRs, and the CA's
@@ -37,4 +35,3 @@ Thumbs.db
 # sequence_state_path default).
 artifacts/
 .fl_worker_sequence_state.*.json
-web/e2e-results/

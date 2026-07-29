@@ -52,8 +52,25 @@ def check_docker_daemon() -> CheckResult:
             check=True,
             text=True,
         )
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+    except FileNotFoundError as exc:
         return CheckResult(False, f"Docker daemon unavailable: {exc}")
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        stdout = (exc.stdout or "").strip()
+        details = stderr or stdout or str(exc)
+        message = f"Docker daemon unavailable: {details}"
+        normalized = details.lower()
+        if any(
+            token in normalized
+            for token in (
+                "the docker daemon is not running",
+                "error during connect",
+                "open //./pipe/docker_engine",
+                "cannot connect to the docker daemon",
+            )
+        ):
+            message += " Start Docker Desktop or another local Docker engine, then retry."
+        return CheckResult(False, message)
     return CheckResult(True, f"Docker daemon {result.stdout.strip()}")
 
 

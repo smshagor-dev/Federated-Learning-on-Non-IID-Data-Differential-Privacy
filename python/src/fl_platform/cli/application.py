@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from contextlib import suppress
@@ -37,6 +38,20 @@ from .status import (
     new_runtime_state,
     process_is_running,
     save_runtime_state,
+)
+
+AUTO_PORT_ENV_VARS: tuple[tuple[str, int, str], ...] = (
+    ("FL_POSTGRES_HOST_PORT", 5432, "postgres"),
+    ("FL_REDIS_HOST_PORT", 6379, "redis"),
+    ("FL_MINIO_API_HOST_PORT", 9000, "minio"),
+    ("FL_MINIO_CONSOLE_HOST_PORT", 9001, "minio-console"),
+    ("FL_MLFLOW_HOST_PORT", 5000, "mlflow"),
+    ("FL_COORDINATOR_HOST_PORT", 50051, "coordinator"),
+    ("FL_API_HOST_PORT", 8080, "api"),
+    ("FL_PROMETHEUS_HOST_PORT", 9090, "prometheus"),
+    ("FL_GRAFANA_HOST_PORT", 3001, "grafana"),
+    ("FL_OTEL_GRPC_HOST_PORT", 4317, "otel-grpc"),
+    ("FL_OTEL_HTTP_HOST_PORT", 4318, "otel-http"),
 )
 
 
@@ -79,7 +94,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def start_command(paths: LauncherPaths, console: Console, args: Any) -> int:
-    compose = resolve_compose(paths, args.profile)
     if args.no_cache:
         args.build = True
     duplicate = load_runtime_state(paths.state_file)
@@ -94,7 +108,8 @@ def start_command(paths: LauncherPaths, console: Console, args: Any) -> int:
         )
         return 1
 
-    checks = run_dependency_checks(paths, compose)
+    compose = resolve_runtime_compose(paths, console, args.profile)
+    checks = run_startup_checks(paths, compose)
     for name, ok, message in checks:
         emit_check(console, name, ok, message)
     if not all(ok for _, ok, _ in checks):
@@ -105,7 +120,7 @@ def start_command(paths: LauncherPaths, console: Console, args: Any) -> int:
         console.error("ports", port_check)
         return 2
 
-    if args.build:
+    if compose is not None and args.build:
         console.info("compose", "Building backend images")
         build_args = compose_base_command(compose) + ["build"]
         if args.no_cache:
@@ -114,26 +129,33 @@ def start_command(paths: LauncherPaths, console: Console, args: Any) -> int:
         if run_checked(build_args, paths.repo_root, console, "compose") != 0:
             return 1
 
-    console.info("compose", "Starting backend containers")
-    up_args = compose_base_command(compose) + ["up", "-d"]
-    up_args.extend(compose.backend_services)
-    if run_checked(up_args, paths.repo_root, console, "compose") != 0:
-        return 1
+    if compose is not None:
+        console.info("compose", "Starting backend containers")
+        up_args = compose_base_command(compose) + ["up", "-d"]
+        up_args.extend(compose.backend_services)
+        if run_checked(up_args, paths.repo_root, console, "compose") != 0:
+            return 1
 
-    console.info("health", "Waiting for required backend services")
-    backend_status = wait_for_backend(compose, paths, timeout_s=180)
-    failed = [
-        service
-        for service in compose.required_services
-        if not _service_ok(compose, service, backend_status)
-    ]
-    if failed:
-        console.error(
-            "health", f"Required services did not become ready: {', '.join(failed)}"
+        console.info("health", "Waiting for required backend services")
+        backend_status = wait_for_backend(compose, paths, timeout_s=180)
+        failed = [
+            service
+            for service in compose.required_services
+            if not _service_ok(compose, service, backend_status)
+        ]
+        if failed:
+            console.error(
+                "health",
+                f"Required services did not become ready: {', '.join(failed)}",
+            )
+            if not args.keep_backend:
+                _compose_down(compose, paths, console, with_volumes=False)
+            return 1
+    else:
+        console.warning(
+            "launcher",
+            "Docker backend unavailable. Starting dashboard in web-only mode.",
         )
-        if not args.keep_backend:
-            _compose_down(compose, paths, console, with_volumes=False)
-        return 1
 
     if args.install_web:
         console.info("web", "Installing locked web dependencies")
@@ -141,11 +163,19 @@ def start_command(paths: LauncherPaths, console: Console, args: Any) -> int:
             run_checked([resolve_npm_command(), "ci"], paths.web_dir, console, "web")
             != 0
         ):
-            if not args.keep_backend:
+            if compose is not None and not args.keep_backend:
                 _compose_down(compose, paths, console, with_volumes=False)
             return 1
 
-    api_url = compose.services["api"].published_url or "http://127.0.0.1:8080"
+    api_url = (
+        compose.services["api"].published_url
+        if compose is not None and "api" in compose.services
+        else (
+            os.environ.get("FL_API_BASE_URL")
+            or os.environ.get("NEXT_PUBLIC_FL_API_BASE_URL")
+            or "http://127.0.0.1:8080"
+        )
+    )
     web_runtime = detect_web_runtime(paths, args.web_host, args.web_port, api_url)
     console.info(
         "web", f"Starting local Next.js dev server with {web_runtime.package_manager}"
@@ -161,21 +191,23 @@ def start_command(paths: LauncherPaths, console: Console, args: Any) -> int:
     if not wait_for_web(args.web_host, args.web_port, timeout_s=120):
         console.error("web", "Web server did not become ready in time.")
         stop_process(managed_web.process, console, "web")
-        if not args.keep_backend:
+        if compose is not None and not args.keep_backend:
             _compose_down(compose, paths, console, with_volumes=False)
         return 1
 
     state = new_runtime_state(
-        compose_project_name=compose.project_name,
-        profile=compose.profile,
-        compose_files=[str(item) for item in compose.compose_files],
-        backend_services=compose.backend_services,
+        compose_project_name=compose.project_name if compose is not None else "",
+        profile=compose.profile if compose is not None else "web-only",
+        compose_files=[str(item) for item in compose.compose_files]
+        if compose is not None
+        else [],
+        backend_services=compose.backend_services if compose is not None else [],
         web_pid=managed_web.process.pid,
         web_port=args.web_port,
-        keep_backend=args.keep_backend,
+        keep_backend=args.keep_backend if compose is not None else False,
     )
     save_runtime_state(paths.state_file, state)
-    print_platform_summary(compose, args.web_host, args.web_port, console)
+    print_platform_summary(compose, api_url, args.web_host, args.web_port, console)
 
     exit_code = 0
     try:
@@ -191,7 +223,9 @@ def start_command(paths: LauncherPaths, console: Console, args: Any) -> int:
         console.info("launcher", "Ctrl+C received. Shutting down.")
     finally:
         stop_process(managed_web.process, console, "web")
-        if not args.keep_backend:
+        if compose is None:
+            delete_runtime_state(paths.state_file)
+        elif not args.keep_backend:
             _compose_down(compose, paths, console, with_volumes=False)
             delete_runtime_state(paths.state_file)
         else:
@@ -218,6 +252,18 @@ def stop_command(
     ignore_missing: bool = False,
 ) -> int:
     state = load_runtime_state(paths.state_file)
+    if state and not state.backend_services:
+        if state.web_pid and process_is_running(state.web_pid):
+            console.info("web", "Stopping managed web process from runtime state")
+            with suppress(OSError):
+                subprocess.run(
+                    ["taskkill", "/PID", str(state.web_pid), "/T", "/F"],
+                    check=False,
+                    capture_output=True,
+                )
+        delete_runtime_state(paths.state_file)
+        console.success("launcher", "Web-only platform stopped.")
+        return 0
     profile = (
         args.profile
         if getattr(args, "profile", None)
@@ -251,6 +297,25 @@ def stop_command(
 
 def status_command(paths: LauncherPaths, console: Console, args: Any) -> int:
     state = load_runtime_state(paths.state_file)
+    if state and not state.backend_services:
+        payload: dict[str, Any] = {
+            "profile": state.profile,
+            "project": state.compose_project_name,
+            "services": [],
+            "web_pid": state.web_pid,
+            "web_process_running": process_is_running(state.web_pid),
+        }
+        if args.json_output:
+            console.plain(json.dumps(payload, indent=2))
+        else:
+            console.plain("Federated Learning Research Platform status")
+            web_state = "running" if payload["web_process_running"] else "stopped"
+            console.plain(
+                f"{'web-process':<18} {web_state:<12} {'local':<10} "
+                f"pid={payload['web_pid']}"
+            )
+            console.plain("backend             skipped      web-only   -")
+        return 0
     profile = (
         args.profile
         if getattr(args, "profile", None)
@@ -297,6 +362,35 @@ def status_command(paths: LauncherPaths, console: Console, args: Any) -> int:
 
 def health_command(paths: LauncherPaths, console: Console, args: Any) -> int:
     state = load_runtime_state(paths.state_file)
+    if state and not state.backend_services:
+        web_port = state.web_port
+        web_ok = http_ready("127.0.0.1", web_port, "/")
+        payload = {
+            "ok": web_ok,
+            "checks": [
+                {
+                    "service": "web",
+                    "state": "running" if web_ok else "unavailable",
+                    "health": "ready" if web_ok else "down",
+                    "ok": str(web_ok).lower(),
+                },
+                {
+                    "service": "backend",
+                    "state": "skipped",
+                    "health": "web-only",
+                    "ok": "true",
+                },
+            ],
+        }
+        if args.json_output:
+            console.plain(json.dumps(payload, indent=2))
+        else:
+            for item in payload["checks"]:
+                console.plain(
+                    f"{item['service']:<18} ok={item['ok']:<5} "
+                    f"state={item['state']:<12} health={item['health']}"
+                )
+        return 0 if web_ok else 1
     profile = (
         args.profile
         if getattr(args, "profile", None)
@@ -341,7 +435,7 @@ def health_command(paths: LauncherPaths, console: Console, args: Any) -> int:
 
 def doctor_command(paths: LauncherPaths, console: Console, args: Any) -> int:
     compose = resolve_compose(paths, args.profile)
-    checks = run_dependency_checks(paths, compose)
+    checks = run_startup_checks(paths, compose)
     if args.json_output:
         console.plain(
             json.dumps(
@@ -462,6 +556,45 @@ def run_dependency_checks(
     return [(name, bool(ok), str(message)) for name, ok, message in checks]
 
 
+def run_startup_checks(
+    paths: LauncherPaths, compose: ResolvedCompose | None
+) -> list[tuple[str, bool, str]]:
+    if compose is None:
+        python_check = check_python_version()
+        node_check = check_command("node", "Node.js")
+        npm_check = check_command(resolve_npm_command(), "npm")
+        web_dependency_check = check_web_dependencies(paths)
+        repository_files_check = check_required_repository_files(paths)
+        runtime_dir_check = check_runtime_directories(paths)
+        legacy_exists = paths.legacy_main.exists()
+        checks = [
+            ("python", python_check.ok, python_check.message),
+            ("node", node_check.ok, node_check.message),
+            ("npm", npm_check.ok, npm_check.message),
+            ("web-deps", web_dependency_check.ok, web_dependency_check.message),
+            (
+                "repo-files",
+                repository_files_check.ok,
+                repository_files_check.message,
+            ),
+            ("runtime-dirs", runtime_dir_check.ok, runtime_dir_check.message),
+            (
+                "legacy-main",
+                legacy_exists,
+                "legacy prototype located"
+                if legacy_exists
+                else "legacy prototype missing",
+            ),
+            (
+                "backend-mode",
+                True,
+                "Docker unavailable; launcher will continue in web-only mode.",
+            ),
+        ]
+        return [(name, bool(ok), str(message)) for name, ok, message in checks]
+    return run_dependency_checks(paths, compose)
+
+
 def emit_check(console: Console, name: str, ok: bool, message: str) -> None:
     if ok:
         console.success(name, message)
@@ -470,50 +603,64 @@ def emit_check(console: Console, name: str, ok: bool, message: str) -> None:
 
 
 def validate_public_ports(
-    compose: ResolvedCompose, web_host: str, web_port: int
+    compose: ResolvedCompose | None, web_host: str, web_port: int
 ) -> str | None:
-    for service_name, definition in compose.services.items():
-        if definition.web:
-            continue
-        if definition.published_port is None:
-            continue
-        if not is_port_available("127.0.0.1", definition.published_port):
-            return (
-                f"Port {definition.published_port} for {service_name} "
-                "is already in use."
-            )
+    if compose is not None:
+        for service_name, definition in compose.services.items():
+            if definition.web:
+                continue
+            if definition.published_port is None:
+                continue
+            if not is_port_available("127.0.0.1", definition.published_port):
+                return (
+                    f"Port {definition.published_port} for {service_name} "
+                    "is already in use."
+                )
     if not is_port_available(web_host, web_port):
         return f"Web port {web_port} is already in use."
     return None
 
 
 def print_platform_summary(
-    compose: ResolvedCompose, web_host: str, web_port: int, console: Console
+    compose: ResolvedCompose | None,
+    api_url: str,
+    web_host: str,
+    web_port: int,
+    console: Console,
 ) -> None:
     console.plain("")
     console.plain("Federated Learning Research Platform")
     console.plain("")
     console.plain("Backend")
     console.plain("--------------------------------------------------")
-    for service in compose.backend_services:
-        definition = compose.services[service]
-        status = inspect_service(
-            compose, compose.compose_files[0].parent.parent.parent, service
-        )
-        health = status.health if status.health != "none" else status.state
-        console.plain(f"{definition.display_name:<18} {health.upper()}")
+    if compose is None:
+        console.plain("Backend skipped      WEB-ONLY")
+    else:
+        for service in compose.backend_services:
+            definition = compose.services[service]
+            status = inspect_service(
+                compose, compose.compose_files[0].parent.parent.parent, service
+            )
+            health = status.health if status.health != "none" else status.state
+            console.plain(f"{definition.display_name:<18} {health.upper()}")
     console.plain("")
     console.plain("URLs")
     console.plain("--------------------------------------------------")
     console.plain(f"Web Dashboard      http://{web_host}:{web_port}")
-    for service_definition in compose.services.values():
-        if service_definition.web or not service_definition.published_url:
-            continue
-        console.plain(
-            f"{service_definition.display_name:<18} {service_definition.published_url}"
-        )
+    if compose is None:
+        console.plain(f"API Base URL        {api_url} (not managed by launcher)")
+    else:
+        for service_definition in compose.services.values():
+            if service_definition.web or not service_definition.published_url:
+                continue
+            console.plain(
+                f"{service_definition.display_name:<18} {service_definition.published_url}"
+            )
     console.plain("")
-    console.plain("Press Ctrl+C to stop the complete platform.")
+    if compose is None:
+        console.plain("Press Ctrl+C to stop the local dashboard.")
+    else:
+        console.plain("Press Ctrl+C to stop the complete platform.")
 
 
 def run_checked(command: list[str], cwd: Path, console: Console, component: str) -> int:
@@ -548,3 +695,94 @@ def _service_ok(
     if definition.category.name == "API" and definition.published_port is not None:
         return http_ready("127.0.0.1", definition.published_port, "/healthz")
     return True
+
+
+def resolve_runtime_compose(
+    paths: LauncherPaths,
+    console: Console,
+    profile: str | None,
+) -> ResolvedCompose | None:
+    docker_check = check_command("docker", "Docker CLI")
+    if not docker_check.ok:
+        console.warning(
+            "docker",
+            "Docker CLI not available. Backend startup will be skipped.",
+        )
+        return None
+
+    docker_daemon_check = check_docker_daemon()
+    if docker_daemon_check.ok:
+        apply_automatic_port_overrides(console)
+        return resolve_compose(paths, profile)
+
+    console.warning("docker-daemon", docker_daemon_check.message)
+    if _try_start_docker_desktop(console):
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline:
+            ready_check = check_docker_daemon()
+            if ready_check.ok:
+                console.success("docker-daemon", ready_check.message)
+                apply_automatic_port_overrides(console)
+                return resolve_compose(paths, profile)
+            time.sleep(3)
+        console.warning(
+            "docker-daemon",
+            "Docker Desktop was launched, but the daemon did not become ready in time.",
+        )
+    return None
+
+
+def _try_start_docker_desktop(console: Console) -> bool:
+    candidates = [
+        Path(os.environ.get("ProgramFiles", "")) / "Docker" / "Docker" / "Docker Desktop.exe",
+        Path(os.environ.get("LocalAppData", "")) / "Programs" / "Docker" / "Docker" / "Docker Desktop.exe",
+    ]
+    for candidate in candidates:
+        if not str(candidate):
+            continue
+        if not candidate.exists():
+            continue
+        try:
+            console.info("docker-daemon", f"Launching Docker Desktop from {candidate}")
+            subprocess.Popen(
+                [str(candidate)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=False,
+            )
+            return True
+        except OSError:
+            continue
+    console.warning(
+        "docker-daemon",
+        "Docker CLI is installed, but Docker Desktop could not be auto-started.",
+    )
+    return False
+
+
+def apply_automatic_port_overrides(console: Console) -> None:
+    for env_var, default_port, service_name in AUTO_PORT_ENV_VARS:
+        configured_port = os.environ.get(env_var)
+        if configured_port:
+            continue
+        if is_port_available("127.0.0.1", default_port):
+            continue
+        replacement = _find_available_port(default_port)
+        if replacement is None:
+            continue
+        os.environ[env_var] = str(replacement)
+        console.warning(
+            "ports",
+            f"Port {default_port} for {service_name} is busy; using {replacement} via {env_var}.",
+        )
+
+
+def _find_available_port(preferred_port: int, attempts: int = 50) -> int | None:
+    for candidate in range(preferred_port + 1, preferred_port + attempts + 1):
+        if is_port_available("127.0.0.1", candidate):
+            return candidate
+    fallback = preferred_port + 10_000
+    for candidate in range(fallback, fallback + attempts):
+        if is_port_available("127.0.0.1", candidate):
+            return candidate
+    return None

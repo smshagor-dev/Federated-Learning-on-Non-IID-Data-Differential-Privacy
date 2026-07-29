@@ -1,6 +1,16 @@
+import os
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from fl_platform.cli.application import (
+    _find_available_port,
+    apply_automatic_port_overrides,
+    resolve_runtime_compose,
+    run_startup_checks,
+)
+from fl_platform.cli.configuration import resolve_paths
+from fl_platform.cli.output import Console
 from fl_platform.cli.application import main as cli_main
 from fl_platform.cli.compose import build_service_inventory
 from fl_platform.cli.configuration import ServiceCategory
@@ -74,6 +84,74 @@ class PlatformLauncherDispatchTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 7)
         delegated.assert_called_once_with()
+
+    def test_run_startup_checks_supports_web_only_mode(self) -> None:
+        paths = resolve_paths(Path(__file__).resolve().parents[2] / "main.py")
+
+        checks = run_startup_checks(paths, None)
+
+        self.assertIn(
+            (
+                "backend-mode",
+                True,
+                "Docker unavailable; launcher will continue in web-only mode.",
+            ),
+            checks,
+        )
+
+    def test_resolve_runtime_compose_returns_none_when_docker_missing(self) -> None:
+        paths = resolve_paths(Path(__file__).resolve().parents[2] / "main.py")
+        console = Console()
+
+        with patch(
+            "fl_platform.cli.application.check_command",
+            return_value=type("Result", (), {"ok": False, "message": "missing"})(),
+        ):
+            compose = resolve_runtime_compose(paths, console, "development")
+
+        self.assertIsNone(compose)
+
+    def test_apply_automatic_port_overrides_sets_replacement_port(self) -> None:
+        console = Console()
+        original = os.environ.pop("FL_POSTGRES_HOST_PORT", None)
+        self.addCleanup(self._restore_env, "FL_POSTGRES_HOST_PORT", original)
+
+        with patch(
+            "fl_platform.cli.application.is_port_available",
+            side_effect=lambda _host, port: port != 5432 and port == 5433,
+        ):
+            apply_automatic_port_overrides(console)
+
+        self.assertEqual(os.environ["FL_POSTGRES_HOST_PORT"], "5433")
+
+    def test_apply_automatic_port_overrides_keeps_existing_value(self) -> None:
+        console = Console()
+        original = os.environ.get("FL_POSTGRES_HOST_PORT")
+        os.environ["FL_POSTGRES_HOST_PORT"] = "55432"
+        self.addCleanup(self._restore_env, "FL_POSTGRES_HOST_PORT", original)
+
+        with patch("fl_platform.cli.application.is_port_available") as availability:
+            apply_automatic_port_overrides(console)
+
+        self.assertEqual(os.environ["FL_POSTGRES_HOST_PORT"], "55432")
+        checked_ports = [call.args[1] for call in availability.call_args_list]
+        self.assertNotIn(5432, checked_ports)
+
+    def test_find_available_port_returns_none_when_range_is_full(self) -> None:
+        with patch(
+            "fl_platform.cli.application.is_port_available",
+            return_value=False,
+        ):
+            result = _find_available_port(5432, attempts=2)
+
+        self.assertIsNone(result)
+
+    @staticmethod
+    def _restore_env(name: str, value: str | None) -> None:
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
 
 
 class PlatformComposeInventoryTests(unittest.TestCase):

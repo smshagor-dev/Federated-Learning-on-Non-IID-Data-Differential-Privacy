@@ -134,6 +134,8 @@ src/fl_platform/workers/service.py
 tests/test_adaptive_clipping_binding.py
 tests/test_algorithm_expansion_foundations.py
 tests/test_capability_statement.py
+tests/test_cli_dependencies.py
+tests/test_cli_environment.py
 tests/test_client_result_security_events.py
 tests/test_coordinator_task_replay.py
 tests/test_coordinator_task_signing.py
