@@ -1,1 +1,0 @@
-Temporary validation trigger for the Ruff configuration correction. Remove before merge.
