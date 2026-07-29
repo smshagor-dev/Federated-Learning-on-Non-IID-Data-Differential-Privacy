@@ -2,9 +2,27 @@
 
 Desktop-first federated learning studio for studying non-IID optimization, client drift, and central differential privacy under a trusted-server simulation.
 
-This repository studies federated optimization under heterogeneous client data distributions, emphasizing the interaction between non-IID partitioning, local optimization, server-side aggregation, and privacy mechanisms. The active root workflow is a desktop-first research application launched through `python main.py`, where a PySide6 dashboard manages experiments, writes runtime configuration snapshots, launches the federated simulator as a local child process, and visualizes metrics from real output artifacts. The active simulator implements GroupNorm-based image classification on MNIST and CIFAR-10, Dirichlet and pathological non-IID partitioning, local client training, sample-count-weighted FedAvg, FedProx, SCAFFOLD, client-level update clipping with Gaussian noise, RDP-based privacy accounting, and artifact generation for reproducibility. The repository also contains additional subsystem implementations for FedSAM, Ditto, Per-FedAvg, C++ FedOpt variants, sample-level Opacus accounting, adaptive clipping, and secure aggregation primitives, but those components are not all exercised by the current root desktop runtime. The platform is research-oriented, not production-certified.
+This repository studies federated optimization under heterogeneous client data distributions, emphasizing the interaction between non-IID partitioning, local optimization, server-side aggregation, and privacy mechanisms. The active root workflow is a desktop-first research application launched through `python main.py`, where a PySide6 dashboard manages experiments, writes runtime configuration snapshots, launches the federated simulator as a local child process, and visualizes metrics from real output artifacts. The active simulator implements GroupNorm-based image classification on MNIST and CIFAR-10, Dirichlet and pathological non-IID partitioning, local client training, FedAvg, FedProx, SCAFFOLD, validated uniform or sample-count aggregation, client-level update clipping with Gaussian noise, RDP-based privacy accounting, and artifact generation for reproducibility. The repository also contains additional subsystem implementations for FedSAM, Ditto, Per-FedAvg, C++ FedOpt variants, sample-level Opacus accounting, adaptive clipping, and secure aggregation primitives, but those components are not all exercised by the current root desktop runtime. The platform is research-oriented, not production-certified.
+
+> **Scope note:** Unless explicitly marked as auxiliary, all runtime claims in this document refer to the active root desktop and CLI workflow launched through `python main.py`.
+
+## Contents
+
+- [Overview](#overview)
+- [Research Objectives and Questions](#objectives)
+- [Mathematical Formulation](#mathematical-notation)
+- [Federated Algorithms and Aggregation](#runtime-mathematics)
+- [Differential Privacy and Accounting](#differential-privacy-in-the-root-runtime)
+- [Metrics and Data Partitioning](#evaluation-metrics)
+- [System and Desktop Architecture](#system-architecture)
+- [Configuration and Execution](#configuration-reference)
+- [Validation and Reproducibility](#validation-and-reproducibility)
+- [Limitations and Future Work](#known-limitations)
+- [Traceability](#function-and-equation-traceability)
+- [Citation and License](#citation)
 
 ## Overview
+
 Centralized machine learning is often unsuitable when raw data cannot leave local devices or institutional boundaries, when medical or financial records are legally constrained, when clients differ substantially in label distributions and sample counts, and when communication or compute resources are unevenly distributed. Federated learning addresses data locality, but under non-IID conditions it introduces slower convergence, client drift, unstable aggregation, and sensitivity to optimizer choice. Privacy mechanisms improve disclosure resistance, but clipping and Gaussian perturbation impose a measurable privacy-utility trade-off. This repository is organized around those tensions rather than around a generic software deployment story.
 
 The active root workflow is launched with `python main.py`. It opens a PySide6 desktop application or runs the simulator directly in CLI mode, depending on flags. The root runtime covers:
@@ -14,9 +32,10 @@ The active root workflow is launched with `python main.py`. It opens a PySide6 d
 - FedAvg, FedProx, and SCAFFOLD in the active simulator.
 - Poisson or fixed-without-replacement client sampling.
 - Central client-level differential privacy for the trusted-server path.
-- CSV, plots, distribution artifacts, and markdown summaries.
+- CSV, plots, distribution artifacts, and Markdown summaries.
 
 ## Objectives
+
 - Study convergence under label-skewed and shard-based non-IID partitions.
 - Compare FedAvg, FedProx, and SCAFFOLD in the active desktop runtime.
 - Measure client disagreement through drift and weight-variance diagnostics.
@@ -24,7 +43,7 @@ The active root workflow is launched with `python main.py`. It opens a PySide6 d
 - Preserve configuration snapshots and generated artifacts for reproducibility.
 - Expose the implementation-to-equation boundary clearly enough for review and extension.
 
-## Questions
+## Research Questions
 
 - How does stronger non-IID heterogeneity alter convergence and final accuracy?
 - When does FedProx reduce instability relative to FedAvg?
@@ -33,15 +52,15 @@ The active root workflow is launched with `python main.py`. It opens a PySide6 d
 - Which metrics in the current codebase are global-only versus client-heterogeneity diagnostics?
 - Which algorithms and privacy mechanisms are active in the root desktop workflow, and which exist only in auxiliary subsystems?
 
-## Contributions
+## Repository Contributions
 
 - A root federated simulator for MNIST/CIFAR-10 with real non-IID partitioning, real local optimization, and artifact generation.
 - A modular PySide6 desktop shell that manages experiments locally through `QProcess`.
-- Exact code paths for weighted FedAvg, FedProx, and SCAFFOLD.
-- A client-level RDP moments accountant implemented in [federated/dp_accountant.py](federated/dp_accountant.py:1).
+- Exact code paths for FedAvg, FedProx, and SCAFFOLD with validated aggregation-weighting constraints.
+- A client-level RDP moments accountant implemented in [federated/dp_accountant.py](federated/dp_accountant.py).
 - Auxiliary implementations for FedSAM, Ditto, Per-FedAvg, Opacus-backed sample-level DP, adaptive clipping, fairness metrics, and secure aggregation primitives under `python/src/fl_platform/` and `cpp/`.
 
-The repository also contains auxiliary Python, C++, and Go subsystems under [python/src/fl_platform](python/src/fl_platform), [cpp](cpp), and [go](go). Those subsystems are useful for broader experimentation, but they are not the default codepath executed by the root desktop runtime.
+The repository also contains auxiliary Python, C++, and Go subsystems under [python/src/fl_platform](python/src/fl_platform), [cpp](cpp), and [go](go). Those subsystems are useful for broader experimentation, but they are not the default code path executed by the root desktop runtime.
 
 ## Entry Points
 
@@ -75,9 +94,9 @@ Core files:
 | $F_k(w)$ | Local objective at client $k$ |
 | $F(w)$ | Weighted global objective |
 | $\eta$ | Client learning rate |
-| $\eta_s$ | Server learning rate in FedOpt-style components |
+| $\eta_s$ | Server update scaling factor |
 | $\mu$ | FedProx proximal coefficient |
-| $C$ | Root runtime clipping norm for gradients and final client updates |
+| $C$ | Client-update clipping norm used by the root differential privacy mechanism |
 | $\sigma$ | Gaussian noise multiplier |
 | $\epsilon$ | Privacy loss parameter |
 | $\delta$ | Privacy failure probability |
@@ -223,7 +242,7 @@ $$
 Important scope notes:
 
 - This is not local DP. Noise is not added independently on each client in the root runtime.
-- This is not secure aggregation in the active root codepath.
+- This is not secure aggregation in the active root code path.
 - `optimizer.grad_clip_norm` and `dp.update_clip_norm` are separate controls.
 - `optimizer.grad_clip_norm` clips optimization gradients before the optimizer step.
 - `dp.update_clip_norm` clips the final transmitted client update before server aggregation.
@@ -253,25 +272,11 @@ Secure aggregation is **not part of the active root desktop runtime**. The repos
 
 The inspected pairwise-masking rule in `python/src/fl_platform/secure_aggregation/pairwise_mask.py` is ring-based additive masking:
 
-$$
-\widetilde{x}_k
-=
-x_k
-+
-\sum_{j>k} r_{k,j}
--
-\sum_{j<k} r_{j,k}
-\pmod{2^{64}}.
-$$
+$$\widetilde{x}_k=x_k+\sum_{j>k}r_{k,j}-\sum_{j<k}r_{j,k}\pmod{2^{64}}.$$
 
 Summing across a complete cohort yields cancellation of pairwise masks:
 
-$$
-\sum_k \widetilde{x}_k
-=
-\sum_k x_k
-\pmod{2^{64}}.
-$$
+$$\sum_k\widetilde{x}_k=\sum_kx_k\pmod{2^{64}}.$$
 
 What can be stated truthfully from the inspected code:
 
@@ -423,9 +428,7 @@ $$
 
 where $C_{\text{model}}$ is the cost of one forward/backward batch for the selected model.
 
-
 ## System Architecture
-
 
 ```mermaid
 flowchart TB
@@ -472,8 +475,7 @@ flowchart TB
 | `ResultsService` | Desktop UI | Filesystem polling every 2 seconds | Summary text, CSV-derived metrics, and artifact list |
 | `DatabaseService` | SQLite | `sqlite3` | `experiment_runs` history |
 
-
-## 23. End-to-End Workflow
+## End-to-End Workflow
 
 ```mermaid
 sequenceDiagram
@@ -508,17 +510,18 @@ sequenceDiagram
     C->>Q: Mark run completed or failed
     C-->>UI: Refresh cards, tables, logs, and artifacts
 ```
-## 24. Desktop Application Architecture
+
+## Desktop Application Architecture
 
 The desktop architecture is intentionally thin:
 
-- [main.py](main.py:1): lazy-selects GUI or CLI.
-- [desktop/app.py](desktop/app.py:1): builds paths, applies theme, creates `QApplication`, controller, and main window.
-- [desktop/main_window.py](desktop/main_window.py:1): left navigation, `QStackedWidget`, periodic refresh.
-- [desktop/controllers/runtime_controller.py](desktop/controllers/runtime_controller.py:1): orchestration across config, results, DB, and subprocess control.
-- [desktop/services/experiment_service.py](desktop/services/experiment_service.py:1): `QProcess` wrapper.
-- [desktop/services/results_service.py](desktop/services/results_service.py:1): filesystem-backed metric/artifact loading.
-- [desktop/services/database_service.py](desktop/services/database_service.py:1): SQLite run-history persistence.
+- [main.py](main.py): lazy-selects GUI or CLI.
+- [desktop/app.py](desktop/app.py): builds paths, applies theme, creates `QApplication`, controller, and main window.
+- [desktop/main_window.py](desktop/main_window.py): left navigation, `QStackedWidget`, periodic refresh.
+- [desktop/controllers/runtime_controller.py](desktop/controllers/runtime_controller.py): orchestration across config, results, DB, and subprocess control.
+- [desktop/services/experiment_service.py](desktop/services/experiment_service.py): `QProcess` wrapper.
+- [desktop/services/results_service.py](desktop/services/results_service.py): filesystem-backed metric/artifact loading.
+- [desktop/services/database_service.py](desktop/services/database_service.py): SQLite run-history persistence.
 
 ```mermaid
 flowchart LR
@@ -540,7 +543,7 @@ flowchart LR
     Ctrl --> DB
 ```
 
-## 25. Dynamic Metrics Pipeline
+## Dynamic Metrics Pipeline
 
 The desktop UI does not display static placeholder values. The current pipeline is file- and process-driven:
 
@@ -570,14 +573,14 @@ What does not exist in the active desktop path:
 - automatic backend failover,
 - explicit chart-throttling beyond the 2-second polling interval.
 
-## 26. Database Architecture
+## Database Architecture
 
 The current desktop app persists run history only in SQLite.
 
 ### Implemented database
 
 - Path builder: `desktop/app.py`
-- Schema: [desktop/database/schema.py](desktop/database/schema.py:1)
+- Schema: [desktop/database/schema.py](desktop/database/schema.py)
 - Access layer: `DatabaseService`
 
 ```mermaid
@@ -596,7 +599,7 @@ erDiagram
     }
 ```
 
-## 27. Experiment Lifecycle
+## Experiment Lifecycle
 
 The exact active desktop status model is the `ExperimentState.status` field plus UI labels:
 
@@ -608,7 +611,7 @@ The exact active desktop status model is the `ExperimentState.status` field plus
 
 The requested richer lifecycle (`CREATED`, `VALIDATING`, `INITIALIZING`, `CHECKPOINTING`, and so on) is **not** implemented in the current desktop state model.
 
-## 28. Project Directory Structure
+## Project Directory Structure
 
 ```text
 main.py
@@ -638,9 +641,9 @@ results/
 docs/
 ```
 
-## 29. Configuration Reference
+## Configuration Reference
 
-Defaults are read from [config.yaml](config.yaml:1).
+Defaults are read from [config.yaml](config.yaml).
 
 | Configuration | Type | Default | Valid Range | Mathematical Role |
 |---|---|---:|---|---|
@@ -664,13 +667,12 @@ Defaults are read from [config.yaml](config.yaml:1).
 | `algorithm.name` | str | `"fedprox"` | `fedavg`,`fedprox`,`scaffold`,`all` | Aggregation/local algorithm selection |
 | `algorithm.mu` | float | `0.01` | \(\ge 0\) | FedProx coefficient \(\mu\) |
 | `dp.enabled` | bool | `true` | boolean | Root runtime privacy switch |
-| `dp.max_grad_norm` | float | `1.5` | \(>0\) | Clipping bound \(C\) |
+| `dp.update_clip_norm` | float | `1.5` | \(>0\) | Client-update clipping bound \(C\) |
 | `dp.noise_multiplier` | float | `0.8` | \(\ge 0\) | Gaussian noise multiplier \(\sigma\) |
 | `dp.target_delta` | float | `1e-5` | \(0<\delta<1\) | Privacy failure probability |
 | `model.name` | str | `"cnn"` | `cnn` | Model family |
 | `model.group_norm_groups` | int | `2` | \(>0\) | GroupNorm groups |
 | `evaluation.eval_batch_size` | int | `256` | \(>0\) | Test-set batch size |
-
 
 ## Running the System
 
@@ -694,6 +696,7 @@ python main.py
 python main.py --cli
 python main.py --cli --algo fedavg --rounds 10
 python main.py --cli --dataset MNIST --dp off
+```
 
 ## Validation and Reproducibility
 
@@ -705,12 +708,14 @@ python main.py --cli --config config.yaml
 python -m pytest tests python/tests -q
 python scripts/validate_repository_docs.py
 ```
+
 ### Active root runtime artifacts
+
 The desktop app under [desktop](desktop) writes validated configuration snapshots, launches the simulator as a subprocess, and renders experiment outputs from generated result artifacts. The root UI is intended to stay operational even when experiment settings change, so the configuration service normalizes and validates YAML before runtime launch.
 
 | Artifact | Purpose |
 |---|---|
-| `run_<algorithm>.csv` | Per-round metrics (`round`, `test_acc`, `test_loss`, `epsilon`, `weight_variance`, `client_drift`, `avg_client_loss`) |
+| `run_<algorithm>.csv` | Per-round metrics, including accuracy, loss, privacy, drift, clipping, noise, cohort, and participation diagnostics |
 | `distribution.png` | Non-IID class-distribution visualization |
 | `client_distribution.csv` | Per-client sample counts and class counts |
 | `accuracy_vs_rounds.png` | Accuracy curve |
@@ -782,46 +787,45 @@ Those should be treated as subsystem implementations, not as automatic guarantee
 
 ## Future Research Directions
 
-- asynchronous federated optimization,
-- richer client selection policies,
-- robust and Byzantine-resilient aggregation,
-- model poisoning defenses,
-- membership inference and reconstruction evaluation,
-- communication compression and quantization,
-- real multi-device validation,
-- integration of the auxiliary secure aggregation stack into the desktop workflow,
-- fairness-aware aggregation in the root desktop path,
-- unification of desktop metrics with structured event storage,
-- broader model and dataset support,
-- reconciliation of the root runtime and the auxiliary `fl_platform` stack under one validated execution contract.
+- Asynchronous federated optimization.
+- Richer client-selection policies.
+- Robust and Byzantine-resilient aggregation.
+- Model-poisoning defenses.
+- Membership-inference and reconstruction evaluation.
+- Communication compression and quantization.
+- Real multi-device validation.
+- Integration of the auxiliary secure-aggregation stack into the desktop workflow.
+- Fairness-aware aggregation in the root desktop path.
+- Unification of desktop metrics with structured event storage.
+- Broader model and dataset support.
+- Reconciliation of the root runtime and the auxiliary `fl_platform` stack under one validated execution contract.
 
 ## Function and Equation Traceability
 
 | Mathematical Concept | Equation / Definition | Source File | Function / Class | Responsibility |
 |---|---|---|---|---|
-| Global objective | \(F(w)=\sum_k p_k F_k(w)\) | [experiment_runtime.py](experiment_runtime.py:1) | `run_experiment` | Orchestrates the weighted federated experiment loop |
-| Client local training | \(w_{t,e+1}^k = w_{t,e}^k - \eta \nabla \ell\) | [federated/client.py](federated/client.py:1) | `Client.train` | Local SGD and algorithm-specific corrections |
-| FedAvg server step | \(\sum_k \frac{n_k}{\sum_j n_j}\Delta_k\) | [federated/server.py](federated/server.py:1) | `Server._aggregate_weighted` | Sample-count-weighted delta averaging |
-| FedProx proximal loss | \(F_k(w)+\frac{\mu}{2}\|w-w_t\|_2^2\) | [federated/client.py](federated/client.py:1) | `Client.train` | Adds proximal penalty locally |
-| SCAFFOLD correction | \(g \leftarrow g + c - c_k\) | [federated/client.py](federated/client.py:1) | `Client.train` | Applies control-variate correction before optimizer step |
-| SCAFFOLD control update | \(c_k^+ = c_k - c - \Delta_k/(K\eta)\) | [federated/client.py](federated/client.py:1) | `Client.train` | Updates per-client control state |
-| Dirichlet non-IID partition | \(\pi_c \sim \mathrm{Dirichlet}(\alpha \mathbf{1})\) | [data/partitioner.py](data/partitioner.py:1) | `partition_dirichlet` | Generates label-skew client splits |
-| Pathological partition | shard-based restricted-class split | [data/partitioner.py](data/partitioner.py:1) | `partition_pathological` | Generates few-classes-per-client splits |
-| Update clipping and Gaussian noise | \(\bar{\Delta}_k = \Delta_k \min(1,C/\|\Delta_k\|_2)\), then add \( \mathcal{N}(0,\sigma^2 C^2 I)\) | [federated/client.py](federated/client.py:1) | `Client.train` | Bounds and privatizes transmitted client delta |
-| Client-level accountant | \(\epsilon=\mathcal{A}(q,\sigma,T,\delta)\) | [federated/dp_accountant.py](federated/dp_accountant.py:1) | `MomentsAccountant` | Tracks cumulative client-level privacy |
-| Global loss / accuracy | cross-entropy and top-1 accuracy | [utils/metrics.py](utils/metrics.py:1) | `evaluate_global` | Global held-out evaluation |
-| Client drift | \(\frac{1}{m}\sum_i \|\Delta_i-\bar{\Delta}\|_2\) | [utils/metrics.py](utils/metrics.py:1) | `compute_client_drift` | Update-divergence diagnostic |
-| Weight variance | mean coordinate-wise variance across local states | [utils/metrics.py](utils/metrics.py:1) | `compute_weight_variance` | Local-state disagreement diagnostic |
-| FedSAM perturbation | \(\epsilon(w)=\rho g/(\|g\|_2+\xi)\) | [python/src/fl_platform/algorithms/fedsam.py](python/src/fl_platform/algorithms/fedsam.py:1) | `FedSamAlgorithm.train` | Auxiliary sharpness-aware local training |
-| Ditto personalized objective | \(F_k(v_k)+\frac{\lambda}{2}\|v_k-w\|_2^2\) | [python/src/fl_platform/algorithms/ditto.py](python/src/fl_platform/algorithms/ditto.py:1) | `DittoAlgorithm.train` | Auxiliary personalized local training |
-| Per-FedAvg first-order meta-step | support/query adaptation and outer step | [python/src/fl_platform/algorithms/per_fedavg.py](python/src/fl_platform/algorithms/per_fedavg.py:1) | `PerFedAvgAlgorithm.train` | Auxiliary first-order meta-learning |
-| FedAdam / FedAdagrad / FedYogi | moment-based server updates | [cpp/core/src/aggregation.cpp](cpp/core/src/aggregation.cpp:1) | `FedAdamOptimizer`, `FedAdagradOptimizer`, `FedYogiOptimizer` | Auxiliary C++ server optimizers |
-| Pairwise mask cancellation | additive mask cancellation in \(2^{64}\) ring | [python/src/fl_platform/secure_aggregation/pairwise_mask.py](python/src/fl_platform/secure_aggregation/pairwise_mask.py:1) | `resolve_pairwise_mask_sign`, `mask_encoded_value` | Auxiliary secure aggregation primitive |
+| Global objective | \(F(w)=\sum_k p_k F_k(w)\) | [experiment_runtime.py](experiment_runtime.py) | `run_experiment` | Orchestrates the weighted federated experiment loop |
+| Client local training | \(w_{t,e+1}^k = w_{t,e}^k - \eta \nabla \ell\) | [federated/client.py](federated/client.py) | `Client.train` | Local SGD and algorithm-specific corrections |
+| FedAvg server step | \(\sum_k \frac{n_k}{\sum_j n_j}\Delta_k\) | [federated/server.py](federated/server.py) | `Server._aggregate_weighted` | Sample-count-weighted delta averaging |
+| FedProx proximal loss | \(F_k(w)+\frac{\mu}{2}\|w-w_t\|_2^2\) | [federated/client.py](federated/client.py) | `Client.train` | Adds proximal penalty locally |
+| SCAFFOLD correction | \(g \leftarrow g + c - c_k\) | [federated/client.py](federated/client.py) | `Client.train` | Applies control-variate correction before optimizer step |
+| SCAFFOLD control update | \(c_k^+ = c_k - c - \Delta_k/(\tau_k\eta)\) | [federated/client.py](federated/client.py) | `Client.train` | Updates per-client control state |
+| Dirichlet non-IID partition | \(\pi_c \sim \mathrm{Dirichlet}(\alpha \mathbf{1})\) | [data/partitioner.py](data/partitioner.py) | `partition_dirichlet` | Generates label-skew client splits |
+| Pathological partition | shard-based restricted-class split | [data/partitioner.py](data/partitioner.py) | `partition_pathological` | Generates few-classes-per-client splits |
+| Update clipping and Gaussian noise | \(\Delta_k^{\mathrm{clip}} = \Delta_k \min(1,C/\|\Delta_k\|_2)\), then add \(\mathcal{N}(0,\sigma^2 C^2 I)\) to the aggregate sum | [federated/client.py](federated/client.py), [federated/server.py](federated/server.py) | `Client.train`, `Server.aggregate` | Clips client updates and applies one server-level Gaussian noise draw |
+| Client-level accountant | \(\epsilon=\mathcal{A}(q,\sigma,T,\delta)\) | [federated/dp_accountant.py](federated/dp_accountant.py) | `MomentsAccountant` | Tracks cumulative client-level privacy |
+| Global loss / accuracy | cross-entropy and top-1 accuracy | [utils/metrics.py](utils/metrics.py) | `evaluate_global` | Global held-out evaluation |
+| Client drift | \(\frac{1}{m}\sum_i \|\Delta_i-\bar{\Delta}\|_2\) | [utils/metrics.py](utils/metrics.py) | `compute_client_drift` | Update-divergence diagnostic |
+| Weight variance | mean coordinate-wise variance across local states | [utils/metrics.py](utils/metrics.py) | `compute_weight_variance` | Local-state disagreement diagnostic |
+| FedSAM perturbation | \(\epsilon(w)=\rho g/(\|g\|_2+\xi)\) | [python/src/fl_platform/algorithms/fedsam.py](python/src/fl_platform/algorithms/fedsam.py) | `FedSamAlgorithm.train` | Auxiliary sharpness-aware local training |
+| Ditto personalized objective | \(F_k(v_k)+\frac{\lambda}{2}\|v_k-w\|_2^2\) | [python/src/fl_platform/algorithms/ditto.py](python/src/fl_platform/algorithms/ditto.py) | `DittoAlgorithm.train` | Auxiliary personalized local training |
+| Per-FedAvg first-order meta-step | support/query adaptation and outer step | [python/src/fl_platform/algorithms/per_fedavg.py](python/src/fl_platform/algorithms/per_fedavg.py) | `PerFedAvgAlgorithm.train` | Auxiliary first-order meta-learning |
+| FedAdam / FedAdagrad / FedYogi | moment-based server updates | [cpp/core/src/aggregation.cpp](cpp/core/src/aggregation.cpp) | `FedAdamOptimizer`, `FedAdagradOptimizer`, `FedYogiOptimizer` | Auxiliary C++ server optimizers |
+| Pairwise mask cancellation | additive mask cancellation in \(2^{64}\) ring | [python/src/fl_platform/secure_aggregation/pairwise_mask.py](python/src/fl_platform/secure_aggregation/pairwise_mask.py) | `resolve_pairwise_mask_sign`, `mask_encoded_value` | Auxiliary secure aggregation primitive |
 
 ## Citation
 
 This repository does not provide a DOI or archival paper in the source tree. For academic use, cite the repository URL and the exact commit hash used in the experiment.
-
 
 Example BibTeX template:
 
@@ -837,7 +841,6 @@ Example BibTeX template:
 
 ## License
 
-This repository is licensed under the Apache License 2.0. See [LICENSE](LICENSE:1).
-
+This repository is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
 
 Generated root artifacts include CSV logs, plots, distribution summaries, and `summary.md` files describing the completed run.
