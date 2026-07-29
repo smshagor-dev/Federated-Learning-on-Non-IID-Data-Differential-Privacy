@@ -90,3 +90,9 @@ if command -v protoc-gen-go >/dev/null 2>&1; then
 else
   echo "warning: protoc-gen-go not found (go install google.golang.org/protobuf/cmd/protoc-gen-go@latest); skipped Go binding generation." >&2
 fi
+
+# Keep the Go source tree canonical before the CI gofmt gate. Generated
+# bindings and hand-written handlers are both deterministic under gofmt.
+if command -v gofmt >/dev/null 2>&1; then
+  gofmt -w go
+fi
