@@ -29,7 +29,8 @@ class MetricsPage(QWidget):
             "accuracy": ChartCard("Accuracy vs Rounds", "Global accuracy by algorithm."),
             "loss": ChartCard("Loss vs Rounds", "Test loss by algorithm."),
             "privacy": ChartCard("Privacy Budget", "Finite epsilon values where available."),
-            "drift": ChartCard("Client Drift", "Mean deviation from the cohort-average update."),
+            "drift": ChartCard("Raw Client Drift", "Mean deviation of raw client updates from the cohort-average raw update."),
+            "clipped_drift": ChartCard("Clipped Client Drift", "Mean deviation after client-update clipping and before server noise."),
             "variance": ChartCard("Weight Variance", "Mean parameter variance across client local states."),
         }
         self.plots = {name: self._build_plot() for name in self.cards}
@@ -37,12 +38,14 @@ class MetricsPage(QWidget):
         self.cards["loss"].set_content(self.plots["loss"])
         self.cards["privacy"].set_content(self.plots["privacy"])
         self.cards["drift"].set_content(self.plots["drift"])
+        self.cards["clipped_drift"].set_content(self.plots["clipped_drift"])
         self.cards["variance"].set_content(self.plots["variance"])
         grid.addWidget(self.cards["accuracy"], 0, 0)
         grid.addWidget(self.cards["loss"], 0, 1)
         grid.addWidget(self.cards["privacy"], 1, 0)
         grid.addWidget(self.cards["drift"], 1, 1)
-        grid.addWidget(self.cards["variance"], 2, 0, 1, 2)
+        grid.addWidget(self.cards["clipped_drift"], 2, 0)
+        grid.addWidget(self.cards["variance"], 2, 1)
         layout.addLayout(grid)
 
     def _build_plot(self):
@@ -84,5 +87,6 @@ class MetricsPage(QWidget):
             finite_eps = [(x, y) for x, y in zip(rounds, series["epsilon"]) if y == y and y != float("inf")]
             if finite_eps:
                 self.plots["privacy"].plot([item[0] for item in finite_eps], [item[1] for item in finite_eps], pen=pen)
-            self.plots["drift"].plot(rounds, series["client_drift"], pen=pen)
+            self.plots["drift"].plot(rounds, series["raw_client_drift"], pen=pen)
+            self.plots["clipped_drift"].plot(rounds, series["clipped_client_drift"], pen=pen)
             self.plots["variance"].plot(rounds, series["weight_variance"], pen=pen)

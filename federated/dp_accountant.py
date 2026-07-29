@@ -1,45 +1,137 @@
-"""Privacy accounting via Renyi Differential Privacy (the "moments
-accountant" of Abadi et al., 2016, in its RDP formulation, Mironov 2017).
+"""Client-level privacy accounting for the root federated runtime.
 
-Model of computation
---------------------
-Each communication round, a fraction q = sample_rate of the N clients is
-sampled uniformly at random. Every sampled client clips its model update to
-L2 norm C and adds Gaussian noise N(0, (sigma*C)^2 I). One round is therefore
-one step of the subsampled Gaussian mechanism at *client level*
-(record = one client's entire dataset).
+The active root runtime models each communication round as a Poisson-
+subsampled Gaussian mechanism under *client-level* add/remove adjacency:
 
-For integer orders alpha >= 2 the RDP of one subsampled-Gaussian step is
-(Mironov et al., 2019, upper bound):
+* each of the ``K`` clients is sampled independently with probability ``q``
+* every sampled client contributes at most one clipped model update
+* the trusted server adds one Gaussian noise vector to the aggregate sum
 
-    eps_RDP(alpha) = 1/(alpha-1) * log( sum_{k=0}^{alpha}
-        C(alpha, k) (1-q)^(alpha-k) q^k * exp(k(k-1) / (2 sigma^2)) )
-
-RDP composes additively over rounds, and converts to approximate DP via
-
-    eps(delta) = min_alpha [ T * eps_RDP(alpha) + log(1/delta)/(alpha-1) ]
+This module tracks Renyi Differential Privacy (RDP) for that mechanism and
+converts the composed RDP curve to an ``(epsilon, delta)`` estimate.
 """
 
 from __future__ import annotations
 
 import math
-from typing import Iterable, List, Optional
+from dataclasses import dataclass
+from typing import Iterable, Sequence
 
 import numpy as np
 from scipy.special import gammaln, logsumexp
 
-DEFAULT_ORDERS: List[int] = list(range(2, 65)) + [80, 96, 128, 256, 512]
+DEFAULT_ORDERS: list[int] = list(range(2, 65)) + [80, 96, 128, 256, 512]
+
+
+def _validate_orders(orders: Iterable[int]) -> list[int]:
+    normalized = sorted(set(int(order) for order in orders))
+    if not normalized:
+        raise ValueError("At least one RDP order is required.")
+    if min(normalized) < 2:
+        raise ValueError("All RDP orders must be integers >= 2.")
+    return normalized
+
+
+def _compute_rdp_single_step(alpha: int, *, q: float, noise_multiplier: float) -> float:
+    if q == 0.0:
+        return 0.0
+    if noise_multiplier == 0.0:
+        return float("inf")
+    if q == 1.0:
+        return alpha / (2.0 * noise_multiplier * noise_multiplier)
+
+    log_terms: list[float] = []
+    for k in range(alpha + 1):
+        log_binom = (
+            gammaln(alpha + 1) - gammaln(k + 1) - gammaln(alpha - k + 1)
+        )
+        log_term = (
+            log_binom
+            + (alpha - k) * math.log1p(-q)
+            + (k * math.log(q) if k > 0 else 0.0)
+            + (k * (k - 1)) / (2.0 * noise_multiplier * noise_multiplier)
+        )
+        log_terms.append(log_term)
+    return float(logsumexp(log_terms) / (alpha - 1))
+
+
+def compute_rdp(
+    *,
+    q: float,
+    noise_multiplier: float,
+    steps: int,
+    orders: Sequence[int] | None = None,
+) -> np.ndarray:
+    """Return the composed RDP curve for ``steps`` Poisson-sampled rounds."""
+    if not 0.0 <= q <= 1.0:
+        raise ValueError("sample_rate must lie in [0, 1].")
+    if noise_multiplier < 0.0:
+        raise ValueError("noise_multiplier must be >= 0.")
+    if steps < 0:
+        raise ValueError("steps must be >= 0.")
+    validated_orders = _validate_orders(orders or DEFAULT_ORDERS)
+    per_step = np.asarray(
+        [
+            _compute_rdp_single_step(
+                order, q=q, noise_multiplier=noise_multiplier
+            )
+            for order in validated_orders
+        ],
+        dtype=np.float64,
+    )
+    return per_step * float(steps)
+
+
+def rdp_to_epsilon(
+    *,
+    orders: Sequence[int],
+    total_rdp: Sequence[float],
+    delta: float,
+) -> tuple[float, int]:
+    """Convert a total RDP curve to the best ``epsilon`` at ``delta``."""
+    validated_orders = _validate_orders(orders)
+    if len(validated_orders) != len(total_rdp):
+        raise ValueError("orders and total_rdp must have the same length.")
+    if not 0.0 < delta < 1.0:
+        raise ValueError("delta must lie in (0, 1).")
+
+    best_epsilon = float("inf")
+    best_order = validated_orders[0]
+    for order, rdp_value in zip(validated_orders, total_rdp, strict=True):
+        if not np.isfinite(rdp_value):
+            continue
+        epsilon = float(rdp_value) + math.log(1.0 / delta) / (order - 1)
+        if epsilon < best_epsilon:
+            best_epsilon = epsilon
+            best_order = order
+    if np.isinf(best_epsilon):
+        return float("inf"), best_order
+    return best_epsilon, best_order
+
+
+def compose_rdp_curves(curves: Sequence[Sequence[float]]) -> np.ndarray:
+    """Additively compose multiple RDP curves on the same order grid."""
+    if not curves:
+        return np.zeros(0, dtype=np.float64)
+    return np.sum(np.asarray(curves, dtype=np.float64), axis=0)
+
+
+@dataclass(slots=True)
+class PrivacyEstimate:
+    epsilon: float
+    optimal_order: int
+    total_rdp: np.ndarray
 
 
 class MomentsAccountant:
-    """Tracks cumulative (epsilon, delta) over federated rounds."""
+    """Tracks composed client-level RDP across communication rounds."""
 
     def __init__(
         self,
         noise_multiplier: float,
         sample_rate: float,
         target_delta: float = 1e-5,
-        orders: Optional[Iterable[int]] = None,
+        orders: Iterable[int] | None = None,
     ) -> None:
         if not 0.0 <= sample_rate <= 1.0:
             raise ValueError("sample_rate must lie in [0, 1].")
@@ -51,90 +143,65 @@ class MomentsAccountant:
         self.noise_multiplier = float(noise_multiplier)
         self.sample_rate = float(sample_rate)
         self.target_delta = float(target_delta)
-        self.orders = sorted(set(int(a) for a in (orders or DEFAULT_ORDERS)))
-        if min(self.orders) < 2:
-            raise ValueError("All RDP orders must be integers >= 2.")
-
+        self.orders = _validate_orders(orders or DEFAULT_ORDERS)
         self.steps = 0
-        # Per-order RDP of a single step; precomputed once.
-        self._rdp_per_step = np.array(
-            [self._compute_rdp_single_step(a) for a in self.orders]
+        self._rdp_per_step = compute_rdp(
+            q=self.sample_rate,
+            noise_multiplier=self.noise_multiplier,
+            steps=1,
+            orders=self.orders,
         )
 
-    # ------------------------------------------------------------------ #
-    def _compute_rdp_single_step(self, alpha: int) -> float:
-        """RDP of one subsampled Gaussian step at integer order alpha."""
-        q = self.sample_rate
-        sigma = self.noise_multiplier
-
-        if q == 0.0:
-            return 0.0
-        if sigma == 0.0:
-            return float("inf")
-        if q == 1.0:
-            # Plain (non-subsampled) Gaussian mechanism.
-            return alpha / (2.0 * sigma * sigma)
-
-        # log of sum_{k=0}^{alpha} C(alpha,k) (1-q)^{alpha-k} q^k
-        #                         * exp(k(k-1)/(2 sigma^2))
-        log_terms = []
-        for k in range(alpha + 1):
-            log_binom = (
-                gammaln(alpha + 1) - gammaln(k + 1) - gammaln(alpha - k + 1)
-            )
-            log_term = (
-                log_binom
-                + (alpha - k) * math.log1p(-q)
-                + (k * math.log(q) if k > 0 else 0.0)
-                + (k * (k - 1)) / (2.0 * sigma * sigma)
-            )
-            log_terms.append(log_term)
-
-        return float(logsumexp(log_terms) / (alpha - 1))
-
-    # ------------------------------------------------------------------ #
     def step(self, num_steps: int = 1) -> None:
-        """Register ``num_steps`` completed communication rounds."""
         if num_steps < 0:
             raise ValueError("num_steps must be >= 0.")
         self.steps += int(num_steps)
 
-    def get_epsilon(self, delta: Optional[float] = None) -> float:
-        """Best epsilon over all tracked orders for the given delta."""
-        delta = self.target_delta if delta is None else float(delta)
+    def get_total_rdp(self) -> np.ndarray:
         if self.steps == 0:
-            return 0.0
-        if np.isinf(self._rdp_per_step).all():
-            return float("inf")
+            return np.zeros(len(self.orders), dtype=np.float64)
+        return self._rdp_per_step * float(self.steps)
 
-        total_rdp = self.steps * self._rdp_per_step
-        eps_candidates = [
-            rdp + math.log(1.0 / delta) / (alpha - 1)
-            for alpha, rdp in zip(self.orders, total_rdp)
-            if np.isfinite(rdp)
-        ]
-        return float(min(eps_candidates)) if eps_candidates else float("inf")
+    def estimate(self, delta: float | None = None) -> PrivacyEstimate:
+        effective_delta = self.target_delta if delta is None else float(delta)
+        total_rdp = self.get_total_rdp()
+        if self.steps == 0 or self.sample_rate == 0.0:
+            return PrivacyEstimate(
+                epsilon=0.0,
+                optimal_order=self.orders[0],
+                total_rdp=total_rdp,
+            )
+        if self.noise_multiplier == 0.0:
+            return PrivacyEstimate(
+                epsilon=float("inf"),
+                optimal_order=self.orders[0],
+                total_rdp=total_rdp,
+            )
+        epsilon, optimal_order = rdp_to_epsilon(
+            orders=self.orders,
+            total_rdp=total_rdp,
+            delta=effective_delta,
+        )
+        return PrivacyEstimate(
+            epsilon=epsilon,
+            optimal_order=optimal_order,
+            total_rdp=total_rdp,
+        )
 
-    def get_optimal_order(self, delta: Optional[float] = None) -> int:
-        """The Renyi order achieving the reported epsilon (diagnostic)."""
-        delta = self.target_delta if delta is None else float(delta)
-        steps = max(1, self.steps)
-        best_alpha, best_eps = self.orders[0], float("inf")
-        for alpha, rdp in zip(self.orders, steps * self._rdp_per_step):
-            if not np.isfinite(rdp):
-                continue
-            eps = rdp + math.log(1.0 / delta) / (alpha - 1)
-            if eps < best_eps:
-                best_eps, best_alpha = eps, alpha
-        return best_alpha
+    def get_epsilon(self, delta: float | None = None) -> float:
+        return float(self.estimate(delta).epsilon)
+
+    def get_optimal_order(self, delta: float | None = None) -> int:
+        return int(self.estimate(delta).optimal_order)
 
     def summary(self) -> dict:
-        """Snapshot of the current privacy expenditure."""
+        estimate = self.estimate()
         return {
             "steps": self.steps,
             "noise_multiplier": self.noise_multiplier,
             "sample_rate": self.sample_rate,
             "target_delta": self.target_delta,
-            "epsilon": self.get_epsilon(),
-            "optimal_order": self.get_optimal_order(),
+            "epsilon": estimate.epsilon,
+            "optimal_order": estimate.optimal_order,
+            "total_rdp": estimate.total_rdp.tolist(),
         }

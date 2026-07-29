@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from experiment_runtime import parse_args as runtime_parse_args
 from fl_platform.cli.application import (
     _find_available_port,
     apply_automatic_port_overrides,
@@ -78,12 +79,17 @@ class PlatformLauncherDispatchTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         start.assert_called_once()
 
-    def test_root_main_bootstraps_and_delegates(self) -> None:
-        with patch("fl_platform.cli.application.main", return_value=7) as delegated:
+    def test_root_main_bootstraps_root_cli_runtime(self) -> None:
+        with patch("main.run_cli") as delegated, patch("main.validate_config", side_effect=lambda cfg: (cfg, [])):
             exit_code = root_main.main()
 
-        self.assertEqual(exit_code, 7)
-        delegated.assert_called_once_with()
+        self.assertEqual(exit_code, 0)
+        delegated.assert_called_once()
+
+    def test_root_runtime_cli_flag_is_supported(self) -> None:
+        args = runtime_parse_args(["--cli", "--rounds", "2"])
+        self.assertTrue(args.cli)
+        self.assertEqual(args.rounds, 2)
 
     def test_run_startup_checks_supports_web_only_mode(self) -> None:
         paths = resolve_paths(Path(__file__).resolve().parents[2] / "main.py")

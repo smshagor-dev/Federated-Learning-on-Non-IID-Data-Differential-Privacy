@@ -1,10 +1,4 @@
-"""Evaluation and heterogeneity diagnostics.
-
-  * evaluate_global        -- loss / accuracy on the held-out global test set
-  * compute_weight_variance -- mean parameter variance across client models
-  * compute_client_drift    -- mean L2 deviation of client updates from the
-                               cohort-average update (classic drift measure)
-"""
+"""Evaluation and heterogeneity diagnostics for the root runtime."""
 
 from __future__ import annotations
 
@@ -23,7 +17,6 @@ StateDict = Dict[str, torch.Tensor]
 def evaluate_global(
     model: nn.Module, test_loader: DataLoader, device: torch.device
 ) -> Tuple[float, float]:
-    """Return (avg_cross_entropy_loss, top1_accuracy) on the test set."""
     model.eval()
     model.to(device)
 
@@ -43,11 +36,10 @@ def evaluate_global(
 
 
 def _flatten_state(state: StateDict) -> np.ndarray:
-    """Concatenate all floating-point tensors of a state dict into one vector."""
     parts = [
-        v.detach().cpu().reshape(-1).numpy()
-        for k, v in sorted(state.items())
-        if torch.is_floating_point(v)
+        value.detach().cpu().reshape(-1).numpy()
+        for _, value in sorted(state.items())
+        if torch.is_floating_point(value)
     ]
     if not parts:
         return np.zeros(0, dtype=np.float64)
@@ -55,25 +47,23 @@ def _flatten_state(state: StateDict) -> np.ndarray:
 
 
 def compute_weight_variance(client_states: List[StateDict]) -> float:
-    """Mean per-coordinate variance of client model weights.
-
-    A direct proxy for how far the sampled clients' local optima have
-    diverged from each other during the round (higher = more drift).
-    """
     if len(client_states) < 2:
         return 0.0
-    stacked = np.stack([_flatten_state(s) for s in client_states], axis=0)
+    stacked = np.stack([_flatten_state(state) for state in client_states], axis=0)
     return float(stacked.var(axis=0, ddof=0).mean())
 
 
-def compute_client_drift(client_deltas: List[StateDict]) -> float:
-    """Average L2 distance between each client update and the mean update.
+def compute_mean_update_norm(client_deltas: List[StateDict]) -> float:
+    if not client_deltas:
+        return 0.0
+    norms = [float(np.linalg.norm(_flatten_state(delta), ord=2)) for delta in client_deltas]
+    return float(np.mean(norms))
 
-    drift = (1/m) * sum_i || delta_i - mean_delta ||_2
-    """
+
+def compute_client_drift(client_deltas: List[StateDict]) -> float:
     if len(client_deltas) < 2:
         return 0.0
-    stacked = np.stack([_flatten_state(d) for d in client_deltas], axis=0)
+    stacked = np.stack([_flatten_state(delta) for delta in client_deltas], axis=0)
     mean_delta = stacked.mean(axis=0, keepdims=True)
     distances = np.linalg.norm(stacked - mean_delta, axis=1)
     return float(distances.mean())

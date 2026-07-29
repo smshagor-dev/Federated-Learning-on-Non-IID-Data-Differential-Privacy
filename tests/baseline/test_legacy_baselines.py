@@ -38,18 +38,22 @@ def base_config() -> dict:
         "federated": {
             "num_clients": 4,
             "sample_rate": 0.5,
+            "sampling_strategy": "poisson",
+            "aggregation_weighting": "uniform",
             "rounds": 1,
             "local_epochs": 1,
             "batch_size": 4,
             "server_lr": 1.0,
         },
-        "optimizer": {"lr": 0.01, "momentum": 0.0, "weight_decay": 0.0},
+        "optimizer": {"lr": 0.01, "momentum": 0.0, "weight_decay": 0.0, "grad_clip_norm": None},
         "algorithm": {"name": "fedavg", "mu": 0.01},
         "dp": {
             "enabled": False,
-            "max_grad_norm": 1.0,
+            "update_clip_norm": 1.0,
             "noise_multiplier": 0.0,
             "target_delta": 1e-5,
+            "deterministic_noise_for_testing": False,
+            "test_noise_seed": None,
         },
         "model": {"name": "cnn", "group_norm_groups": 2},
         "evaluation": {"eval_batch_size": 8},
@@ -111,7 +115,7 @@ class LegacyBaselineTests(unittest.TestCase):
             compute_client_drift([delta_a, delta_b]), np.sqrt(0.5), places=6
         )
 
-    def test_server_fedavg_weighting(self) -> None:
+    def test_server_fedavg_sample_count_weighting(self) -> None:
         model = build_model("cnn", num_classes=4, in_channels=1, group_norm_groups=2)
         server = Server(
             model=model,
@@ -119,6 +123,7 @@ class LegacyBaselineTests(unittest.TestCase):
             algorithm="fedavg",
             server_lr=1.0,
             device=torch.device("cpu"),
+            aggregation_weighting="sample_count",
         )
         before = copy.deepcopy(server.broadcast())
         float_key = next(
@@ -126,10 +131,10 @@ class LegacyBaselineTests(unittest.TestCase):
         )
         delta_one = {float_key: torch.ones_like(before[float_key])}
         delta_two = {float_key: torch.zeros_like(before[float_key])}
-        server._aggregate_weighted(
+        server.aggregate(
             [
-                {"num_samples": 3, "delta": delta_one},
-                {"num_samples": 1, "delta": delta_two},
+                {"client_id": 0, "num_samples": 3, "delta": delta_one},
+                {"client_id": 1, "num_samples": 1, "delta": delta_two},
             ]
         )
         after = server.broadcast()
@@ -154,12 +159,13 @@ class LegacyBaselineTests(unittest.TestCase):
         }
         for key in recomputed:
             self.assertTrue(torch.allclose(result["delta"][key], recomputed[key]))
+            self.assertTrue(torch.allclose(result["raw_delta"][key], recomputed[key]))
 
     def test_client_dp_clipping_reduces_update_norm(self) -> None:
         config = base_config()
         config["dp"]["enabled"] = True
         config["dp"]["noise_multiplier"] = 0.0
-        config["dp"]["max_grad_norm"] = 0.05
+        config["dp"]["update_clip_norm"] = 0.05
         indices = np.arange(8, dtype=np.int64)
         client = Client(0, self.dataset, indices, config, torch.device("cpu"))
         model = build_model("cnn", num_classes=4, in_channels=1, group_norm_groups=2)
@@ -173,6 +179,35 @@ class LegacyBaselineTests(unittest.TestCase):
         for tensor in result["delta"].values():
             norm_sq += float(tensor.pow(2).sum().item())
         self.assertLessEqual(norm_sq**0.5, 0.050001)
+        self.assertLess(result["clipping_factor"], 1.0)
+
+    def test_server_uniform_dp_noise_is_added_once_to_aggregate(self) -> None:
+        model = build_model("cnn", num_classes=4, in_channels=1, group_norm_groups=2)
+        generator = torch.Generator(device="cpu").manual_seed(1234)
+        server = Server(
+            model=model,
+            num_clients=4,
+            algorithm="fedavg",
+            aggregation_weighting="uniform",
+            dp_enabled=True,
+            noise_multiplier=0.5,
+            update_clip_norm=2.0,
+            privacy_noise_generator=generator,
+        )
+        before = server.broadcast()
+        float_key = next(
+            name for name, tensor in before.items() if torch.is_floating_point(tensor)
+        )
+        zero = torch.zeros_like(before[float_key])
+        stats = server.aggregate(
+            [
+                {"client_id": 0, "num_samples": 1, "delta": {float_key: zero.clone()}},
+                {"client_id": 1, "num_samples": 1, "delta": {float_key: zero.clone()}},
+            ]
+        )
+        after = server.broadcast()
+        self.assertGreater(stats["aggregate_noise_norm"], 0.0)
+        self.assertFalse(torch.allclose(before[float_key], after[float_key]))
 
 
 if __name__ == "__main__":

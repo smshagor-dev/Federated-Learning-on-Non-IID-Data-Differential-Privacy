@@ -69,7 +69,7 @@ class FedAvgFedProxParityTests(unittest.TestCase):
     def test_fedavg_equal_sample_counts(self) -> None:
         model = _toy_model()
         legacy_model = copy.deepcopy(model)
-        server = Server(legacy_model, num_clients=2, algorithm="fedavg")
+        server = Server(legacy_model, num_clients=2, algorithm="fedavg", aggregation_weighting="sample_count")
 
         delta_a = {"weight": torch.tensor([[1.0, 2.0], [3.0, 4.0]]), "bias": torch.tensor([1.0, -1.0])}
         delta_b = {"weight": torch.zeros(2, 2), "bias": torch.zeros(2)}
@@ -96,7 +96,7 @@ class FedAvgFedProxParityTests(unittest.TestCase):
     def test_fedavg_unequal_sample_counts(self) -> None:
         model = _toy_model()
         legacy_model = copy.deepcopy(model)
-        server = Server(legacy_model, num_clients=2, algorithm="fedavg")
+        server = Server(legacy_model, num_clients=2, algorithm="fedavg", aggregation_weighting="sample_count")
 
         delta_a = {"weight": torch.tensor([[2.0, 0.0], [0.0, 2.0]]), "bias": torch.tensor([0.4, 0.2])}
         delta_b = {"weight": torch.tensor([[0.0, 4.0], [4.0, 0.0]]), "bias": torch.tensor([-0.2, 0.6])}
@@ -168,7 +168,7 @@ class FedAvgFedProxParityTests(unittest.TestCase):
     def test_fedprox_server_behavior_matches_fedavg(self) -> None:
         model = _toy_model()
         legacy_model = copy.deepcopy(model)
-        server = Server(legacy_model, num_clients=2, algorithm="fedprox")
+        server = Server(legacy_model, num_clients=2, algorithm="fedprox", aggregation_weighting="sample_count")
 
         delta_a = {"weight": torch.tensor([[1.0, -1.0], [-1.0, 1.0]]), "bias": torch.tensor([0.1, -0.1])}
         delta_b = {"weight": torch.zeros(2, 2), "bias": torch.zeros(2)}

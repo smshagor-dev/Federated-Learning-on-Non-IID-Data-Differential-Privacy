@@ -5,6 +5,8 @@ from copy import deepcopy
 
 import yaml
 
+from experiment_runtime import validate_config
+
 
 class ConfigurationService:
     def __init__(self, config_path: str, project_root: str) -> None:
@@ -14,13 +16,16 @@ class ConfigurationService:
     def load(self, path: str | None = None) -> dict:
         target = path or self.config_path
         with open(target, "r", encoding="utf-8") as handle:
-            return yaml.safe_load(handle)
+            raw = yaml.safe_load(handle)
+        config, _warnings = validate_config(raw)
+        return config
 
     def build_runtime_config(self, base_config: dict, updates: dict) -> dict:
         config = deepcopy(base_config)
         for section, values in updates.items():
             config[section].update(values)
-        return config
+        normalized, _warnings = validate_config(config)
+        return normalized
 
     def write_runtime_config(self, config: dict, results_dir: str) -> str:
         os.makedirs(results_dir, exist_ok=True)

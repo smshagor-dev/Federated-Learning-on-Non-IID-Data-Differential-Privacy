@@ -12,6 +12,19 @@ PROHIBITED_PHRASE = re.compile(
 )
 README_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 LEGACY_ALL_COMMAND = "python main.py" + " all"
+UNSUPPORTED_MATH = re.compile(r"(?<!`)(\\\(|\\\)|\\\[|\\\])")
+
+
+def strip_fenced_code(text: str) -> str:
+    parts: list[str] = []
+    in_fence = False
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            parts.append(line)
+    return "".join(parts)
 
 
 def iter_local_links(text: str) -> list[str]:
@@ -25,6 +38,7 @@ def iter_local_links(text: str) -> list[str]:
 
 def main() -> int:
     text = README.read_text(encoding="utf-8")
+    prose_only = strip_fenced_code(text)
     errors: list[str] = []
 
     if "python main.py" not in text:
@@ -35,6 +49,10 @@ def main() -> int:
         errors.append("README.md still contains the prohibited repository phrase.")
     if "E:\\" in text or "C:\\" in text:
         errors.append("README.md must not contain local Windows filesystem paths.")
+    if UNSUPPORTED_MATH.search(prose_only):
+        errors.append(
+            "README.md contains unsupported GitHub math delimiters (use $...$ or $$...$$ outside code fences)."
+        )
 
     for target in iter_local_links(text):
         normalized = target.split("#", 1)[0]

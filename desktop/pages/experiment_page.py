@@ -95,16 +95,21 @@ class ExperimentPage(QWidget):
         self.min_partition_size_spin = self._int_spin(1, 100_000)
 
         self.alpha_spin = self._double_spin(0.001, 100.0, 3)
-        self.sample_rate_spin = self._double_spin(0.01, 1.0, 3)
+        self.sample_rate_spin = self._double_spin(0.0, 1.0, 3)
+        self.grad_clip_norm_spin = self._double_spin(0.0, 1000.0, 4)
         self.server_lr_spin = self._double_spin(0.0001, 100.0, 4)
         self.optimizer_lr_spin = self._double_spin(0.000001, 10.0, 5)
         self.momentum_spin = self._double_spin(0.0, 1.0, 3)
         self.weight_decay_spin = self._double_spin(0.0, 1.0, 6)
         self.mu_spin = self._double_spin(0.0, 100.0, 4)
-        self.max_grad_norm_spin = self._double_spin(0.0001, 1000.0, 4)
+        self.update_clip_norm_spin = self._double_spin(0.0001, 1000.0, 4)
         self.noise_spin = self._double_spin(0.0, 1000.0, 4)
         self.delta_spin = self._double_spin(0.0, 1.0, 8)
         self.dp_checkbox = QCheckBox("Enable differential privacy")
+        self.sampling_strategy_combo = QComboBox()
+        self.sampling_strategy_combo.addItems(["poisson", "fixed_without_replacement"])
+        self.aggregation_weighting_combo = QComboBox()
+        self.aggregation_weighting_combo.addItems(["uniform", "sample_count"])
 
         grid = QGridLayout()
         grid.setSpacing(10)
@@ -125,6 +130,8 @@ class ExperimentPage(QWidget):
         federated = ConfigurationGroup("Federated Training", "Communication-round controls and sampling configuration.")
         federated.add_row("Number of clients", self.num_clients_spin)
         federated.add_row("Sampling rate", self.sample_rate_spin)
+        federated.add_row("Sampling strategy", self.sampling_strategy_combo)
+        federated.add_row("Aggregation weighting", self.aggregation_weighting_combo)
         federated.add_row("Communication rounds", self.rounds_spin)
         federated.add_row("Local epochs", self.local_epochs_spin)
         federated.add_row("Batch size", self.batch_size_spin)
@@ -135,11 +142,12 @@ class ExperimentPage(QWidget):
         algorithm_group.add_row("Optimizer learning rate", self.optimizer_lr_spin)
         algorithm_group.add_row("Momentum", self.momentum_spin)
         algorithm_group.add_row("Weight decay", self.weight_decay_spin)
+        algorithm_group.add_row("Grad clip norm", self.grad_clip_norm_spin)
         algorithm_group.add_row("FedProx mu", self.mu_spin)
 
-        privacy = ConfigurationGroup("Differential Privacy", "Client-update clipping and Gaussian perturbation controls.")
+        privacy = ConfigurationGroup("Differential Privacy", "Trusted-server central DP controls for clipped client updates.")
         privacy.add_row("DP enabled", self.dp_checkbox)
-        privacy.add_row("Max grad norm", self.max_grad_norm_spin)
+        privacy.add_row("Update clip norm", self.update_clip_norm_spin)
         privacy.add_row("Noise multiplier", self.noise_spin)
         privacy.add_row("Target delta", self.delta_spin)
 
@@ -214,6 +222,8 @@ class ExperimentPage(QWidget):
             self.partition_combo,
             self.algorithm_combo,
             self.device_combo,
+            self.sampling_strategy_combo,
+            self.aggregation_weighting_combo,
             self.dp_checkbox,
         ]:
             if hasattr(widget, "currentTextChanged"):
@@ -235,8 +245,9 @@ class ExperimentPage(QWidget):
             self.optimizer_lr_spin,
             self.momentum_spin,
             self.weight_decay_spin,
+            self.grad_clip_norm_spin,
             self.mu_spin,
-            self.max_grad_norm_spin,
+            self.update_clip_norm_spin,
             self.noise_spin,
             self.delta_spin,
         ]:
@@ -270,6 +281,8 @@ class ExperimentPage(QWidget):
         self.algorithm_combo.setCurrentText(str(config["algorithm"]["name"]))
         self.num_clients_spin.setValue(int(config["federated"]["num_clients"]))
         self.sample_rate_spin.setValue(float(config["federated"]["sample_rate"]))
+        self.sampling_strategy_combo.setCurrentText(str(config["federated"]["sampling_strategy"]))
+        self.aggregation_weighting_combo.setCurrentText(str(config["federated"]["aggregation_weighting"]))
         self.rounds_spin.setValue(int(config["federated"]["rounds"]))
         self.local_epochs_spin.setValue(int(config["federated"]["local_epochs"]))
         self.batch_size_spin.setValue(int(config["federated"]["batch_size"]))
@@ -278,9 +291,10 @@ class ExperimentPage(QWidget):
         self.optimizer_lr_spin.setValue(float(config["optimizer"]["lr"]))
         self.momentum_spin.setValue(float(config["optimizer"]["momentum"]))
         self.weight_decay_spin.setValue(float(config["optimizer"]["weight_decay"]))
+        self.grad_clip_norm_spin.setValue(float(config["optimizer"]["grad_clip_norm"] or 0.0))
         self.mu_spin.setValue(float(config["algorithm"]["mu"]))
         self.dp_checkbox.setChecked(bool(config["dp"]["enabled"]))
-        self.max_grad_norm_spin.setValue(float(config["dp"]["max_grad_norm"]))
+        self.update_clip_norm_spin.setValue(float(config["dp"]["update_clip_norm"]))
         self.noise_spin.setValue(float(config["dp"]["noise_multiplier"]))
         self.delta_spin.setValue(float(config["dp"]["target_delta"]))
         self._refresh_preview()
@@ -302,6 +316,8 @@ class ExperimentPage(QWidget):
             "federated": {
                 "num_clients": self.num_clients_spin.value(),
                 "sample_rate": self.sample_rate_spin.value(),
+                "sampling_strategy": self.sampling_strategy_combo.currentText(),
+                "aggregation_weighting": self.aggregation_weighting_combo.currentText(),
                 "rounds": self.rounds_spin.value(),
                 "local_epochs": self.local_epochs_spin.value(),
                 "batch_size": self.batch_size_spin.value(),
@@ -311,6 +327,7 @@ class ExperimentPage(QWidget):
                 "lr": self.optimizer_lr_spin.value(),
                 "momentum": self.momentum_spin.value(),
                 "weight_decay": self.weight_decay_spin.value(),
+                "grad_clip_norm": None if self.grad_clip_norm_spin.value() == 0.0 else self.grad_clip_norm_spin.value(),
             },
             "algorithm": {
                 "name": self.algorithm_combo.currentText(),
@@ -318,7 +335,7 @@ class ExperimentPage(QWidget):
             },
             "dp": {
                 "enabled": self.dp_checkbox.isChecked(),
-                "max_grad_norm": self.max_grad_norm_spin.value(),
+                "update_clip_norm": self.update_clip_norm_spin.value(),
                 "noise_multiplier": self.noise_spin.value(),
                 "target_delta": self.delta_spin.value(),
             },
@@ -336,19 +353,26 @@ class ExperimentPage(QWidget):
                     f"Results dir: {updates['system']['results_dir']}",
                     f"Dataset: {updates['data']['dataset']} | Partition: {updates['data']['partition']} | alpha: {updates['data']['alpha']:.3f}",
                     f"Algorithm: {updates['algorithm']['name']} | Device: {updates['system']['device']}",
-                    f"Clients: {updates['federated']['num_clients']} | Sample rate: {updates['federated']['sample_rate']:.2f} | Rounds: {updates['federated']['rounds']}",
+                    f"Clients: {updates['federated']['num_clients']} | Sample rate: {updates['federated']['sample_rate']:.2f} | Strategy: {updates['federated']['sampling_strategy']}",
+                    f"Weighting: {updates['federated']['aggregation_weighting']} | Rounds: {updates['federated']['rounds']}",
                     f"Local epochs: {updates['federated']['local_epochs']} | Batch size: {updates['federated']['batch_size']}",
-                    f"DP enabled: {updates['dp']['enabled']} | noise: {updates['dp']['noise_multiplier']} | clip: {updates['dp']['max_grad_norm']} | delta: {updates['dp']['target_delta']}",
+                    f"DP enabled: {updates['dp']['enabled']} | noise: {updates['dp']['noise_multiplier']} | update clip: {updates['dp']['update_clip_norm']} | grad clip: {updates['optimizer']['grad_clip_norm']}",
                 ]
             )
         )
         issues: list[str] = []
-        if updates["federated"]["sample_rate"] <= 0 or updates["federated"]["sample_rate"] > 1:
-            issues.append("Sampling rate should stay within (0, 1].")
+        if updates["federated"]["sample_rate"] < 0 or updates["federated"]["sample_rate"] > 1:
+            issues.append("Sampling rate should stay within [0, 1].")
         if updates["federated"]["num_clients"] < 2:
             issues.append("At least 2 clients are recommended for federated learning behavior.")
         if updates["dp"]["enabled"] and updates["dp"]["noise_multiplier"] <= 0:
             issues.append("Differential privacy is enabled but noise multiplier is not positive.")
+        if updates["dp"]["enabled"] and updates["federated"]["sampling_strategy"] != "poisson":
+            issues.append("DP accounting requires Poisson client sampling in the root runtime.")
+        if updates["dp"]["enabled"] and updates["federated"]["aggregation_weighting"] != "uniform":
+            issues.append("DP-enabled runs require uniform client weighting in the root runtime.")
+        if updates["algorithm"]["name"] in {"scaffold", "all"} and updates["federated"]["aggregation_weighting"] != "uniform":
+            issues.append("SCAFFOLD and algorithm=all currently require uniform client weighting.")
         if updates["system"]["device"] == "cuda" and not updates["system"]["results_dir"]:
             issues.append("CUDA is selected, but results directory is empty.")
         self.validation_text.setPlainText("\n".join(issues) if issues else "Configuration looks internally consistent for a desktop-managed run.")

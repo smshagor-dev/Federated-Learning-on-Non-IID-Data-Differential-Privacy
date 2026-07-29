@@ -30,7 +30,7 @@ class PrivacyPage(QWidget):
         self.enabled_card = MetricCard("Privacy Status", "--", "Root runtime privacy switch")
         self.epsilon_card = MetricCard("Epsilon", "--", "Latest finite privacy expenditure")
         self.noise_card = MetricCard("Noise Multiplier", "--", "Configured Gaussian noise scale")
-        self.clip_card = MetricCard("Clipping Norm", "--", "Configured root runtime clipping bound")
+        self.clip_card = MetricCard("Update Clip Norm", "--", "Configured client-update sensitivity bound")
         cards.addWidget(self.enabled_card, 0, 0)
         cards.addWidget(self.epsilon_card, 0, 1)
         cards.addWidget(self.noise_card, 0, 2)
@@ -78,16 +78,18 @@ class PrivacyPage(QWidget):
         self.epsilon_card.set_caption("No finite value when privacy is disabled")
         self.noise_card.set_value(str(dp["noise_multiplier"]))
         self.noise_card.set_caption(f"Target delta {dp['target_delta']}")
-        self.clip_card.set_value(str(dp["max_grad_norm"]))
-        self.clip_card.set_caption("Shared clipping bound for gradient stability and update release")
+        self.clip_card.set_value(str(dp["update_clip_norm"]))
+        self.clip_card.set_caption("Used only for client-update clipping in the central DP mechanism")
         self.notes.setPlainText(
             "\n".join(
                 [
                     f"DP enabled: {dp['enabled']}",
-                    f"Max grad norm (C): {dp['max_grad_norm']}",
+                    f"Update clip norm (C): {dp['update_clip_norm']}",
                     f"Noise multiplier (sigma): {dp['noise_multiplier']}",
                     f"Target delta: {dp['target_delta']}",
-                    "The active root runtime privatizes the final client update and tracks client-level privacy with the moments accountant.",
+                    f"Sampling strategy: {config['federated']['sampling_strategy']}",
+                    f"Aggregation weighting: {config['federated']['aggregation_weighting']}",
+                    "The active root runtime clips client updates locally, adds one Gaussian noise vector at the trusted server, and tracks client-level privacy with the Poisson-sampled moments accountant.",
                     "Opacus-backed sample-level accounting exists in the auxiliary fl_platform worker stack, not in this root desktop path.",
                 ]
             )

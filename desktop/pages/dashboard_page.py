@@ -194,7 +194,7 @@ class DashboardPage(QWidget):
         self.accuracy_card = self._build_chart_card("Accuracy vs Rounds")
         self.loss_card = self._build_chart_card("Loss vs Rounds")
         self.epsilon_card = self._build_chart_card("Privacy Budget (epsilon) vs Rounds")
-        self.drift_card = self._build_chart_card("Client Drift (Distance to Global)")
+        self.drift_card = self._build_chart_card("Raw Client Drift")
         self.chart_grid.addWidget(self.accuracy_card, 0, 0)
         self.chart_grid.addWidget(self.loss_card, 0, 1)
         self.chart_grid.addWidget(self.epsilon_card, 1, 0)
@@ -392,7 +392,7 @@ class DashboardPage(QWidget):
         rounds_total = int(config["federated"]["rounds"])
         sample_rate = float(config["federated"]["sample_rate"])
         total_clients = int(config["federated"]["num_clients"])
-        active_clients = max(1, round(total_clients * sample_rate))
+        active_clients = int(round(total_clients * sample_rate))
         progress = 0.0 if rounds_total <= 0 else min(1.0, latest_round / rounds_total)
 
         elapsed = self._elapsed_text(process_state.started_at)
@@ -420,11 +420,11 @@ class DashboardPage(QWidget):
         )
         self.federated_card.body_label.setText(
             f"{total_clients} clients\n{active_clients} clients per round\n"
-            f"{rounds_total} communication rounds\nLocal epochs: {config['federated']['local_epochs']}"
+            f"{rounds_total} communication rounds\nSampling: {config['federated']['sampling_strategy']}"
         )
         self.privacy_card.body_label.setText(
-            f"Sample-level DP\nNoise Multiplier (sigma): {config['dp']['noise_multiplier']}\n"
-            f"Clipping Norm (C): {config['dp']['max_grad_norm']}\ndelta: {config['dp']['target_delta']}"
+            f"Central client-level DP\nNoise Multiplier (sigma): {config['dp']['noise_multiplier']}\n"
+            f"Update Clip Norm (C): {config['dp']['update_clip_norm']}\ndelta: {config['dp']['target_delta']}"
         )
         self.runtime_card.body_label.setText(
             f"Device: {config['system']['device'].upper()}\nDatabase: PostgreSQL\n"
@@ -550,7 +550,7 @@ class DashboardPage(QWidget):
             finite_eps = [(x, y) for x, y in zip(rounds, values["epsilon"]) if math.isfinite(y)]
             if finite_eps:
                 self.epsilon_card.plot_widget.plot([x for x, _ in finite_eps], [y for _, y in finite_eps], pen=pen)
-            self.drift_card.plot_widget.plot(rounds, values["client_drift"], pen=pen)
+            self.drift_card.plot_widget.plot(rounds, values["raw_client_drift"], pen=pen)
 
         if selected_series and selected_series["round"]:
             rounds = selected_series["round"]

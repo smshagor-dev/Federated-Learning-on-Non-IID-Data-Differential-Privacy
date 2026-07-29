@@ -1,19 +1,7 @@
-"""Federated client: local SGD, FedProx proximal term, SCAFFOLD variance
-reduction, and client-level differential privacy (clip + Gaussian noise).
-
-DP mechanism (DP-FedAvg style, McMahan et al., 2018):
-  1. During local SGD every per-batch gradient is clipped to ``max_grad_norm``
-     for optimization stability.
-  2. The *model update* delta = w_local - w_global is clipped to L2 norm
-     C = ``max_grad_norm`` (bounding each client's sensitivity), then Gaussian
-     noise N(0, (sigma * C)^2 I) is added before the update leaves the client.
-  Privacy is accounted at client level by the subsampled-Gaussian moments
-  accountant in ``dp_accountant.py`` (sampling rate = clients/round / total).
-"""
+"""Federated client local training for the active root runtime."""
 
 from __future__ import annotations
 
-import copy
 from typing import Dict, Optional
 
 import numpy as np
@@ -25,17 +13,31 @@ from torch.utils.data import DataLoader, Subset
 StateDict = Dict[str, torch.Tensor]
 
 
-def _float_keys(state: StateDict):
-    """Keys of floating-point tensors (the aggregatable parameters)."""
-    return [k for k, v in state.items() if torch.is_floating_point(v)]
+def float_state_keys(state: StateDict) -> list[str]:
+    return [key for key, value in state.items() if torch.is_floating_point(value)]
 
 
-def _flat_norm(delta: StateDict) -> float:
-    """Global L2 norm of a (possibly multi-tensor) update."""
+def flat_l2_norm(state: StateDict) -> float:
     total = 0.0
-    for v in delta.values():
-        total += float(v.pow(2).sum().item())
+    for value in state.values():
+        total += float(value.detach().pow(2).sum().item())
     return float(np.sqrt(total))
+
+
+def assert_finite_state(state: StateDict, *, context: str) -> None:
+    for name, value in state.items():
+        if not torch.isfinite(value).all():
+            raise ValueError(f"Non-finite tensor detected in {context}: {name}")
+
+
+def clip_state_update(delta: StateDict, clip_norm: float) -> tuple[StateDict, float, float, bool]:
+    if clip_norm <= 0.0:
+        raise ValueError("clip_norm must be > 0.")
+    update_norm = flat_l2_norm(delta)
+    clip_factor = min(1.0, clip_norm / (update_norm + 1e-12))
+    clipped = {name: value * clip_factor for name, value in delta.items()}
+    assert_finite_state(clipped, context="clipped client update")
+    return clipped, update_norm, clip_factor, clip_factor < 1.0
 
 
 class Client:
@@ -53,20 +55,15 @@ class Client:
         self.device = device
         self.cfg = config
         self.num_samples = int(len(indices))
-
         batch_size = int(config["federated"]["batch_size"])
-        # drop_last=False so tiny non-IID shards still produce batches.
         self.loader = DataLoader(
             Subset(dataset, indices.tolist()),
-            batch_size=min(batch_size, self.num_samples),
+            batch_size=max(1, min(batch_size, self.num_samples)),
             shuffle=True,
             num_workers=0,
             drop_last=False,
         )
 
-    # ------------------------------------------------------------------ #
-    # Local training                                                     #
-    # ------------------------------------------------------------------ #
     def train(
         self,
         model: nn.Module,
@@ -75,26 +72,6 @@ class Client:
         c_global: Optional[StateDict] = None,
         c_local: Optional[StateDict] = None,
     ) -> dict:
-        """Run E local epochs starting from ``global_state``.
-
-        Args:
-            model: scratch model instance (architecture only; weights are
-                overwritten with the global state).
-            global_state: server parameters at the start of the round (CPU).
-            algorithm: "fedavg" | "fedprox" | "scaffold".
-            c_global / c_local: SCAFFOLD control variates (CPU state dicts,
-                required iff algorithm == "scaffold").
-
-        Returns:
-            dict with keys:
-                delta        -- clipped/noised update (CPU state dict)
-                num_samples  -- local dataset size (aggregation weight)
-                avg_loss     -- mean local training loss
-                local_state  -- final local weights (CPU, pre-noise; used for
-                                the weight-variance / drift diagnostics)
-                new_c_local  -- updated control variate (SCAFFOLD only)
-                delta_c      -- c_i^+ - c_i (SCAFFOLD only)
-        """
         algorithm = algorithm.lower()
         fed_cfg = self.cfg["federated"]
         opt_cfg = self.cfg["optimizer"]
@@ -102,119 +79,110 @@ class Client:
 
         local_epochs = int(fed_cfg["local_epochs"])
         lr = float(opt_cfg["lr"])
-        # SCAFFOLD's control-variate correction assumes plain SGD steps.
         momentum = 0.0 if algorithm == "scaffold" else float(opt_cfg["momentum"])
         weight_decay = float(opt_cfg["weight_decay"])
+        grad_clip_norm = opt_cfg.get("grad_clip_norm")
         mu = float(self.cfg["algorithm"]["mu"])
         dp_enabled = bool(dp_cfg["enabled"])
-        clip_bound = float(dp_cfg["max_grad_norm"])
-        noise_multiplier = float(dp_cfg["noise_multiplier"])
+        update_clip_value = dp_cfg.get("update_clip_norm", dp_cfg.get("max_grad_norm", 1.0))
+        update_clip_norm = float(update_clip_value)
 
         model.load_state_dict(global_state)
         model.to(self.device)
         model.train()
 
-        # Snapshot of global trainable params for FedProx / SCAFFOLD math.
         global_params = {
-            name: p.detach().clone()
-            for name, p in model.named_parameters()
+            name: param.detach().clone()
+            for name, param in model.named_parameters()
         }
-
         if algorithm == "scaffold":
             if c_global is None or c_local is None:
                 raise ValueError("SCAFFOLD requires c_global and c_local.")
-            c_global_dev = {k: v.to(self.device) for k, v in c_global.items()}
-            c_local_dev = {k: v.to(self.device) for k, v in c_local.items()}
+            c_global_dev = {name: value.to(self.device) for name, value in c_global.items()}
+            c_local_dev = {name: value.to(self.device) for name, value in c_local.items()}
 
         optimizer = torch.optim.SGD(
-            model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay
+            model.parameters(),
+            lr=lr,
+            momentum=momentum,
+            weight_decay=weight_decay,
         )
 
-        step_count = 0
-        loss_sum, loss_batches = 0.0, 0
-
+        local_steps = 0
+        loss_sum = 0.0
+        loss_batches = 0
         for _ in range(local_epochs):
             for inputs, labels in self.loader:
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
-
                 optimizer.zero_grad(set_to_none=True)
                 outputs = model(inputs)
                 loss = F.cross_entropy(outputs, labels)
-
                 if algorithm == "fedprox" and mu > 0.0:
                     prox = torch.tensor(0.0, device=self.device)
-                    for name, p in model.named_parameters():
-                        prox = prox + (p - global_params[name]).pow(2).sum()
+                    for name, param in model.named_parameters():
+                        prox = prox + (param - global_params[name]).pow(2).sum()
                     loss = loss + 0.5 * mu * prox
-
                 loss.backward()
-
-                if dp_enabled:
-                    # Stability clipping of the per-batch gradient.
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), clip_bound)
-
+                if grad_clip_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(),
+                        float(grad_clip_norm),
+                    )
                 if algorithm == "scaffold":
-                    # Variance-reduced gradient: g <- g + c - c_i
-                    for name, p in model.named_parameters():
-                        if p.grad is not None:
-                            p.grad.add_(c_global_dev[name] - c_local_dev[name])
-
+                    for name, param in model.named_parameters():
+                        if param.grad is not None:
+                            param.grad.add_(c_global_dev[name] - c_local_dev[name])
                 optimizer.step()
-                step_count += 1
+                local_steps += 1
                 loss_sum += float(loss.item())
                 loss_batches += 1
 
         avg_loss = loss_sum / max(1, loss_batches)
-
-        # ------------------------------------------------------------------
-        # Build the model update delta = w_local - w_global (trainable params)
-        # ------------------------------------------------------------------
         local_state = {
-            k: v.detach().cpu().clone() for k, v in model.state_dict().items()
+            key: value.detach().cpu().clone()
+            for key, value in model.state_dict().items()
         }
-        delta: StateDict = {}
-        for name in _float_keys(local_state):
-            delta[name] = local_state[name] - global_state[name].cpu()
-
-        # ------------------------------------------------------------------
-        # Differential privacy: clip update sensitivity, then add noise
-        # ------------------------------------------------------------------
+        raw_delta = {
+            name: local_state[name] - global_state[name].cpu()
+            for name in float_state_keys(local_state)
+        }
+        assert_finite_state(raw_delta, context="raw client update")
+        clipped_delta = raw_delta
+        unclipped_update_norm = flat_l2_norm(raw_delta)
+        clipping_factor = 1.0
+        was_clipped = False
         if dp_enabled:
-            update_norm = _flat_norm(delta)
-            clip_factor = min(1.0, clip_bound / (update_norm + 1e-12))
-            for name in delta:
-                delta[name] = delta[name] * clip_factor
-                noise = torch.normal(
-                    mean=0.0,
-                    std=noise_multiplier * clip_bound,
-                    size=delta[name].shape,
-                    generator=None,
-                )
-                delta[name] = delta[name] + noise.to(delta[name].dtype)
+            clipped_delta, unclipped_update_norm, clipping_factor, was_clipped = clip_state_update(
+                raw_delta,
+                update_clip_norm,
+            )
+        transmitted_delta = {
+            name: tensor.detach().clone() for name, tensor in clipped_delta.items()
+        }
 
         result = {
             "client_id": self.client_id,
-            "delta": delta,
+            "delta": transmitted_delta,
+            "raw_delta": raw_delta,
+            "clipped_delta": clipped_delta,
             "num_samples": self.num_samples,
             "avg_loss": avg_loss,
             "local_state": local_state,
+            "unclipped_update_norm": unclipped_update_norm,
+            "clipping_factor": clipping_factor,
+            "was_clipped": was_clipped,
+            "local_steps": max(1, local_steps),
         }
 
-        # ------------------------------------------------------------------
-        # SCAFFOLD control-variate update (Option II, Karimireddy et al. 2020)
-        #   c_i^+ = c_i - c + (x - y_i) / (K * eta_l)
-        # We use the transmitted (clipped+noised) delta so the control variate
-        # leaks no additional information beyond the DP-protected update.
-        # ------------------------------------------------------------------
         if algorithm == "scaffold":
-            K = max(1, step_count)
             new_c_local: StateDict = {}
             delta_c: StateDict = {}
-            for name in delta:
+            tau_k = max(1, local_steps)
+            for name in transmitted_delta:
                 c_i = c_local[name].cpu()
                 c_g = c_global[name].cpu()
-                c_plus = c_i - c_g - delta[name] / (K * lr)
+                c_plus = c_i - c_g - transmitted_delta[name] / (tau_k * lr)
                 new_c_local[name] = c_plus
                 delta_c[name] = c_plus - c_i
             result["new_c_local"] = new_c_local

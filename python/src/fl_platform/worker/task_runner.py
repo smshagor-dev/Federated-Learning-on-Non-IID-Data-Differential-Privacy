@@ -117,9 +117,22 @@ def build_bridge_compatible_model(
 def _legacy_config(task: ClientTrainingTask) -> dict[str, dict[str, object]]:
     return {
         "federated": {"batch_size": task.batch_size, "local_epochs": task.local_epochs},
-        "optimizer": {"lr": task.learning_rate, "momentum": 0.0, "weight_decay": 0.0},
+        "optimizer": {
+            "lr": task.learning_rate,
+            "momentum": 0.0,
+            "weight_decay": 0.0,
+            "grad_clip_norm": None,
+        },
         "algorithm": {"mu": task.fedprox_mu},
-        "dp": {"enabled": False, "max_grad_norm": 1.0, "noise_multiplier": 0.0},
+        "dp": {
+            "enabled": False,
+            "update_clip_norm": 1.0,
+            "max_grad_norm": 1.0,
+            "noise_multiplier": 0.0,
+            "target_delta": 1e-5,
+            "deterministic_noise_for_testing": False,
+            "test_noise_seed": None,
+        },
     }
 
 

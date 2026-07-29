@@ -19,7 +19,9 @@ data:
 
 federated:
   num_clients: 20             # Total client population
-  sample_rate: 0.2            # Fraction of clients sampled per round (0.2 * 20 = 4 clients/round)
+  sample_rate: 0.2            # Poisson selection probability q for each client in each round
+  sampling_strategy: "poisson"  # "poisson" | "fixed_without_replacement" (DP accounting supports only poisson)
+  aggregation_weighting: "uniform"  # "uniform" | "sample_count" (DP-supported default: uniform)
   rounds: 50                  # Communication rounds
   local_epochs: 2             # Local SGD epochs (E)
   batch_size: 64              # Local mini-batch size
@@ -29,6 +31,7 @@ optimizer:
   lr: 0.01                    # Client SGD learning rate
   momentum: 0.9               # Set to 0.0 automatically for SCAFFOLD (theory requires plain SGD)
   weight_decay: 0.0005
+  grad_clip_norm: null        # Optional optimization-only gradient clipping (not part of privacy accounting)
 
 algorithm:
   name: "fedprox"             # "fedavg" | "fedprox" | "scaffold" (or "all" via CLI to run the full matrix)
@@ -36,9 +39,11 @@ algorithm:
 
 dp:
   enabled: true               # Master switch for the DP mechanism
-  max_grad_norm: 1.5          # Clipping bound C (applied to per-batch grads AND the client update)
-  noise_multiplier: 0.8       # sigma: Gaussian noise std = sigma * C added to each clipped client update
+  update_clip_norm: 1.5       # Client-update clipping bound C used by the central DP mechanism
+  noise_multiplier: 0.8       # sigma: one Gaussian noise vector added to the server-side aggregate sum
   target_delta: 1.0e-5        # Delta used when converting RDP -> (epsilon, delta)
+  deterministic_noise_for_testing: false  # Simulation-only deterministic privacy noise
+  test_noise_seed: null       # Required only when deterministic_noise_for_testing=true
 
 model:
   name: "cnn"                 # Lightweight GroupNorm CNN (see models/networks.py)
