@@ -144,7 +144,7 @@ In code, that update is performed by `Server.aggregate()` and `Server._apply_del
 The root runtime implements central client-level DP under a trusted-server assumption. The privacy mechanism is:
 
 1. Each selected client computes its raw model delta.
-2. When DP is enabled, each client update $\Delta_k$ is clipped to the global $\ell_2$-norm bound $C = \texttt{dp.update\_clip\_norm}$ before server-side aggregation.
+2. The client delta is clipped to norm $C$ (configured by `dp.update_clip_norm`) when DP is enabled.
 3. The server sums the clipped deltas.
 4. The server adds one Gaussian noise draw to that aggregate sum.
 5. The server divides by the cohort size to form the released average update.
@@ -152,7 +152,7 @@ The root runtime implements central client-level DP under a trusted-server assum
 With uniform weighting, the privatized sum is
 
 $$
-\widetilde{S}_t=\sum_{k\in S_t}\operatorname{clip}\left(\Delta_k^t,C\right)+\mathcal{N}\left(0,\sigma^2C^2I\right).
+\widetilde{\Delta}_t=\sum_{k\in S_t}\mathrm{clip}\left(\Delta_k,C\right)+\mathcal{N}\left(0,\sigma^2C^2I\right),
 $$
 
 and the released update is
