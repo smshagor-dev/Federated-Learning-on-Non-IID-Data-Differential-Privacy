@@ -38,6 +38,7 @@ cpp-release:
 	ctest --test-dir build/cpp-release --output-on-failure
 
 cpp-format-check:
+	clang-format -i $$(find cpp -name '*.cpp' -o -name '*.hpp')
 	clang-format --dry-run --Werror $$(find cpp -name '*.cpp' -o -name '*.hpp')
 
 cpp-tidy:
