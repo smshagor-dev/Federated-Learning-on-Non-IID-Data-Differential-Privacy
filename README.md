@@ -6,8 +6,6 @@ A desktop-first federated learning research platform for studying heterogeneous 
 
 ## Documentation Status
 
-```
-
 The document distinguishes four different kinds of claims:
 
 - **Active root runtime:** executed by `python main.py` or `python main.py --cli`.
