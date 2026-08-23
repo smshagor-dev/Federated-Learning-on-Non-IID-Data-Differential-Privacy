@@ -1,6 +1,8 @@
 package execution
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -18,7 +20,16 @@ func TestPausedEvidenceAllowsFinalTrainingBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkpointPath := filepath.Join(controlDir, "runtime-checkpoint.pt")
-	if err := os.WriteFile(checkpointPath, []byte("checkpoint\n"), 0o600); err != nil {
+	checkpointBytes := []byte("checkpoint\n")
+	if err := os.WriteFile(checkpointPath, checkpointBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(checkpointBytes)
+	if err := os.WriteFile(
+		checkpointPath+".sha256",
+		[]byte(hex.EncodeToString(digest[:])+"\n"),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 	marker := localPausedMarker{
