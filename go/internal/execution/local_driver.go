@@ -328,6 +328,15 @@ func validateLocalMapping(spec Spec) error {
 		if spec.Federation.Weighting != "uniform" {
 			return fmt.Errorf("%w: local user-level DP requires uniform weighting", ErrUnsupportedMapping)
 		}
+		if !strings.EqualFold(strings.TrimSpace(spec.Privacy.UserLevel.Accountant), "rdp") {
+			return fmt.Errorf("%w: local root backend currently implements only the RDP accountant", ErrUnsupportedMapping)
+		}
+		if !strings.EqualFold(strings.TrimSpace(spec.Privacy.UserLevel.WeightingStrategy), "uniform") {
+			return fmt.Errorf("%w: local user-level DP requires weighting_strategy=uniform", ErrUnsupportedMapping)
+		}
+		if spec.Privacy.UserLevel.EpsilonBudget > 0 {
+			return fmt.Errorf("%w: local root backend does not yet implement epsilon_budget stop-policy enforcement", ErrUnsupportedMapping)
+		}
 		if spec.Privacy.UserLevel.SecureRandom {
 			return fmt.Errorf("%w: local root backend does not claim a cryptographically secure Gaussian RNG", ErrUnsupportedMapping)
 		}
