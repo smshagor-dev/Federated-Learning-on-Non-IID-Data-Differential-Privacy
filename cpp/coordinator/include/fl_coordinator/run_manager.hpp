@@ -56,6 +56,18 @@ struct RunConfig {
     std::uint32_t round_timeout_seconds{300};
     std::uint32_t minimum_valid_results{1};
     std::uint64_t client_selection_seed{0};
+
+    // Canonical dataset/partition configuration. The same seed currently
+    // drives client selection and deterministic partition generation to
+    // preserve the existing local-runtime semantics; separating those RNG
+    // streams is a future schema change, not silently invented here.
+    std::string dataset_name{"synthetic-cifar-like"};
+    std::string dataset_partitioning{"iid"};
+    double dataset_alpha{0.0};
+    std::uint32_t dataset_classes_per_client{0};
+    double dataset_quantity_skew_sigma{0.0};
+    std::uint32_t dataset_min_client_size{0};
+
     std::uint32_t task_lease_seconds{60};
     std::uint32_t max_task_retries{3};
     std::uint32_t local_epochs{1};
