@@ -10,13 +10,13 @@ system:
   results_dir: "results"      # CSV logs, plots, manifests and summaries
 
 data:
-  dataset: "CIFAR10"          # "CIFAR10" | "MNIST"
+  dataset: "CIFAR10"          # "MNIST" | "FASHIONMNIST" | "CIFAR10" | "CIFAR100"
   data_root: "./data_raw"     # Download / cache directory for torchvision
   partition: "dirichlet"      # "iid" | "dirichlet" | "pathological" | "quantity_skew"
   alpha: 0.1                  # Used only by dirichlet
   classes_per_client: 2       # Used only by pathological
   quantity_skew_sigma: 1.0    # Log-normal sigma used only by quantity_skew
-  min_partition_size: 10      # Minimum samples per client
+  min_partition_size: 10      # Minimum samples per training client
 
 federated:
   num_clients: 20
@@ -53,4 +53,4 @@ model:
   group_norm_groups: 2
 
 evaluation:
-  eval_batch_size: 256
+  eval_batch_size: 256        # Global and held-out per-client evaluation batch size
