@@ -60,7 +60,8 @@ func CanRequestResume(status Status) bool {
 }
 
 func CanRequestCancel(status Status) bool {
-	return !Record{Status: status}.Terminal() && status != StatusCanceling
+	record := Record{Status: status}
+	return !record.Terminal() && status != StatusCanceling
 }
 
 type Event struct {
