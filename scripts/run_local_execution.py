@@ -116,7 +116,9 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
         )
 
     federation = _required_mapping(spec["federation"], "federation")
-    total_clients = _positive_int(federation.get("total_clients"), "federation.total_clients")
+    total_clients = _positive_int(
+        federation.get("total_clients"), "federation.total_clients"
+    )
     target_clients = _positive_int(
         federation.get("target_clients_per_round"),
         "federation.target_clients_per_round",
@@ -127,7 +129,9 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
     if sampling not in SUPPORTED_SAMPLING:
         raise ValueError(f"local sampling strategy is unsupported: {sampling!r}")
     if federation.get("scheduling_mode") != "synchronous":
-        raise ValueError("local root backend currently supports synchronous scheduling only")
+        raise ValueError(
+            "local root backend currently supports synchronous scheduling only"
+        )
 
     privacy = _required_mapping(spec["privacy"], "privacy")
     privacy_mode = str(privacy.get("mode", "none"))
@@ -143,14 +147,18 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("adaptive clipping is not implemented by the local root backend")
 
     security = _required_mapping(spec["security"], "security")
-    if any(bool(security.get(key, False)) for key in (
-        "require_authenticated_workers",
-        "require_signed_tasks",
-        "require_signed_results",
-        "secure_aggregation",
-    )):
+    if any(
+        bool(security.get(key, False))
+        for key in (
+            "require_authenticated_workers",
+            "require_signed_tasks",
+            "require_signed_results",
+            "secure_aggregation",
+        )
+    ):
         raise ValueError(
-            "worker transport/signing/secure-aggregation policies require the distributed backend"
+            "worker transport/signing/secure-aggregation policies require the "
+            "distributed backend"
         )
 
     if privacy_mode == "user_level_dp":
@@ -160,9 +168,16 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("local client-level DP requires poisson client sampling")
         if str(federation.get("weighting", "")) != "uniform":
             raise ValueError("local client-level DP requires uniform client weighting")
+        if str(user_level.get("accountant", "")).lower() != "rdp":
+            raise ValueError("local root backend currently uses the RDP accountant only")
+        if str(user_level.get("weighting_strategy", "")).lower() != "uniform":
+            raise ValueError(
+                "local root backend user-level DP requires uniform weighting_strategy"
+            )
         if bool(user_level.get("secure_random", False)):
             raise ValueError(
-                "local root backend does not claim a cryptographically secure Gaussian RNG"
+                "local root backend does not claim a cryptographically secure "
+                "Gaussian RNG"
             )
 
     optimizer = _required_mapping(spec["optimizer"], "optimizer")
@@ -184,7 +199,9 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
         positive=True,
     )
     config["data"]["classes_per_client"] = int(
-        partition.get("classes_per_client", config["data"].get("classes_per_client", 2))
+        partition.get(
+            "classes_per_client", config["data"].get("classes_per_client", 2)
+        )
     )
     config["data"]["quantity_skew_sigma"] = _finite_float(
         partition.get(
@@ -193,7 +210,9 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
         "dataset.partition.quantity_skew_sigma",
     )
     config["data"]["min_partition_size"] = int(
-        partition.get("minimum_client_size", config["data"].get("min_partition_size", 10))
+        partition.get(
+            "minimum_client_size", config["data"].get("min_partition_size", 10)
+        )
     )
 
     config["federated"]["num_clients"] = total_clients
@@ -242,15 +261,20 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
             "privacy.user_level.noise_multiplier",
             positive=True,
         )
-        config["dp"]["target_delta"] = _finite_float(
+        target_delta = _finite_float(
             user_level.get("target_delta"),
             "privacy.user_level.target_delta",
             positive=True,
         )
+        if target_delta >= 1.0:
+            raise ValueError("privacy.user_level.target_delta must lie in (0, 1)")
+        config["dp"]["target_delta"] = target_delta
         epsilon_budget = _finite_float(
             user_level.get("epsilon_budget", 0.0),
             "privacy.user_level.epsilon_budget",
         )
+        if epsilon_budget < 0.0:
+            raise ValueError("privacy.user_level.epsilon_budget must be non-negative")
         config["dp"]["target_epsilon"] = epsilon_budget if epsilon_budget > 0 else None
     else:
         config["dp"]["target_epsilon"] = None
