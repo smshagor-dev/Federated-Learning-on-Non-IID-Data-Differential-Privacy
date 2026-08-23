@@ -335,6 +335,9 @@ func readLocalPauseEvidence(run *localRun) (localPausedMarker, error) {
 	if _, err := os.Stat(expectedCheckpoint); err != nil {
 		return localPausedMarker{}, fmt.Errorf("paused checkpoint is unavailable: %w", err)
 	}
+	if err := verifyLocalCheckpointDigest(expectedCheckpoint); err != nil {
+		return localPausedMarker{}, fmt.Errorf("verify paused checkpoint digest: %w", err)
+	}
 	return marker, nil
 }
 
