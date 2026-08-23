@@ -90,7 +90,8 @@ class BenchmarkPlanTests(unittest.TestCase):
             rounds=10,
         )
         plan.validate()
-        self.assertEqual({cell.dataset_id for cell in plan.expand()}, {"fashionmnist", "cifar100"})
+        dataset_ids = {cell.dataset_id for cell in plan.expand()}
+        self.assertEqual(dataset_ids, {"fashionmnist", "cifar100"})
 
     def test_unknown_root_dataset_is_rejected(self) -> None:
         plan = BenchmarkPlan(
