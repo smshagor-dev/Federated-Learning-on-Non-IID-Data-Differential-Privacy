@@ -26,6 +26,103 @@ jobs:
           patch()
           PY
 
+      - name: Harden checkpointed lease expiry after restart
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              data = target.read_text(encoding="utf-8")
+              count = data.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one post-restart lease anchor, found {count}")
+              target.write_text(data.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "cpp/coordinator/src/run_manager.cpp",
+              '''void RunInstance::advance(double now_unix_s) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (dispatcher_) {
+        dispatcher_->sweep_expired_leases(now_unix_s);
+    }
+
+    const auto current = state_machine_.state();
+''',
+              '''void RunInstance::advance(double now_unix_s) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // After a coordinator restart, a still-valid checkpointed lease is
+    // deliberately not inserted into the rebuilt dispatcher. If that lease
+    // expires later, force one dispatcher reconstruction so the client is
+    // requeued with its persisted attempt count instead of waiting until the
+    // absolute round deadline.
+    bool checkpointed_lease_expired = false;
+    for (const auto& [client_id, lease] : active_leases_) {
+        if (round_results_.contains(client_id) || now_unix_s <= lease.lease_expires_at_unix_s) {
+            continue;
+        }
+        if (!lease.worker_id.empty()) {
+            worker_registry_->clear_current_task(lease.worker_id);
+            worker_registry_->record_failure(lease.worker_id);
+        }
+        checkpointed_lease_expired = true;
+    }
+    if (checkpointed_lease_expired) {
+        dispatcher_.reset();
+    }
+    if (dispatcher_) {
+        dispatcher_->sweep_expired_leases(now_unix_s);
+    }
+
+    const auto current = state_machine_.state();
+''',
+          )
+
+          test_path = Path("cpp/coordinator/tests/round_fault_tolerance_test.cpp")
+          data = test_path.read_text(encoding="utf-8")
+          anchor = '''    {
+        const auto config = fault_config("deadline-recovery", 2, 1, 20, 30, 3);
+'''
+          block = '''    {
+        const auto config = fault_config("live-lease-recovery", 1, 1, 30, 5, 2);
+        {
+            RunManager manager(coordinator_config,
+                               scratch_dir + "/live-lease/cp",
+                               scratch_dir + "/live-lease/sc");
+            register_fault_workers(manager, 1);
+            manager.create_run(config, 600.0);
+            auto& run = manager.get("live-lease-recovery");
+            run.start("trace", 600.0);
+            run.advance(600.0);
+            const auto first = run.acquire_task("worker-0", 600.0);
+            check(first.has_value() && first->attempt == 1,
+                  "live lease recovery starts with attempt one");
+        }
+        {
+            RunManager manager(coordinator_config,
+                               scratch_dir + "/live-lease/cp",
+                               scratch_dir + "/live-lease/sc");
+            register_fault_workers(manager, 1);
+            manager.create_run(config, 602.0);
+            auto& run = manager.get("live-lease-recovery");
+            run.restore_from_checkpoint();
+            run.advance(602.0);
+            check(!run.acquire_task("worker-0", 603.0).has_value(),
+                  "still-valid checkpointed lease is not duplicated after restart");
+            run.advance(606.0);
+            const auto second = run.acquire_task("worker-0", 606.0);
+            check(second.has_value() && second->attempt == 2,
+                  "checkpointed lease expiry requeues the next persisted retry immediately");
+        }
+    }
+
+'''
+          if data.count(anchor) != 1:
+              raise SystemExit("round_fault_tolerance_test.cpp: deadline recovery anchor mismatch")
+          test_path.write_text(data.replace(anchor, block + anchor, 1), encoding="utf-8")
+          PY
+
       - name: Install C++ validation dependencies
         run: |
           sudo apt-get update
