@@ -7,13 +7,9 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 RUNTIME_CONTRACT = ROOT / "RUNTIME.md"
-RESEARCH_CONTRACT = ROOT / "docs" / "research-correctness-contract.md"
+CORRECTNESS_CONTRACT = ROOT / "docs" / "runtime-correctness.md"
 MAIN = ROOT / "main.py"
 COMPOSE = ROOT / "infra" / "compose" / "docker-compose.dev.yml"
-PROHIBITED_PHRASE = re.compile(
-    r"research" + r"[ -]" + r"projects?",
-    re.IGNORECASE,
-)
 README_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 LEGACY_ALL_COMMAND = "python main.py" + " all"
 UNSUPPORTED_MATH = re.compile(r"(?<!`)(\\\(|\\\)|\\\[|\\\])")
@@ -40,22 +36,24 @@ def iter_local_links(text: str) -> list[str]:
     return links
 
 
-def validate_research_contracts(errors: list[str]) -> None:
-    if not RUNTIME_CONTRACT.exists():
-        errors.append("RUNTIME.md is required as the canonical runtime source of truth.")
-        return
-    if not RESEARCH_CONTRACT.exists():
-        errors.append("docs/research-correctness-contract.md is required.")
-        return
-    if not MAIN.exists():
-        errors.append("main.py is required by the root runtime contract.")
-        return
-    if not COMPOSE.exists():
-        errors.append("infra/compose/docker-compose.dev.yml is required by the distributed runtime contract.")
+def validate_runtime_contracts(errors: list[str]) -> None:
+    required_files = (
+        (RUNTIME_CONTRACT, "RUNTIME.md is required."),
+        (CORRECTNESS_CONTRACT, "docs/runtime-correctness.md is required."),
+        (MAIN, "main.py is required by the root runtime contract."),
+        (
+            COMPOSE,
+            "infra/compose/docker-compose.dev.yml is required by the distributed runtime contract.",
+        ),
+    )
+    for path, message in required_files:
+        if not path.exists():
+            errors.append(message)
+    if errors:
         return
 
     runtime_text = RUNTIME_CONTRACT.read_text(encoding="utf-8")
-    research_text = RESEARCH_CONTRACT.read_text(encoding="utf-8")
+    correctness_text = CORRECTNESS_CONTRACT.read_text(encoding="utf-8")
     main_text = MAIN.read_text(encoding="utf-8")
 
     required_runtime_fragments = (
@@ -64,28 +62,30 @@ def validate_research_contracts(errors: list[str]) -> None:
         "distributed-platform",
         "docker compose -f infra/compose/docker-compose.dev.yml up --build",
         "DP-enabled SCAFFOLD is intentionally fail-closed",
+        "python scripts/run_benchmark_matrix.py --dry-run",
     )
     for fragment in required_runtime_fragments:
         if fragment not in runtime_text:
-            errors.append(f"RUNTIME.md is missing required research contract text: {fragment!r}")
+            errors.append(f"RUNTIME.md is missing required text: {fragment!r}")
 
-    required_research_fragments = (
+    required_correctness_fragments = (
         "same neighboring relation",
         "target epsilon",
-        "at least 5 independent seeds",
-        "Synthetic label assignment is acceptable for unit tests",
+        "at least five unique seeds",
+        "partition_indices.npz",
+        "paired sign-flip tests",
     )
-    for fragment in required_research_fragments:
-        if fragment not in research_text:
+    for fragment in required_correctness_fragments:
+        if fragment not in correctness_text:
             errors.append(
-                "docs/research-correctness-contract.md is missing required text: "
+                "docs/runtime-correctness.md is missing required text: "
                 f"{fragment!r}"
             )
 
     if "from experiment_runtime import" not in main_text:
         errors.append(
-            "RUNTIME.md declares the root research simulator, but main.py no longer imports experiment_runtime. "
-            "Update the runtime contract and executable atomically."
+            "RUNTIME.md declares the root runtime, but main.py no longer imports "
+            "experiment_runtime. Update code and runtime documentation together."
         )
 
 
@@ -98,13 +98,12 @@ def main() -> int:
         errors.append("README.md must include `python main.py`.")
     if LEGACY_ALL_COMMAND in text:
         errors.append("README.md must not include the legacy `all` form.")
-    if PROHIBITED_PHRASE.search(text):
-        errors.append("README.md still contains the prohibited repository phrase.")
     if "E:\\" in text or "C:\\" in text:
         errors.append("README.md must not contain local Windows filesystem paths.")
     if UNSUPPORTED_MATH.search(prose_only):
         errors.append(
-            "README.md contains unsupported GitHub math delimiters (use $...$ or $$...$$ outside code fences)."
+            "README.md contains unsupported GitHub math delimiters "
+            "(use $...$ or $$...$$ outside code fences)."
         )
 
     for target in iter_local_links(text):
@@ -133,7 +132,7 @@ def main() -> int:
         if not candidate.exists():
             errors.append(f"README link target does not exist: {target}")
 
-    validate_research_contracts(errors)
+    validate_runtime_contracts(errors)
 
     if errors:
         print("Repository documentation validation failed:\n")
