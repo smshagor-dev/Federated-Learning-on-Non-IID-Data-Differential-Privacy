@@ -27,10 +27,6 @@ class RunManagerError : public std::runtime_error {
     explicit RunManagerError(const std::string& what);
 };
 
-// Identifies which submitted tensor names the coordinator may aggregate
-// (shared backbone) vs. which must never be aggregated (personalized head,
-// frozen). Empty means no manifest was declared for this run and preserves
-// the existing permissive FedAvg/FedProx/SCAFFOLD behavior.
 struct AggregationManifest {
     std::vector<std::string> shared_parameter_names;
     std::vector<std::string> personalized_parameter_names;
@@ -57,14 +53,7 @@ struct RunConfig {
     std::uint32_t target_clients_per_round{1};
     std::uint32_t total_clients{1};
     std::uint32_t max_rounds{1};
-    // Absolute wall-clock deadline for one communication round. A value of
-    // zero keeps the historical no-deadline behavior for old callers; the
-    // canonical distributed execution path supplies a positive value.
     std::uint32_t round_timeout_seconds{300};
-    // Minimum accepted client results required when the cohort settles or the
-    // absolute round deadline is reached. This is not an early-finalization
-    // target: before the deadline the coordinator waits for the full cohort
-    // unless every remaining client has already permanently failed.
     std::uint32_t minimum_valid_results{1};
     std::uint64_t client_selection_seed{0};
     std::uint32_t task_lease_seconds{60};
@@ -163,6 +152,17 @@ struct RoundSnapshot {
     double round_deadline_at_unix_s{0.0};
 };
 
+struct RoundFaultToleranceSnapshot {
+    std::uint64_t round_id{0};
+    std::size_t completed_clients{0};
+    std::size_t failed_clients{0};
+    std::size_t timed_out_clients{0};
+    std::uint32_t minimum_valid_results{0};
+    double round_started_at_unix_s{0.0};
+    double round_deadline_at_unix_s{0.0};
+    bool deadline_reached{false};
+};
+
 class RunInstance {
   public:
     RunInstance(RunConfig config,
@@ -209,14 +209,17 @@ class RunInstance {
     void pause(const std::string& reason, const std::string& trace_id, double now_unix_s);
     void resume(const std::string& trace_id, double now_unix_s);
     void cancel(const std::string& reason, const std::string& trace_id, double now_unix_s);
-
-    // Drives the round lifecycle one step. A round finalizes before its
-    // deadline only when the entire selected cohort is settled. At the
-    // absolute deadline every unresolved client is classified as timed out;
-    // the partial cohort is released only if minimum_valid_results is met,
-    // otherwise the run fails. The deadline is persisted in the coordinator
-    // checkpoint so retries/restarts never extend the round silently.
     void advance(double now_unix_s);
+
+    // Enforces the absolute communication-round deadline independently of
+    // worker polling. The live coordinator drives this from a watchdog. A
+    // deadline record is persisted separately from the main coordinator
+    // checkpoint so process restart cannot silently grant a fresh timeout.
+    // Returns true when this call changes the run state by finalizing or
+    // failing the round.
+    bool enforce_round_fault_tolerance(double now_unix_s);
+    [[nodiscard]] RoundFaultToleranceSnapshot round_fault_tolerance_snapshot(
+        double now_unix_s) const;
 
     [[nodiscard]] std::optional<DispatchedTask> acquire_task(const std::string& worker_id,
                                                              double now_unix_s);
@@ -294,7 +297,6 @@ class RunInstance {
     std::vector<AdaptiveClippingLedgerEntry> adaptive_clipping_ledger_;
     std::vector<SampleLevelLedgerEntry> sample_level_ledger_;
     std::map<std::string, ClientResultSubmission> round_results_;
-
     std::map<std::string, PersonalizationMetricRecord> personalization_metrics_by_client_;
 
     struct ActiveLease {
@@ -306,9 +308,6 @@ class RunInstance {
     std::map<std::string, ActiveLease> active_leases_;
 
     std::set<std::string> failed_clients_;
-    // Subset of failed_clients_ whose failure reason is the absolute round
-    // deadline rather than retry exhaustion/revocation. Kept separately so
-    // observability can distinguish worker/client timeout from other failure.
     std::set<std::string> timed_out_clients_;
     std::uint64_t current_round_id_{0};
     double round_started_at_unix_s_{0.0};
