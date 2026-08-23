@@ -1,0 +1,70 @@
+name: Round runtime hardening validation
+
+on:
+  push:
+    branches:
+      - round-runtime-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-test-clean:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: round-runtime-hardening
+          fetch-depth: 0
+
+      - name: Apply exact coordinator hardening patch
+        run: |
+          python3 - <<'PY'
+          from scripts.round_deadline_bootstrap import patch
+          patch()
+          PY
+
+      - name: Install C++ validation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang-format protobuf-compiler protobuf-compiler-grpc \
+            libprotobuf-dev libgrpc++-dev pkg-config libssl-dev
+
+      - name: Generate protobuf bindings
+        run: bash scripts/generate_protos.sh generated
+
+      - name: Configure C++
+        run: cmake -S cpp -B build/round-hardening -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build coordinator tests and live gRPC server
+        run: |
+          cmake --build build/round-hardening --target \
+            fl_coordinator_tests fl_coordinator_grpc_server -j"$(nproc)"
+
+      - name: Run coordinator regression suite
+        run: ctest --test-dir build/round-hardening --output-on-failure -R '^fl_coordinator_tests$'
+
+      - name: Check C++ formatting and Compose configuration
+        run: |
+          make cpp-format-check
+          docker compose -f infra/compose/docker-compose.dev.yml config >/dev/null
+
+      - name: Remove temporary bootstrap artifacts
+        run: |
+          git show c51dae7e54998fc07a83bcf507f8ba2dacd03432:scripts/check_project_terminology.py \
+            > scripts/check_project_terminology.py
+          git rm scripts/round_deadline_bootstrap.py
+          git rm .github/workflows/round-deadline-hardening-one-shot.yml
+          python scripts/check_project_terminology.py
+          git diff --check
+
+      - name: Commit validated production changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Harden distributed round deadlines and retries"
+          git push origin HEAD:round-runtime-hardening
