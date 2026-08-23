@@ -27,14 +27,29 @@ def test_verified_raw_reference_is_published_only_after_base_acquire_succeeds(
     )
 
     def _verified_acquire(
-        self: GrpcCoordinatorClient, spec: RunSpec, worker_id: str, now: float
+        self: GrpcCoordinatorClient,
+        spec: RunSpec,
+        worker_id: str,
+        now: float,
     ) -> ClientTrainingTask:
         del spec, worker_id, now
-        self._pending_partition_reference = ("task-1", "client-a", reference)  # type: ignore[attr-defined]
-        return ClientTrainingTask(has_task=True, task_id="task-1", client_id="client-a")
+        self._pending_partition_reference = (  # type: ignore[attr-defined]
+            "task-1",
+            "client-a",
+            reference,
+        )
+        return ClientTrainingTask(
+            has_task=True,
+            task_id="task-1",
+            client_id="client-a",
+        )
 
     monkeypatch.setattr(GrpcCoordinatorClient, "acquire_task", _verified_acquire)
-    task = client.acquire_task(RunSpec(run_id="run-1", algorithm="fedavg"), "worker-1", 0.0)
+    task = client.acquire_task(
+        RunSpec(run_id="run-1", algorithm="fedavg"),
+        "worker-1",
+        0.0,
+    )
     assert task.has_task
     manifest = manifest_for_client("synthetic:client-a", "client-a", 999)
     assert manifest.partition_strategy == "pathological"
@@ -49,7 +64,10 @@ def test_rejected_base_acquire_does_not_publish_pending_reference(
     client._pending_partition_reference = None
 
     def _rejected_acquire(
-        self: GrpcCoordinatorClient, spec: RunSpec, worker_id: str, now: float
+        self: GrpcCoordinatorClient,
+        spec: RunSpec,
+        worker_id: str,
+        now: float,
     ) -> ClientTrainingTask:
         del spec, worker_id, now
         self._pending_partition_reference = (  # type: ignore[attr-defined]
@@ -63,7 +81,11 @@ def test_rejected_base_acquire_does_not_publish_pending_reference(
 
     monkeypatch.setattr(GrpcCoordinatorClient, "acquire_task", _rejected_acquire)
     with pytest.raises(RuntimeError, match="signature rejected"):
-        client.acquire_task(RunSpec(run_id="run-1", algorithm="fedavg"), "worker-1", 0.0)
+        client.acquire_task(
+            RunSpec(run_id="run-1", algorithm="fedavg"),
+            "worker-1",
+            0.0,
+        )
 
     manifest = manifest_for_client("synthetic:client-a", "client-a", 5)
     assert manifest.partition_strategy == "iid"
