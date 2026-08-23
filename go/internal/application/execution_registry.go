@@ -51,6 +51,13 @@ func ExecutionEngineFor(services *Services) (*ExecutionService, bool) {
 	return engine, ok && engine != nil
 }
 
+func SetExecutionEngineForTests(services *Services, engine *ExecutionService) {
+	if services == nil || engine == nil {
+		return
+	}
+	executionEngines.Store(services, engine)
+}
+
 func ClearExecutionEngineForTests(services *Services) {
 	if services != nil {
 		executionEngines.Delete(services)
