@@ -32,9 +32,9 @@ func (s *ExecutionService) ReconcileBackend(ctx context.Context, backend executi
 // ReconcileRuntimeBackend is safe for a periodic background loop. It skips
 // records whose control-plane lifecycle operation is currently transitional so
 // a poll cannot race an in-flight Start/Pause/Resume/Cancel request and write an
-// older backend snapshot over that request. Backend events are polled only when
-// the runtime snapshot changed, avoiding a long-lived event poll on every idle
-// reconciliation tick.
+// older backend snapshot over that request. Secure-aggregation security events
+// are checked on every stable tick because a session deadline can expire while
+// the ordinary run snapshot remains WAITING_FOR_CLIENTS.
 func (s *ExecutionService) ReconcileRuntimeBackend(ctx context.Context, backend executiondomain.Backend) (ReconcileSummary, error) {
 	return s.reconcileBackend(ctx, backend, false)
 }
@@ -91,23 +91,59 @@ func (s *ExecutionService) reconcileBackend(ctx context.Context, backend executi
 
 		summary.Checked++
 		beforeRevision := record.Revision
+		executionUpdated := false
+
+		// Security reconciliation deliberately happens before GetRun. A
+		// coordinator restart destroys in-memory secure-session key/mask
+		// material by design; its durable security journal can therefore be
+		// the only surviving evidence that the old run can no longer finish.
+		withSecurity, _, securityErr := s.ReconcileSecureAggregationSecurityEvents(ctx, record.ID)
+		if securityErr != nil {
+			summary.Failures = append(summary.Failures, ReconcileFailure{
+				ExecutionID: record.ID,
+				Error:       securityErr.Error(),
+			})
+			continue
+		}
+		if withSecurity.Revision > beforeRevision {
+			executionUpdated = true
+		}
+		if withSecurity.Terminal() {
+			if executionUpdated {
+				summary.Updated++
+			}
+			continue
+		}
+		record = withSecurity
+
+		beforeBackendRevision := record.Revision
 		updated, reconcileErr := s.Reconcile(ctx, record.ID)
 		if reconcileErr != nil {
+			if executionUpdated {
+				summary.Updated++
+			}
 			summary.Failures = append(summary.Failures, ReconcileFailure{
 				ExecutionID: record.ID,
 				Error:       reconcileErr.Error(),
 			})
 			continue
 		}
-		executionUpdated := updated.Revision > beforeRevision
+		backendStateUpdated := updated.Revision > beforeBackendRevision
+		if backendStateUpdated {
+			executionUpdated = true
+		}
 
 		// Startup always performs one event catch-up for active executions.
-		// The periodic loop only polls when the backend snapshot changed;
-		// deadline completion/failure changes status/model/round and therefore
-		// triggers this path while completely idle executions stay cheap.
-		if includeTransitional || executionUpdated {
+		// The periodic loop only polls the ordinary coordinator event stream
+		// when the backend snapshot changed. Secure-session aborts use the
+		// separate security-journal pass above and therefore do not depend on
+		// an ordinary state/model/round transition to become visible.
+		if includeTransitional || backendStateUpdated {
 			withEvents, _, ingestErr := s.IngestBackendEvents(ctx, updated.ID)
 			if ingestErr != nil {
+				if executionUpdated {
+					summary.Updated++
+				}
 				summary.Failures = append(summary.Failures, ReconcileFailure{
 					ExecutionID: updated.ID,
 					Error:       ingestErr.Error(),
