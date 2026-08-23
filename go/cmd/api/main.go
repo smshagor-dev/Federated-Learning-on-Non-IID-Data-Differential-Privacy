@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,25 +17,6 @@ import (
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/transport/httpapi"
 )
 
-// newCoordinatorClient builds the real gRPC coordinator client when
-// FL_COORDINATOR_ADDRESS is set (e.g. "coordinator:9090" in Docker
-// Compose). Left unset, Services.Coordinator stays unconfigured and the
-// coordinator-backed HTTP routes return 503 rather than failing startup
-// — this lets the Go API run standalone (as it did before the Coordinator Runtime phase)
-// against just the local project/experiment/run bookkeeping.
-//
-// Transport mode (Secure Transport and Worker Identity Hardening
-// slice, docs/mtls.md): FL_TRANSPORT_MODE selects "insecure_development"
-// (default, matching this project's pre-existing behavior),
-// "tls", or "mtls". Selecting tls/mtls requires
-// FL_COORDINATOR_CA (and, for mtls, FL_COORDINATOR_CLIENT_CERT +
-// FL_COORDINATOR_CLIENT_KEY) to be set — never a silent fallback to
-// insecure credentials on a missing/misconfigured path. Insecure mode
-// additionally requires FL_ALLOW_INSECURE_DEVELOPMENT_TRANSPORT=true to
-// be selected in an environment that has explicitly opted into it, so a
-// deployment cannot end up insecure purely by omission — this mirrors
-// the closure-gate requirement "insecure mode is an explicit opt-in"
-// stated for every language in this platform.
 func newCoordinatorClient() coordinator.Client {
 	address := os.Getenv("FL_COORDINATOR_ADDRESS")
 	if address == "" {
@@ -96,12 +78,6 @@ func coordinatorConfigFromEnv(address string) (coordinator.Config, error) {
 	}
 }
 
-// securityJournalPathFromEnv is FL_GO_SECURITY_EVENT_JOURNAL_PATH/
-// FL_GO_SECURITY_AUDIT_JOURNAL_PATH's default -- same
-// env-var-with-sensible-default-under-the-control-plane-data-dir
-// convention as bootstrap.PathsForDataDir, so these two new journals
-// persist across restarts alongside every other piece of control-plane
-// state by default (see docs/security-events.md).
 func securityJournalPathFromEnv(envVar, dataDir, defaultName string) string {
 	if value := os.Getenv(envVar); value != "" {
 		return value
@@ -122,7 +98,29 @@ func newResearchCommandClient() research.CommandClient {
 	return research.NewHTTPCommandClient(url, secret, serviceIdentity, 10*time.Second)
 }
 
-func configureLocalExecution(services *application.Services) {
+func reconcileExecutionBackend(services *application.Services, backend execution.Backend, label string) {
+	engine, ok := application.ExecutionEngineFor(services)
+	if !ok {
+		log.Fatal("persistent execution engine was not configured")
+	}
+	summary, err := engine.ReconcileBackend(context.Background(), backend)
+	if err != nil {
+		log.Fatalf("reconcile %s executions during startup: %v", label, err)
+	}
+	for _, failure := range summary.Failures {
+		log.Printf("%s execution startup reconciliation failed: execution_id=%s error=%s", label, failure.ExecutionID, failure.Error)
+	}
+	log.Printf(
+		"%s execution startup reconciliation: checked=%d updated=%d skipped=%d failures=%d",
+		label,
+		summary.Checked,
+		summary.Updated,
+		summary.Skipped,
+		len(summary.Failures),
+	)
+}
+
+func configureLocalExecution(services *application.Services, dataDir string) {
 	if os.Getenv("FL_LOCAL_EXECUTION_ENABLED") != "true" {
 		return
 	}
@@ -131,9 +129,11 @@ func configureLocalExecution(services *application.Services) {
 		log.Fatal("FL_LOCAL_EXECUTION_ENABLED=true requires FL_LOCAL_EXECUTION_REPOSITORY_ROOT")
 	}
 	pythonExecutable := os.Getenv("FL_LOCAL_EXECUTION_PYTHON")
+	stateRoot := filepath.Join(dataDir, "local-execution")
 	localDriver, err := execution.NewLocalDriver(execution.LocalDriverConfig{
 		RepositoryRoot:   repositoryRoot,
 		PythonExecutable: pythonExecutable,
+		StateRoot:        stateRoot,
 	})
 	if err != nil {
 		log.Fatalf("configure local execution backend: %v", err)
@@ -145,7 +145,8 @@ func configureLocalExecution(services *application.Services) {
 	if err := engine.RegisterDriver(execution.BackendLocal, localDriver); err != nil {
 		log.Fatalf("register local execution backend: %v", err)
 	}
-	log.Printf("local execution backend enabled: repository_root=%s python=%s", repositoryRoot, pythonExecutable)
+	reconcileExecutionBackend(services, execution.BackendLocal, "local")
+	log.Printf("local execution backend enabled: repository_root=%s state_root=%s python=%s", repositoryRoot, stateRoot, pythonExecutable)
 }
 
 func main() {
@@ -158,7 +159,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap persistent services: %v", err)
 	}
-	configureLocalExecution(services)
+	if coordinatorClient != nil {
+		reconcileExecutionBackend(services, execution.BackendDistributed, "distributed")
+	}
+	configureLocalExecution(services, dataDir)
 	services.Research.SetWriter(newResearchCommandClient())
 	server := httpapi.NewServerWithSecurityJournalPaths(services,
 		securityJournalPathFromEnv("FL_GO_SECURITY_EVENT_JOURNAL_PATH", dataDir, "security-events.jsonl"),

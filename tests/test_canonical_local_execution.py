@@ -86,6 +86,28 @@ def canonical_spec() -> dict:
     }
 
 
+def private_spec(*, accountant: str = "rdp", epsilon_budget: float = 0.0) -> dict:
+    spec = canonical_spec()
+    spec["federation"]["sampling_strategy"] = "poisson"
+    spec["algorithm"] = {"name": "fedprox", "mu": 0.02}
+    spec["privacy"] = {
+        "mode": "user_level_dp",
+        "sample_level": {},
+        "user_level": {
+            "noise_multiplier": 2.0,
+            "target_delta": 1e-5,
+            "accountant": accountant,
+            "initial_clipping_bound": 1.5,
+            "weighting_strategy": "uniform",
+            "secure_random": False,
+            "epsilon_budget": epsilon_budget,
+        },
+        "adaptive_clipping": {"enabled": False},
+        "warning_threshold_fraction": 0.8,
+    }
+    return spec
+
+
 class CanonicalLocalExecutionTests(unittest.TestCase):
     def test_fixed_sampling_maps_exact_expected_root_cohort(self) -> None:
         config = adapter.build_root_config(canonical_spec())
@@ -101,27 +123,9 @@ class CanonicalLocalExecutionTests(unittest.TestCase):
         self.assertEqual(config["system"]["seed"], 17)
 
     def test_user_level_dp_maps_to_existing_root_privacy_path(self) -> None:
-        spec = canonical_spec()
-        spec["federation"]["sampling_strategy"] = "poisson"
-        spec["algorithm"] = {"name": "fedprox", "mu": 0.02}
-        spec["privacy"] = {
-            "mode": "user_level_dp",
-            "sample_level": {},
-            "user_level": {
-                "noise_multiplier": 2.0,
-                "target_delta": 1e-5,
-                "accountant": "rdp",
-                "initial_clipping_bound": 1.5,
-                "weighting_strategy": "uniform",
-                "secure_random": False,
-                "epsilon_budget": 4.0,
-            },
-            "adaptive_clipping": {"enabled": False},
-            "warning_threshold_fraction": 0.8,
-        }
-        config = adapter.build_root_config(spec)
+        config = adapter.build_root_config(private_spec())
         self.assertTrue(config["dp"]["enabled"])
-        self.assertEqual(config["dp"]["target_epsilon"], 4.0)
+        self.assertIsNone(config["dp"]["target_epsilon"])
         self.assertEqual(config["dp"]["target_delta"], 1e-5)
         self.assertEqual(config["dp"]["update_clip_norm"], 1.5)
         self.assertEqual(config["dp"]["noise_multiplier"], 2.0)
@@ -129,20 +133,12 @@ class CanonicalLocalExecutionTests(unittest.TestCase):
         self.assertEqual(config["algorithm"]["mu"], 0.02)
 
     def test_non_rdp_accountant_is_rejected_instead_of_silently_changed(self) -> None:
-        spec = canonical_spec()
-        spec["federation"]["sampling_strategy"] = "poisson"
-        spec["privacy"]["mode"] = "user_level_dp"
-        spec["privacy"]["user_level"] = {
-            "noise_multiplier": 2.0,
-            "target_delta": 1e-5,
-            "accountant": "prv",
-            "initial_clipping_bound": 1.5,
-            "weighting_strategy": "uniform",
-            "secure_random": False,
-            "epsilon_budget": 4.0,
-        }
         with self.assertRaisesRegex(ValueError, "RDP accountant"):
-            adapter.build_root_config(spec)
+            adapter.build_root_config(private_spec(accountant="prv"))
+
+    def test_epsilon_budget_is_not_reinterpreted_as_target_calibration(self) -> None:
+        with self.assertRaisesRegex(ValueError, "stop-policy enforcement"):
+            adapter.build_root_config(private_spec(epsilon_budget=4.0))
 
     def test_sample_level_and_hybrid_privacy_are_rejected(self) -> None:
         for mode in ("sample_level_dp", "hybrid_dp"):
