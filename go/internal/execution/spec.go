@@ -29,6 +29,13 @@ const (
 	SchedulingStalenessAwareAsync     SchedulingMode = "staleness_aware_asynchronous"
 )
 
+type SamplingStrategy string
+
+const (
+	SamplingPoisson                 SamplingStrategy = "poisson"
+	SamplingFixedWithoutReplacement SamplingStrategy = "fixed_without_replacement"
+)
+
 type PrivacyMode string
 
 const (
@@ -88,22 +95,23 @@ type OptimizerSpec struct {
 }
 
 type FederationSpec struct {
-	TotalClients          uint32         `json:"total_clients"`
-	ClientIDs             []string       `json:"client_ids"`
-	TargetClientsPerRound uint32         `json:"target_clients_per_round"`
-	MinimumValidResults   uint32         `json:"minimum_valid_results"`
-	Rounds                uint32         `json:"rounds"`
-	LocalEpochs           uint32         `json:"local_epochs"`
-	BatchSize             uint32         `json:"batch_size"`
-	Weighting             string         `json:"weighting"`
-	ClientSelectionSeed   uint64         `json:"client_selection_seed"`
-	SchedulingMode        SchedulingMode `json:"scheduling_mode"`
-	RoundTimeoutSeconds   uint32         `json:"round_timeout_seconds"`
-	TaskLeaseSeconds      uint32         `json:"task_lease_seconds"`
-	MaxTaskRetries        uint32         `json:"max_task_retries"`
-	BufferSize            uint32         `json:"buffer_size,omitempty"`
-	MaximumStaleness      uint32         `json:"maximum_staleness,omitempty"`
-	CarryoverLateResults  bool           `json:"carryover_late_results,omitempty"`
+	TotalClients          uint32           `json:"total_clients"`
+	ClientIDs             []string         `json:"client_ids"`
+	TargetClientsPerRound uint32           `json:"target_clients_per_round"`
+	MinimumValidResults   uint32           `json:"minimum_valid_results"`
+	Rounds                uint32           `json:"rounds"`
+	LocalEpochs           uint32           `json:"local_epochs"`
+	BatchSize             uint32           `json:"batch_size"`
+	Weighting             string           `json:"weighting"`
+	SamplingStrategy      SamplingStrategy `json:"sampling_strategy"`
+	ClientSelectionSeed   uint64           `json:"client_selection_seed"`
+	SchedulingMode        SchedulingMode   `json:"scheduling_mode"`
+	RoundTimeoutSeconds   uint32           `json:"round_timeout_seconds"`
+	TaskLeaseSeconds      uint32           `json:"task_lease_seconds"`
+	MaxTaskRetries        uint32           `json:"max_task_retries"`
+	BufferSize            uint32           `json:"buffer_size,omitempty"`
+	MaximumStaleness      uint32           `json:"maximum_staleness,omitempty"`
+	CarryoverLateResults  bool             `json:"carryover_late_results,omitempty"`
 }
 
 type SampleLevelPrivacySpec struct {
@@ -138,18 +146,18 @@ type AdaptiveClippingSpec struct {
 }
 
 type PrivacySpec struct {
-	Mode                     PrivacyMode               `json:"mode"`
-	SampleLevel              SampleLevelPrivacySpec    `json:"sample_level,omitempty"`
-	UserLevel                UserLevelPrivacySpec      `json:"user_level,omitempty"`
-	AdaptiveClipping         AdaptiveClippingSpec      `json:"adaptive_clipping,omitempty"`
-	WarningThresholdFraction float64                   `json:"warning_threshold_fraction,omitempty"`
+	Mode                     PrivacyMode            `json:"mode"`
+	SampleLevel              SampleLevelPrivacySpec `json:"sample_level,omitempty"`
+	UserLevel                UserLevelPrivacySpec   `json:"user_level,omitempty"`
+	AdaptiveClipping         AdaptiveClippingSpec   `json:"adaptive_clipping,omitempty"`
+	WarningThresholdFraction float64                `json:"warning_threshold_fraction,omitempty"`
 }
 
 type EvaluationSpec struct {
-	EvaluateGlobal        bool `json:"evaluate_global"`
-	EvaluatePerClient     bool `json:"evaluate_per_client"`
-	EvaluateFairness      bool `json:"evaluate_fairness"`
-	EvaluationBatchSize   uint32 `json:"evaluation_batch_size"`
+	EvaluateGlobal      bool   `json:"evaluate_global"`
+	EvaluatePerClient   bool   `json:"evaluate_per_client"`
+	EvaluateFairness    bool   `json:"evaluate_fairness"`
+	EvaluationBatchSize uint32 `json:"evaluation_batch_size"`
 }
 
 type ArtifactSpec struct {
@@ -182,9 +190,7 @@ type Spec struct {
 	Security      SecuritySpec   `json:"security"`
 }
 
-var (
-	ErrInvalidSpec = errors.New("invalid execution specification")
-)
+var ErrInvalidSpec = errors.New("invalid execution specification")
 
 func (s Spec) Validate() error {
 	var problems []string
@@ -210,9 +216,6 @@ func (s Spec) Validate() error {
 		problems = append(problems, "artifacts.root is required")
 	}
 	if s.Backend == BackendDistributed && s.Security.SecureAggregation {
-		// The current C++ coordinator can enable secure aggregation only as a
-		// process-wide setting. A canonical execution spec must never pretend a
-		// per-run flag was enforced when it was not wired end to end.
 		problems = append(problems, "security.secure_aggregation is not yet per-run configurable on the distributed backend")
 	}
 	if len(problems) != 0 {
@@ -352,6 +355,14 @@ func validateFederation(backend Backend, federation FederationSpec) []string {
 	}
 	if federation.Weighting != "uniform" && federation.Weighting != "sample_count" {
 		problems = append(problems, "federation.weighting must be uniform or sample_count")
+	}
+	switch federation.SamplingStrategy {
+	case SamplingPoisson, SamplingFixedWithoutReplacement:
+	default:
+		problems = append(problems, "federation.sampling_strategy must be poisson or fixed_without_replacement")
+	}
+	if backend == BackendDistributed && federation.SamplingStrategy != SamplingFixedWithoutReplacement {
+		problems = append(problems, "distributed backend currently requires fixed_without_replacement client sampling")
 	}
 	if federation.RoundTimeoutSeconds == 0 {
 		problems = append(problems, "federation.round_timeout_seconds must be positive")
