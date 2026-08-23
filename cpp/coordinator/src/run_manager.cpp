@@ -537,12 +537,12 @@ bool RunInstance::submit_client_result(const std::string& worker_id,
         worker_registry_->record_failure(worker_id);
         return false;
     }
-    const auto accepted = submit_client_result_legacy(
+    // Submission only persists the accepted client result. Round progression is
+    // driven by the coordinator tick/watchdog (or the CLI bridge's explicit
+    // advance), so one result cannot both finalize a round and immediately
+    // dispatch the next one in the same request path.
+    return submit_client_result_legacy(
         worker_id, task_id, lease_id, std::move(result), now_unix_s, reason);
-    if (accepted) {
-        advance(now_unix_s);
-    }
-    return accepted;
 }
 
 std::string RunManager::create_run(RunConfig config, double now_unix_s) {
