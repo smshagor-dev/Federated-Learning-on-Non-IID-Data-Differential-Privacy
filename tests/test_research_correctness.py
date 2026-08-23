@@ -13,6 +13,7 @@ from federated.privacy_research import (
     calibrate_noise_multiplier,
     compose_same_adjacency_rdp,
     epsilon_for_client_level_gaussian,
+    resolve_target_epsilon_config,
 )
 from federated.server import Server
 
@@ -76,6 +77,32 @@ class PrivacyCalibrationTests(unittest.TestCase):
         tolerance = float(dp["epsilon_tolerance"])
         self.assertLessEqual(epsilon, target + tolerance)
         self.assertLess(target - epsilon, 1e-3)
+
+    def test_runtime_recalibrates_after_round_override(self) -> None:
+        config = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
+        original_sigma = float(config["dp"]["noise_multiplier"])
+        config["federated"]["rounds"] = 100
+        resolved, calibration = resolve_target_epsilon_config(config)
+        self.assertIsNotNone(calibration)
+        assert calibration is not None
+        self.assertGreater(float(resolved["dp"]["noise_multiplier"]), original_sigma)
+        self.assertLessEqual(
+            calibration.achieved_epsilon,
+            float(config["dp"]["target_epsilon"]) + 1e-10,
+        )
+        self.assertEqual(resolved["dp"]["privacy_parameter_source"], "target_epsilon_calibration")
+
+    def test_manual_noise_override_disables_target_in_effective_config(self) -> None:
+        config = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
+        config["dp"]["noise_multiplier"] = 3.25
+        resolved, calibration = resolve_target_epsilon_config(
+            config,
+            manual_noise_override=True,
+        )
+        self.assertIsNone(calibration)
+        self.assertEqual(resolved["dp"]["noise_multiplier"], 3.25)
+        self.assertIsNone(resolved["dp"]["target_epsilon"])
+        self.assertEqual(resolved["dp"]["privacy_parameter_source"], "manual_noise_multiplier")
 
 
 class PrivacyCompositionTests(unittest.TestCase):
