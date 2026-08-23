@@ -80,7 +80,9 @@ class PlatformLauncherDispatchTests(unittest.TestCase):
         start.assert_called_once()
 
     def test_root_main_bootstraps_root_cli_runtime(self) -> None:
-        with patch("main.run_cli") as delegated, patch("main.validate_config", side_effect=lambda cfg: (cfg, [])):
+        with patch("main._run_with_client_evaluation") as delegated, patch(
+            "main.validate_config", side_effect=lambda cfg: (cfg, [])
+        ):
             exit_code = root_main.main()
 
         self.assertEqual(exit_code, 0)
