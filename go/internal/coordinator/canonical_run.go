@@ -16,12 +16,15 @@ var ErrCanonicalRunUnsupported = errors.New("coordinator client does not support
 // model identity/update format, and algorithm-specific mu.
 type CanonicalRunRequest struct {
 	CreateRunRequest
-	DatasetName         string
-	DatasetPartitioning string
-	DatasetAlpha        float64
-	ModelName           string
-	ModelUpdateFormat   string
-	AlgorithmMu         float64
+	DatasetName              string
+	DatasetPartitioning      string
+	DatasetAlpha             float64
+	DatasetClassesPerClient  uint32
+	DatasetQuantitySkewSigma float64
+	DatasetMinClientSize     uint32
+	ModelName                string
+	ModelUpdateFormat        string
+	AlgorithmMu              float64
 }
 
 // CanonicalRunCreator is an additive capability. Existing coordinator.Client
@@ -46,9 +49,12 @@ func (c *GrpcClient) CreateCanonicalRun(ctx context.Context, request CanonicalRu
 		Config: &experimentv1.RunConfiguration{
 			RunId: request.RunID,
 			Dataset: &experimentv1.DatasetConfig{
-				Name:         request.DatasetName,
-				Partitioning: request.DatasetPartitioning,
-				Alpha:        request.DatasetAlpha,
+				Name:              request.DatasetName,
+				Partitioning:      request.DatasetPartitioning,
+				Alpha:             request.DatasetAlpha,
+				ClassesPerClient:  request.DatasetClassesPerClient,
+				QuantitySkewSigma: request.DatasetQuantitySkewSigma,
+				MinClientSize:     request.DatasetMinClientSize,
 			},
 			Model: &experimentv1.ModelConfig{
 				Name:         request.ModelName,
