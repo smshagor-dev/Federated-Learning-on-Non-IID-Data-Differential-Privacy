@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -40,6 +41,38 @@ struct RoundRuntimeState {
     std::set<std::string> deferred_lease_clients;
     std::set<std::string> timed_out_clients;
 };
+
+std::string percent_encode_component(const std::string& value) {
+    static constexpr char kHex[] = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(value.size());
+    for (const unsigned char byte : value) {
+        const bool unreserved = (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') ||
+                                (byte >= '0' && byte <= '9') || byte == '-' || byte == '.' ||
+                                byte == '_' || byte == '~';
+        if (unreserved) {
+            out.push_back(static_cast<char>(byte));
+            continue;
+        }
+        out.push_back('%');
+        out.push_back(kHex[(byte >> 4) & 0x0F]);
+        out.push_back(kHex[byte & 0x0F]);
+    }
+    return out;
+}
+
+std::string canonical_dataset_reference(const RunConfig& config) {
+    std::ostringstream out;
+    out << "fl-partition-v1://synthetic?dataset=" << percent_encode_component(config.dataset_name)
+        << "&strategy=" << percent_encode_component(config.dataset_partitioning)
+        << "&alpha=" << std::setprecision(17) << config.dataset_alpha
+        << "&classes_per_client=" << config.dataset_classes_per_client
+        << "&quantity_skew_sigma=" << std::setprecision(17)
+        << config.dataset_quantity_skew_sigma
+        << "&min_client_size=" << config.dataset_min_client_size
+        << "&seed=" << config.client_selection_seed;
+    return out.str();
+}
 
 std::string runtime_state_path(const std::string& directory, const std::string& run_id) {
     return (std::filesystem::path(directory) / (run_id + ".round-runtime")).string();
@@ -473,6 +506,13 @@ std::optional<DispatchedTask> RunInstance::acquire_task(const std::string& worke
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
+    // The legacy descriptor used a client-specific opaque synthetic reference.
+    // Replace it here with a versioned canonical URI carrying the complete
+    // partition contract. dataset_reference is already included in the signed
+    // dataset_partition_hash, so these semantics remain integrity-bound without
+    // changing the signing schema or duplicating unsigned task fields.
+    task->descriptor.dataset_reference = canonical_dataset_reference(config_);
+
     const auto path = runtime_state_path(checkpoint_directory_, config_.run_id);
     auto state = load_runtime_state(path);
     if (state.has_value() && state->round_id == current_round_id_ &&
