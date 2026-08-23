@@ -14,13 +14,13 @@ import yaml
 from experiment_runtime import (
     apply_overrides,
     load_config,
-    parse_args,
     run_cli,
     should_launch_gui,
     validate_config,
 )
 from federated.privacy_budget import resolve_target_epsilon_config
 from utils.client_evaluation import evaluate_completed_run
+from utils.runtime_args import parse_args
 
 _CHECKPOINT_DIR_ENV = "FL_ROOT_CHECKPOINT_DIR"
 
