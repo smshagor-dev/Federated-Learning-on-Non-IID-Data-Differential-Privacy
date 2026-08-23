@@ -1,116 +1,156 @@
 # Privacy Mathematics: the Critical Privacy Rule
 
-**Status: implemented & tested.** This document is the foundational
-reference every other Privacy Engineering doc and dozens of code
-comments point back to. Source of the rule's enforcement: there is no
-single function that could violate it, because no code path in this
-repository ever adds, averages, or otherwise combines two different
-mechanisms' epsilon values — that absence is itself the guarantee, and
-it is exercised by dedicated tests in all three languages (see each
-mechanism's own test suite, cross-referenced below).
+**Status: research-correctness revision.** This document defines how privacy
+values may be interpreted and composed. The key distinction is between
+**mechanism separation for auditability** and **privacy composition for a
+joint release**.
 
 ## The rule
 
-**Never display, persist, calculate, or report one combined epsilon for
-mechanisms protecting different neighboring relations.** This system
-implements three independent differential-privacy mechanisms, each of
-which answers a different question about what "changing one thing" means:
+**Never collapse mechanisms protecting different neighboring relations into
+one epsilon. When multiple released mechanisms protect the same neighboring
+relation, their privacy loss must be composed before claiming one overall
+guarantee for the joint release.**
 
-| Mechanism | Neighboring relation | Where it's computed | Domain type |
+The repository contains three privacy mechanism families:
+
+| Mechanism | Protected change / adjacency | Where it is computed | Domain type |
 |---|---|---|---|
-| Sample-level DP | One training example, within one client's local dataset | Python worker, via Opacus (`fl_platform.privacy.accounting.SampleLevelAccountant`) | `SampleLevelLedgerEntry` |
-| User-level DP | One client's complete round contribution (the whole local update, treated as one unit) | C++ coordinator, centrally (`fl::core::UserLevelAccountant`) | `UserLevelLedgerEntry` |
-| Adaptive clipping | The clip-bound statistic itself (a count query over the cohort) | C++ coordinator, centrally (`fl::core::UserLevelAccountant`, reused as a plain Gaussian mechanism accountant) | `AdaptiveClippingLedgerEntry` |
+| Sample-level DP | One training example within one client's local dataset | Python worker, via Opacus (`fl_platform.privacy.accounting.SampleLevelAccountant`) | `SampleLevelLedgerEntry` |
+| User/client-level DP | One client's complete round contribution | C++ coordinator, centrally (`fl::core::UserLevelAccountant`) | `UserLevelLedgerEntry` |
+| Adaptive clipping statistic | One client's contribution to the clipping statistic when interpreted at client adjacency | Coordinator-side adaptive clipping accountant | `AdaptiveClippingLedgerEntry` |
 
-Because the neighboring relation differs, **epsilon values from
-different mechanisms are not comparable, not addable, and not
-substitutable for one another** — even when (as with adaptive clipping)
-two mechanisms happen to reuse the identical RDP-accounting *formula*.
-Reusing a formula is not reusing an epsilon; see
-`fl_core/privacy.hpp`'s `AdaptiveClipController` doc comment for the
-explicit statement of this distinction at the one place in the codebase
-it could be most easily conflated.
+Sample-level and client-level epsilons answer different privacy questions and
+must remain separately reported. They are not addable substitutes for one
+another.
 
-## How this is enforced in practice, not just stated
+Adaptive clipping requires a more careful statement than the older
+"different epsilon, never compose" rule. Its noised count is a second release
+whose sensitivity is driven by client participation. If the publication claim
+uses the same add/remove-client neighboring relation for that statistic and
+the model release, then the two client-level mechanisms are part of one joint
+release and must be composed (preferably in RDP before conversion to
+`(epsilon, delta)`). Keeping two ledger rows is still useful, but separate
+ledgers do not remove the composition requirement.
 
-* **Separate accountant types, separate state.** `SampleLevelAccountant`,
-  `UserLevelAccountant`, and the adaptive-clipping accountant (which
-  wraps `UserLevelAccountant` with `sample_rate=1.0` rather than sharing
-  an instance) are three distinct objects with no shared mutable state,
-  in both Python (`fl_platform/privacy/accounting.py`) and C++
-  (`fl_core/privacy.hpp`/`.cpp`). `AccountantSeparationTests`
-  (`python/tests/test_privacy_accounting.py`) asserts this at the type
-  level.
-* **Separate ledger tables, never joined.** `PrivacyLedger` (Go:
-  `coordinator.PrivacyLedger`, C++: `RunInstance::sample_level_ledger()`/
-  `user_level_ledger()`/`adaptive_clipping_ledger()`) exposes three
-  independent lists. No code path zips them into per-round rows — a
-  round with hybrid DP active has one user-level entry but as many
-  sample-level entries as clients that round, which don't line up 1:1
-  by construction.
-* **Separate budget policies, applied independently.** See
-  [privacy-budget-policies.md](privacy-budget-policies.md) — a budget
-  configured for one mechanism never affects another's enforcement.
-* **The one deliberate summary that isn't a violation:**
-  `PrivacyMetricsSnapshot.sample_epsilon` is the *worst-case (max)*
-  epsilon across clients that have submitted a sample-level entry so
-  far — a reduction *within* one mechanism (across its own multiple
-  entries), not a combination *across* mechanisms. Documented explicitly
-  at the struct definition (`run_manager.hpp`) so it's never mistaken
-  for the forbidden kind of combination.
+`federated/privacy_research.py::compose_same_adjacency_rdp` implements this
+research-facing rule explicitly: all mechanisms must declare the same
+adjacency, otherwise composition is rejected.
 
-## RDP accounting (Mironov 2017/2019, subsampled-Gaussian mechanism)
+## What remains separate in implementation
 
-Both `UserLevelAccountant` (C++ and its legacy-derived Python
-counterpart) and Opacus's own accountant implement the same published
-formula for one step's Rényi DP at order α:
+* **Separate accountant instances and state.** Sample-level, user-level and
+  adaptive-clipping mechanism state must never share mutable accountant
+  instances. This prevents accidental cross-mechanism state corruption and
+  preserves traceability.
+* **Separate ledger tables.** `PrivacyLedger` and the C++ run state expose
+  separate sample-level, user-level and adaptive-clipping records. This is an
+  auditability property, not a proof that the releases are composition-free.
+* **Separate budget policies where the neighboring relation differs.** A
+  sample-level budget cannot be substituted for a user/client-level budget.
+* **Same-adjacency publication composition.** If two mechanisms are jointly
+  released under the same client-level adjacency, an overall client-level
+  claim must include both privacy costs.
 
-```
-q = sample_rate, σ = noise_multiplier
-RDP(α) = (1/(α-1)) · log( Σ_{k=0}^{α} C(α,k) · (1-q)^(α-k) · q^k · exp(k(k-1)/(2σ²)) )
-```
+The existing `PrivacyMetricsSnapshot.sample_epsilon` remains valid as a
+worst-case reduction *within* the sample-level mechanism. It is not a combined
+sample+user privacy guarantee.
 
-with the degenerate `q=1` case reducing to the textbook Gaussian
-mechanism, `RDP(α) = α/(2σ²)` — used directly by adaptive clipping's
-accountant (no subsampling amplification applies there: every cohort
-member already selected for the round contributes exactly one bit to
-the over-threshold count).
+## RDP accounting (Mironov 2017/2019, subsampled Gaussian mechanism)
 
-Composition over `T` steps is a plain sum of per-step RDP; conversion to
-(ε,δ)-DP is:
+The root `MomentsAccountant`, the coordinator user-level accountant and
+Opacus's RDP implementation use the same integer-order subsampled-Gaussian
+formula for the shared orders:
 
-```
-ε = min_α [ T · RDP(α) + log(1/δ)/(α-1) ]
+```text
+q = sample_rate, sigma = noise_multiplier
+RDP(alpha) = (1/(alpha-1)) * log(
+  sum_{k=0}^{alpha}
+    C(alpha,k) * (1-q)^(alpha-k) * q^k * exp(k(k-1)/(2*sigma^2))
+)
 ```
 
-minimized numerically over a fixed set of candidate orders (C++: 2–64
-plus {80,96,128,256,512}, ~69 orders; Opacus: ~151 fractional orders —
-see known-limitations.md's Privacy Engineering Phase section for why
-this makes the C++/legacy-Python accountant a valid but measurably more
-conservative upper bound than Opacus's own).
+For `q=1`, this reduces to the ordinary Gaussian-mechanism RDP:
 
-**Validation, not assumption:** before trusting the legacy
-`federated.dp_accountant.MomentsAccountant` (reused rather than
-reimplemented — see its own module docstring), its per-order RDP values
-were checked against Opacus's `compute_rdp` directly and found to match
-to float precision at every shared integer order
-(`UserLevelAccountantGoldenParityTests` in
-`python/tests/test_privacy_accounting.py`). The C++ implementation is
-golden-parity tested against the *same* reference value
-(`cpp/core/tests/privacy_test.cpp`'s cross-language parity case: q=0.1,
-σ=1.2, 100 steps, δ=1e-5 → ε≈6.414998048146023, matching to 1e-6).
-`python/tests/test_privacy_statistical_validation.py` extends this with
-parametrized monotonicity checks (more noise ⇒ lower ε; more
-subsampling amplification ⇒ lower ε; more steps ⇒ never-decreasing ε)
-across many parameter combinations, not just one hand-picked point.
+```text
+RDP(alpha) = alpha / (2*sigma^2)
+```
+
+Composition over released mechanisms/steps that share the same adjacency is
+additive in RDP:
+
+```text
+RDP_total(alpha) = sum_j RDP_j(alpha)
+```
+
+Conversion to `(epsilon, delta)` is then:
+
+```text
+epsilon = min_alpha [ RDP_total(alpha) + log(1/delta)/(alpha-1) ]
+```
+
+This is preferable to adding independently converted epsilons because the RDP
+composition retains the order-wise information until the final conversion.
+
+## Adaptive clipping sampling caveat
+
+The current Python/C++ adaptive-clipping accountant has historically treated
+the privatized cohort count as an ordinary Gaussian mechanism with
+`sample_rate=1.0` **conditional on the selected cohort**. That mechanism-level
+ledger is useful for tracking the released statistic, but it is not by itself
+a proof of the tight population-level add/remove-client guarantee when client
+selection is Poisson-subsampled before the count is formed.
+
+Therefore:
+
+1. do not publish a single end-to-end client-level epsilon for
+   user-level model release + adaptive clipping merely by reading the two
+   existing ledger values;
+2. first state the population adjacency and client-sampling model explicitly;
+3. use a composition/accounting path whose `sample_rate` matches that stated
+   model for each release;
+4. compose the same-adjacency RDP curves before converting to epsilon.
+
+The research utility in `federated/privacy_research.py` is designed for this
+explicit workflow. The distributed runtime's adaptive-clipping accountant
+must be upgraded to the same population-level sampling semantics before the
+platform claims a composed end-to-end epsilon for that mode.
+
+## DP + SCAFFOLD boundary
+
+The active root SCAFFOLD implementation maintains control-variate state in
+addition to the noised global-model release. The existing root client-level
+accountant only models the clipped/noised model-update mechanism; it does not
+provide a proof for additional control-variate state or releases.
+
+For that reason the root runtime now fails closed for DP-enabled SCAFFOLD.
+SCAFFOLD remains available without DP as an optimization baseline. A future
+DP-SCAFFOLD mode must specify the complete release/state semantics and prove
+that its accountant covers them before the fail-closed guard is removed.
+
+## Validation
+
+Before relying on the legacy-derived `federated.dp_accountant.MomentsAccountant`,
+its per-order RDP values were compared directly with Opacus at shared integer
+orders (`python/tests/test_privacy_accounting.py`). The C++ implementation is
+also covered by golden parity tests against the same reference model.
+
+The research-correctness tests additionally verify that:
+
+- target-epsilon calibration returns a privacy-safe noise multiplier;
+- stricter epsilon targets require at least as much noise;
+- same-adjacency RDP composition never produces a privacy cost smaller than
+  either component;
+- mixed-adjacency composition is rejected;
+- DP-enabled SCAFFOLD is rejected in the active root runtime;
+- the default root configuration stays pinned to its declared target epsilon.
 
 ## Trust model
 
-This is central differential privacy, not secure aggregation — the
-coordinator sees plaintext client updates before applying user-level
-DP's clip+noise step. See
-[privacy-engineering-security-audit.md](privacy-engineering-security-audit.md)'s
-Section 0 for the full, explicit trust model (trusted coordinator
-operator, honestly-reporting workers, non-cryptographic randomness,
-unencrypted transport by default) — read that before deploying this
-system anywhere the trust model doesn't already hold.
+Client-level central DP assumes the coordinator correctly clips contributions,
+samples privacy noise and follows the documented sampling/accounting model.
+Secure aggregation changes what the coordinator can observe; it does not by
+itself prove honest client clipping or correct DP execution.
+
+See `privacy-engineering-security-audit.md`, `secure-aggregation-threat-model.md`
+and `RUNTIME.md` before making deployment or publication claims.
