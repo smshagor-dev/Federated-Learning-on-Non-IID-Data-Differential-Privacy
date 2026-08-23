@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 import sys
 
+import yaml
+
 from experiment_runtime import (
     apply_overrides,
     load_config,
@@ -60,6 +62,16 @@ def _resolve_effective_privacy_config(
     return resolved
 
 
+def write_effective_runtime_config(config: dict) -> str:
+    """Persist the exact post-override config used by the root CLI run."""
+    results_dir = os.path.abspath(str(config["system"]["results_dir"]))
+    os.makedirs(results_dir, exist_ok=True)
+    target = os.path.join(results_dir, "_effective_runtime_config.yaml")
+    with open(target, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(config, handle, sort_keys=False)
+    return target
+
+
 def main(argv: list[str] | None = None) -> int:
     effective_argv = [] if argv is None else argv
     args = parse_args(effective_argv)
@@ -87,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"WARNING: {warning}")
         return int(launch_desktop_app(os.path.abspath(os.path.dirname(__file__)), args.config))
 
+    effective_config_path = write_effective_runtime_config(config)
+    warnings.append(f"Effective runtime configuration archived at {effective_config_path}.")
     for warning in warnings:
         print(f"WARNING: {warning}")
     run_cli(config)
