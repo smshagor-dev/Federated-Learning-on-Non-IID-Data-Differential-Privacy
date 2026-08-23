@@ -40,9 +40,9 @@ algorithm:
 dp:
   enabled: true               # Master switch for the DP mechanism
   update_clip_norm: 1.5       # Client-update clipping bound C used by the central DP mechanism
-  target_epsilon: 4.0         # Research budget; main.py calibrates sigma to this target when --noise is not supplied
-  epsilon_tolerance: 1.0e-4   # Calibration tolerance for target_epsilon
-  noise_multiplier: 0.8       # Fallback/manual sigma; explicit --noise overrides target-epsilon calibration
+  target_epsilon: 4.0         # Publication-facing reference budget for the default q/rounds/delta below
+  epsilon_tolerance: 1.0e-4   # Allowed calibration error for target_epsilon
+  noise_multiplier: 2.163873  # Calibrated for epsilon ~= 4.0 at q=0.2, T=50, delta=1e-5
   target_delta: 1.0e-5        # Delta used when converting RDP -> (epsilon, delta)
   deterministic_noise_for_testing: false  # Simulation-only deterministic privacy noise
   test_noise_seed: null       # Required only when deterministic_noise_for_testing=true
