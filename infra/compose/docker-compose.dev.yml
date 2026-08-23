@@ -85,6 +85,10 @@ services:
       dockerfile: infra/docker/cpp-coordinator.Dockerfile
     environment:
       FL_ALLOW_INSECURE_DEVELOPMENT_TRANSPORT: "true"
+      # Cleartext distributed-round watchdog. Secure-aggregation dropout
+      # recovery uses a separate protocol and must not infer participation
+      # from cleartext round_results_.
+      FL_ROUND_WATCHDOG_INTERVAL_MS: "${FL_ROUND_WATCHDOG_INTERVAL_MS:-1000}"
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/50051' || exit 1"]
       interval: 15s
