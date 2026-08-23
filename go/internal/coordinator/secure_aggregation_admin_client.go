@@ -2,7 +2,11 @@ package coordinator
 
 import (
 	"context"
+	"fmt"
 	"strings"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	coordinatorv1 "github.com/smshagor-dev/federated-learning-super-system/go/generated/coordinator/v1"
 )
@@ -22,19 +26,19 @@ type SecureAggregationSessionSummary struct {
 // control-plane watchdog. It contains lifecycle/deadline metadata only; no key,
 // mask, secret-share, or tensor material is exposed by the wire message.
 type SecureAggregationSessionStatus struct {
-	SessionID                       string
-	RunID                           string
-	RoundID                         uint64
-	State                           string
-	KeyAdvertisementCount           uint64
-	MaskedContributionCount         uint64
-	KeyAdvertisementDeadlineUnixS   float64
-	MaskedUpdateDeadlineUnixS       float64
-	SessionExpiryUnixS              float64
-	CreatedAtUnixS                  float64
-	CompletedAtUnixS                float64
-	AbortReason                     string
-	FailureReason                   string
+	SessionID                     string
+	RunID                         string
+	RoundID                       uint64
+	State                         string
+	KeyAdvertisementCount         uint64
+	MaskedContributionCount       uint64
+	KeyAdvertisementDeadlineUnixS float64
+	MaskedUpdateDeadlineUnixS     float64
+	SessionExpiryUnixS            float64
+	CreatedAtUnixS                float64
+	CompletedAtUnixS              float64
+	AbortReason                   string
+	FailureReason                 string
 }
 
 // SecureAggregationAdminClient is intentionally separate from Client. The
@@ -66,6 +70,21 @@ func secureAggregationAbortReasonString(value coordinatorv1.SecureAggregationAbo
 	return strings.TrimPrefix(value.String(), "SECURE_AGGREGATION_ABORT_REASON_")
 }
 
+// mapSecureAggregationAdminGrpcError preserves the general security-RPC error
+// vocabulary while adding one compatibility rule for this optional surface:
+// older coordinators may not expose these RPCs at all, which gRPC reports as
+// UNIMPLEMENTED. Treat that like an unavailable optional feature rather than a
+// generic rejected mutation.
+func mapSecureAggregationAdminGrpcError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if status.Code(err) == codes.Unimplemented {
+		return fmt.Errorf("%w: secure aggregation administration is not implemented by this coordinator", ErrFailedPrecondition)
+	}
+	return mapSecurityGrpcError(err)
+}
+
 func (c *GrpcClient) ListSecureAggregationSessions(
 	ctx context.Context,
 	runID string,
@@ -78,7 +97,7 @@ func (c *GrpcClient) ListSecureAggregationSessions(
 		PageToken: pageToken,
 	})
 	if err != nil {
-		return nil, "", mapSecurityGrpcError(err)
+		return nil, "", mapSecureAggregationAdminGrpcError(err)
 	}
 	result := make([]SecureAggregationSessionSummary, 0, len(response.GetSessions()))
 	for _, session := range response.GetSessions() {
@@ -102,26 +121,26 @@ func (c *GrpcClient) GetSecureAggregationSession(
 		SessionId: sessionID,
 	})
 	if err != nil {
-		return SecureAggregationSessionStatus{}, false, mapSecurityGrpcError(err)
+		return SecureAggregationSessionStatus{}, false, mapSecureAggregationAdminGrpcError(err)
 	}
 	if !response.GetFound() || response.GetStatus() == nil {
 		return SecureAggregationSessionStatus{}, false, nil
 	}
-	status := response.GetStatus()
+	statusRecord := response.GetStatus()
 	return SecureAggregationSessionStatus{
-		SessionID:                     status.GetSessionId(),
-		RunID:                         status.GetRunId(),
-		RoundID:                       status.GetRoundId(),
-		State:                         secureAggregationStateString(status.GetState()),
-		KeyAdvertisementCount:         status.GetKeyAdvertisementCount(),
-		MaskedContributionCount:       status.GetMaskedContributionCount(),
-		KeyAdvertisementDeadlineUnixS: status.GetKeyAdvertisementDeadlineUnixS(),
-		MaskedUpdateDeadlineUnixS:     status.GetMaskedUpdateDeadlineUnixS(),
-		SessionExpiryUnixS:            status.GetSessionExpiryUnixS(),
-		CreatedAtUnixS:                status.GetCreatedAtUnixS(),
-		CompletedAtUnixS:              status.GetCompletedAtUnixS(),
-		AbortReason:                   secureAggregationAbortReasonString(status.GetAbortReason()),
-		FailureReason:                 status.GetFailureReason(),
+		SessionID:                     statusRecord.GetSessionId(),
+		RunID:                         statusRecord.GetRunId(),
+		RoundID:                       statusRecord.GetRoundId(),
+		State:                         secureAggregationStateString(statusRecord.GetState()),
+		KeyAdvertisementCount:         statusRecord.GetKeyAdvertisementCount(),
+		MaskedContributionCount:       statusRecord.GetMaskedContributionCount(),
+		KeyAdvertisementDeadlineUnixS: statusRecord.GetKeyAdvertisementDeadlineUnixS(),
+		MaskedUpdateDeadlineUnixS:     statusRecord.GetMaskedUpdateDeadlineUnixS(),
+		SessionExpiryUnixS:            statusRecord.GetSessionExpiryUnixS(),
+		CreatedAtUnixS:                statusRecord.GetCreatedAtUnixS(),
+		CompletedAtUnixS:              statusRecord.GetCompletedAtUnixS(),
+		AbortReason:                   secureAggregationAbortReasonString(statusRecord.GetAbortReason()),
+		FailureReason:                 statusRecord.GetFailureReason(),
 	}, true, nil
 }
 
@@ -135,7 +154,7 @@ func (c *GrpcClient) AbortSecureAggregationSession(
 		Reason:    reason,
 	})
 	if err != nil {
-		return false, "", mapSecurityGrpcError(err)
+		return false, "", mapSecureAggregationAdminGrpcError(err)
 	}
 	return response.GetAccepted(), response.GetReason(), nil
 }
