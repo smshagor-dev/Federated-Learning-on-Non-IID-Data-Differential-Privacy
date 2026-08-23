@@ -53,6 +53,35 @@ type EventSource interface {
 	PollEvents(ctx context.Context, backendRunID, afterEventID string) ([]BackendEvent, error)
 }
 
+// BackendSecurityEvent is a transport-neutral projection of a safe security
+// journal record. It deliberately carries identifiers and bounded metadata
+// only; no signature, secret-share, tensor, or key material crosses this layer.
+type BackendSecurityEvent struct {
+	EventID       string
+	EventType     string
+	RunID         string
+	RoundID       uint64
+	SafeSubjectID string
+	ReasonCode    string
+	TraceID       string
+	Outcome       string
+	SafeDetails   map[string]string
+	Timestamp     time.Time
+}
+
+// SecurityEventPage is one cursorable page from a backend security journal.
+type SecurityEventPage struct {
+	Events     []BackendSecurityEvent
+	NextCursor string
+}
+
+// SecurityEventSource is an optional capability for distributed backends that
+// expose a safe, resumable security event journal. Keeping it separate from
+// Driver avoids expanding the base lifecycle contract for local execution.
+type SecurityEventSource interface {
+	PollSecurityEvents(ctx context.Context, afterEventID string, limit uint32) (SecurityEventPage, error)
+}
+
 // Driver is the lifecycle contract every execution backend must satisfy.
 // Local and distributed backends may have very different transports, but
 // lifecycle state, snapshots, and failure semantics converge here.
