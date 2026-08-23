@@ -1,11 +1,12 @@
 """Research-grade privacy calibration and composition helpers.
 
-This module sits above :mod:`federated.dp_accountant` and provides two
-operations that are needed for defensible research experiments:
+This module sits above :mod:`federated.dp_accountant` and provides operations
+needed for defensible research experiments:
 
 * calibrate the Gaussian noise multiplier from a target epsilon instead of
   guessing ``sigma``;
-* compose RDP curves only when the mechanisms protect the same neighboring
+* resolve an experiment config against that target after CLI/UI overrides;
+* compose RDP curves only when mechanisms protect the same neighboring
   relation.
 
 It deliberately does not combine privacy guarantees that refer to different
@@ -14,6 +15,7 @@ adjacency definitions. Callers must state the adjacency explicitly.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
@@ -182,6 +184,53 @@ def calibrate_noise_multiplier(
         steps=steps,
         delta=delta,
     )
+
+
+def resolve_target_epsilon_config(
+    config: dict,
+    *,
+    manual_noise_override: bool = False,
+) -> tuple[dict, NoiseCalibrationResult | None]:
+    """Return an effective config with ``sigma`` calibrated after overrides.
+
+    Calibration happens *after* round/sample-rate overrides so the declared
+    target epsilon cannot silently drift when an experiment changes its
+    participation rate or number of rounds. An explicit CLI/manual sigma is
+    authoritative: in that case ``target_epsilon`` is cleared in the effective
+    runtime config to avoid reporting a target that was not actually enforced.
+    """
+    resolved = copy.deepcopy(config)
+    dp_cfg = resolved.setdefault("dp", {})
+    fed_cfg = resolved.setdefault("federated", {})
+
+    if not bool(dp_cfg.get("enabled", False)):
+        return resolved, None
+
+    if manual_noise_override:
+        if float(dp_cfg.get("noise_multiplier", 0.0)) < 0.0:
+            raise ValueError("dp.noise_multiplier must be >= 0 for a manual override.")
+        dp_cfg["target_epsilon"] = None
+        dp_cfg["privacy_parameter_source"] = "manual_noise_multiplier"
+        return resolved, None
+
+    target = dp_cfg.get("target_epsilon")
+    if target is None:
+        dp_cfg["privacy_parameter_source"] = "configured_noise_multiplier"
+        return resolved, None
+
+    target_epsilon = float(target)
+    epsilon_tolerance = float(dp_cfg.get("epsilon_tolerance", 1e-4))
+    result = calibrate_noise_multiplier(
+        target_epsilon=target_epsilon,
+        sample_rate=float(fed_cfg["sample_rate"]),
+        steps=int(fed_cfg["rounds"]),
+        delta=float(dp_cfg["target_delta"]),
+        epsilon_tolerance=epsilon_tolerance,
+    )
+    dp_cfg["noise_multiplier"] = result.noise_multiplier
+    dp_cfg["calibrated_epsilon"] = result.achieved_epsilon
+    dp_cfg["privacy_parameter_source"] = "target_epsilon_calibration"
+    return resolved, result
 
 
 def compose_same_adjacency_rdp(
