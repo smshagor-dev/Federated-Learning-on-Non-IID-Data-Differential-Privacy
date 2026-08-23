@@ -2,30 +2,27 @@ from __future__ import annotations
 
 import unittest
 
-from fl_platform.research.benchmark import (
+from fl_platform.benchmark.matrix import (
     BenchmarkPartition,
     BenchmarkPlan,
-    build_publication_plan,
+    build_benchmark_plan,
 )
-from fl_platform.research.specification import PartitionStrategy
 
 
 class BenchmarkPlanTests(unittest.TestCase):
-    def test_publication_plan_expands_full_cartesian_matrix(self) -> None:
-        partitions = (
-            BenchmarkPartition("iid", PartitionStrategy.IID, {}),
-            BenchmarkPartition(
-                "dirichlet-0.1", PartitionStrategy.DIRICHLET, {"alpha": 0.1}
-            ),
-        )
-        plan = build_publication_plan(
-            benchmark_id="paper-a",
-            datasets=("cifar10", "femnist"),
+    def test_plan_expands_full_cartesian_matrix(self) -> None:
+        plan = build_benchmark_plan(
+            benchmark_id="matrix-a",
+            datasets=("cifar10", "mnist"),
             algorithms=("fedavg", "fedprox"),
-            partitions=partitions,
+            partitions=(
+                BenchmarkPartition("iid", "iid", {}),
+                BenchmarkPartition("dirichlet-0.1", "dirichlet", {"alpha": 0.1}),
+            ),
             target_epsilons=(None, 4.0),
             seeds=(11, 23, 37, 53, 71),
             rounds=50,
+            runtime_identity="root-simulator",
         )
         cells = plan.expand()
         self.assertEqual(len(cells), 2 * 2 * 2 * 2 * 5)
@@ -38,27 +35,26 @@ class BenchmarkPlanTests(unittest.TestCase):
 
     def test_plan_hash_and_cell_ids_are_deterministic(self) -> None:
         kwargs = dict(
-            benchmark_id="paper-b",
+            benchmark_id="matrix-b",
             datasets=("cifar10",),
             algorithms=("fedavg", "fedprox"),
-            partitions=(
-                BenchmarkPartition("iid", PartitionStrategy.IID, {}),
-            ),
+            partitions=(BenchmarkPartition("iid", "iid", {}),),
             target_epsilons=(4.0,),
             seeds=(1, 2, 3, 4, 5),
             rounds=100,
+            runtime_identity="root-simulator",
         )
-        first = build_publication_plan(**kwargs)
-        second = build_publication_plan(**kwargs)
+        first = build_benchmark_plan(**kwargs)
+        second = build_benchmark_plan(**kwargs)
         self.assertEqual(first.plan_hash(), second.plan_hash())
         self.assertEqual(first.expand(), second.expand())
 
-    def test_fewer_than_five_seeds_fail_publication_gate(self) -> None:
+    def test_fewer_than_five_seeds_fail(self) -> None:
         plan = BenchmarkPlan(
             benchmark_id="too-small",
             datasets=("cifar10",),
             algorithms=("fedavg",),
-            partitions=(BenchmarkPartition("iid", PartitionStrategy.IID, {}),),
+            partitions=(BenchmarkPartition("iid", "iid", {}),),
             target_epsilons=(None,),
             target_delta=1e-5,
             seeds=(1, 2, 3, 4),
@@ -68,19 +64,19 @@ class BenchmarkPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least 5 unique seeds"):
             plan.validate()
 
-    def test_invalid_runtime_identity_is_rejected(self) -> None:
+    def test_private_scaffold_is_rejected_for_root_runtime(self) -> None:
         plan = BenchmarkPlan(
-            benchmark_id="bad-runtime",
+            benchmark_id="scaffold-private",
             datasets=("cifar10",),
-            algorithms=("fedavg",),
-            partitions=(BenchmarkPartition("iid", PartitionStrategy.IID, {}),),
-            target_epsilons=(None,),
+            algorithms=("scaffold",),
+            partitions=(BenchmarkPartition("iid", "iid", {}),),
+            target_epsilons=(4.0,),
             target_delta=1e-5,
             seeds=(1, 2, 3, 4, 5),
             rounds=10,
-            runtime_identity="unknown",
+            runtime_identity="root-simulator",
         )
-        with self.assertRaisesRegex(ValueError, "runtime_identity"):
+        with self.assertRaisesRegex(ValueError, "DP-enabled SCAFFOLD"):
             plan.validate()
 
 

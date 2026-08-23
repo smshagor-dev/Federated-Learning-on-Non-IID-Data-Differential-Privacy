@@ -1,16 +1,10 @@
-"""Research-grade privacy calibration and composition helpers.
+"""Privacy-budget calibration and same-adjacency RDP composition helpers.
 
-This module sits above :mod:`federated.dp_accountant` and provides operations
-needed for defensible research experiments:
+The module sits above :mod:`federated.dp_accountant` and provides:
 
-* calibrate the Gaussian noise multiplier from a target epsilon instead of
-  guessing ``sigma``;
-* resolve an experiment config against that target after CLI/UI overrides;
-* compose RDP curves only when mechanisms protect the same neighboring
-  relation.
-
-It deliberately does not combine privacy guarantees that refer to different
-adjacency definitions. Callers must state the adjacency explicitly.
+* target-epsilon calibration for the Gaussian noise multiplier;
+* effective configuration resolution after CLI/UI overrides;
+* RDP composition only when mechanisms share the same neighboring relation.
 """
 
 from __future__ import annotations
@@ -42,8 +36,6 @@ class NoiseCalibrationResult:
 
 @dataclass(frozen=True, slots=True)
 class RDPMechanism:
-    """One mechanism to be composed at a shared neighboring relation."""
-
     name: str
     adjacency: str
     sample_rate: float
@@ -80,7 +72,6 @@ def epsilon_for_client_level_gaussian(
     delta: float,
     orders: Iterable[int] | None = None,
 ) -> float:
-    """Return epsilon for the root runtime's client-level Gaussian model."""
     accountant = MomentsAccountant(
         noise_multiplier=noise_multiplier,
         sample_rate=sample_rate,
@@ -103,14 +94,7 @@ def calibrate_noise_multiplier(
     max_noise_multiplier: float = 1e3,
     max_iterations: int = 200,
 ) -> NoiseCalibrationResult:
-    """Find the smallest practical ``sigma`` whose epsilon is at target.
-
-    Binary search is safe here because, for fixed sampling rate, number of
-    steps and delta, the accountant's epsilon is monotone non-increasing in
-    the Gaussian noise multiplier. The returned point is always on the
-    privacy-safe side of the target (``achieved_epsilon <= target_epsilon``)
-    up to floating-point precision.
-    """
+    """Return the smallest practical sigma on the privacy-safe side."""
     if target_epsilon <= 0.0:
         raise ValueError("target_epsilon must be > 0.")
     if not 0.0 <= sample_rate <= 1.0:
@@ -129,7 +113,6 @@ def calibrate_noise_multiplier(
         raise ValueError("max_iterations must be > 0.")
 
     normalized_orders: Sequence[int] = _normalize_orders(orders)
-
     if steps == 0 or sample_rate == 0.0:
         return NoiseCalibrationResult(
             target_epsilon=target_epsilon,
@@ -151,7 +134,6 @@ def calibrate_noise_multiplier(
 
     low = min_noise_multiplier
     high = min(max_noise_multiplier, max(1.0, low * 2.0))
-
     while epsilon_at(high) > target_epsilon and high < max_noise_multiplier:
         high = min(max_noise_multiplier, high * 2.0)
 
@@ -170,7 +152,6 @@ def calibrate_noise_multiplier(
             high_epsilon = mid_epsilon
         else:
             low = mid
-
         if abs(target_epsilon - high_epsilon) <= epsilon_tolerance:
             break
         if high - low <= 1e-12 * max(1.0, high):
@@ -192,14 +173,7 @@ def resolve_target_epsilon_config(
     *,
     manual_noise_override: bool = False,
 ) -> tuple[dict, NoiseCalibrationResult | None]:
-    """Return an effective config with ``sigma`` calibrated after overrides.
-
-    Calibration happens *after* round/sample-rate overrides so the declared
-    target epsilon cannot silently drift when an experiment changes its
-    participation rate or number of rounds. An explicit CLI/manual sigma is
-    authoritative: in that case ``target_epsilon`` is cleared in the effective
-    runtime config to avoid reporting a target that was not actually enforced.
-    """
+    """Resolve the effective sigma after all runtime overrides."""
     resolved = copy.deepcopy(config)
     dp_cfg = resolved.setdefault("dp", {})
     fed_cfg = resolved.setdefault("federated", {})
@@ -219,14 +193,12 @@ def resolve_target_epsilon_config(
         dp_cfg["privacy_parameter_source"] = "configured_noise_multiplier"
         return resolved, None
 
-    target_epsilon = float(target)
-    epsilon_tolerance = float(dp_cfg.get("epsilon_tolerance", 1e-4))
     result = calibrate_noise_multiplier(
-        target_epsilon=target_epsilon,
+        target_epsilon=float(target),
         sample_rate=float(fed_cfg["sample_rate"]),
         steps=int(fed_cfg["rounds"]),
         delta=float(dp_cfg["target_delta"]),
-        epsilon_tolerance=epsilon_tolerance,
+        epsilon_tolerance=float(dp_cfg.get("epsilon_tolerance", 1e-4)),
     )
     dp_cfg["noise_multiplier"] = result.noise_multiplier
     dp_cfg["calibrated_epsilon"] = result.achieved_epsilon
@@ -240,13 +212,7 @@ def compose_same_adjacency_rdp(
     delta: float,
     orders: Iterable[int] | None = None,
 ) -> PrivacyCompositionResult:
-    """Compose RDP mechanisms only when their adjacency is identical.
-
-    This is the correct primitive for multiple released client-level Gaussian
-    mechanisms over the same add/remove-client neighboring relation. It
-    intentionally refuses to combine sample-level DP and client-level DP (or
-    any other mismatched adjacency) into one epsilon.
-    """
+    """Compose RDP only when every mechanism uses identical adjacency."""
     if not mechanisms:
         raise ValueError("At least one mechanism is required.")
     if not 0.0 < delta < 1.0:

@@ -7,49 +7,50 @@
 system:
   seed: 42                    # Global seed (python random / numpy / torch / cuda)
   device: "auto"              # "auto" | "cuda" | "cpu"
-  results_dir: "results"      # All CSV logs, plots and summaries are written here
+  results_dir: "results"      # CSV logs, plots, manifests and summaries
 
 data:
   dataset: "CIFAR10"          # "CIFAR10" | "MNIST"
   data_root: "./data_raw"     # Download / cache directory for torchvision
-  partition: "dirichlet"      # "dirichlet" | "pathological"
-  alpha: 0.1                  # Dirichlet concentration (0.1 => extreme Non-IID)
-  classes_per_client: 2       # Used only when partition == "pathological"
-  min_partition_size: 10      # Re-draw Dirichlet split until every client has >= this many samples
+  partition: "dirichlet"      # "iid" | "dirichlet" | "pathological" | "quantity_skew"
+  alpha: 0.1                  # Used only by dirichlet
+  classes_per_client: 2       # Used only by pathological
+  quantity_skew_sigma: 1.0    # Log-normal sigma used only by quantity_skew
+  min_partition_size: 10      # Minimum samples per client
 
 federated:
-  num_clients: 20             # Total client population
-  sample_rate: 0.2            # Poisson selection probability q for each client in each round
-  sampling_strategy: "poisson"  # "poisson" | "fixed_without_replacement" (DP accounting supports only poisson)
-  aggregation_weighting: "uniform"  # "uniform" | "sample_count" (DP-supported default: uniform)
-  rounds: 50                  # Communication rounds
-  local_epochs: 2             # Local SGD epochs (E)
-  batch_size: 64              # Local mini-batch size
-  server_lr: 1.0              # Server-side learning rate (used by SCAFFOLD aggregation too)
+  num_clients: 20
+  sample_rate: 0.2
+  sampling_strategy: "poisson"  # "poisson" | "fixed_without_replacement"
+  aggregation_weighting: "uniform"  # "uniform" | "sample_count"
+  rounds: 50
+  local_epochs: 2
+  batch_size: 64
+  server_lr: 1.0
 
 optimizer:
-  lr: 0.01                    # Client SGD learning rate
-  momentum: 0.9               # Set to 0.0 automatically for SCAFFOLD (theory requires plain SGD)
+  lr: 0.01
+  momentum: 0.9
   weight_decay: 0.0005
-  grad_clip_norm: null        # Optional optimization-only gradient clipping (not part of privacy accounting)
+  grad_clip_norm: null
 
 algorithm:
-  name: "fedprox"             # "fedavg" | "fedprox" | "scaffold" (or "all" via CLI to run the full matrix)
-  mu: 0.01                    # FedProx proximal coefficient (mu/2 * ||w - w_global||^2)
+  name: "fedprox"             # "fedavg" | "fedprox" | "scaffold"
+  mu: 0.01
 
 dp:
-  enabled: true               # Master switch for the DP mechanism
-  update_clip_norm: 1.5       # Client-update clipping bound C used by the central DP mechanism
-  target_epsilon: 4.0         # Publication-facing reference budget for the default q/rounds/delta below
-  epsilon_tolerance: 1.0e-4   # Allowed calibration error for target_epsilon
-  noise_multiplier: 2.163873  # Calibrated for epsilon ~= 4.0 at q=0.2, T=50, delta=1e-5
-  target_delta: 1.0e-5        # Delta used when converting RDP -> (epsilon, delta)
-  deterministic_noise_for_testing: false  # Simulation-only deterministic privacy noise
-  test_noise_seed: null       # Required only when deterministic_noise_for_testing=true
+  enabled: true
+  update_clip_norm: 1.5
+  target_epsilon: 4.0
+  epsilon_tolerance: 1.0e-4
+  noise_multiplier: 2.163873
+  target_delta: 1.0e-5
+  deterministic_noise_for_testing: false
+  test_noise_seed: null
 
 model:
-  name: "cnn"                 # Lightweight GroupNorm CNN (see models/networks.py)
-  group_norm_groups: 2        # num_groups for every GroupNorm layer
+  name: "cnn"
+  group_norm_groups: 2
 
 evaluation:
-  eval_batch_size: 256        # Batch size for global test-set evaluation
+  eval_batch_size: 256

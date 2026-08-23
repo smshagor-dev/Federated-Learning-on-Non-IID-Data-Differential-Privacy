@@ -1,8 +1,8 @@
 # Runtime Source of Truth
 
-This file is the canonical runtime contract for the repository. It exists to prevent research claims from drifting away from executable behavior.
+This file defines the executable runtime boundaries for the repository and prevents documentation from drifting away from actual behavior.
 
-## Canonical research simulator
+## Root runtime
 
 The root command:
 
@@ -10,7 +10,7 @@ The root command:
 python main.py
 ```
 
-runs the root Python research simulator / desktop workflow defined by:
+runs the single-machine federated-learning workflow defined by:
 
 - `main.py`
 - `experiment_runtime.py`
@@ -19,7 +19,7 @@ runs the root Python research simulator / desktop workflow defined by:
 - `models/`
 - `desktop/`
 
-The root simulator is the reference path for controlled FedAvg/FedProx/SCAFFOLD experiments on MNIST/CIFAR-10. It is single-machine simulation, not evidence of a real cross-device deployment.
+It supports real MNIST and CIFAR-10 datasets, deterministic client partitioning, FedAvg/FedProx/SCAFFOLD execution, central client-level DP for the supported algorithms, round metrics, exact partition manifests, and machine-readable result summaries.
 
 For terminal-only execution:
 
@@ -29,7 +29,7 @@ python main.py --cli
 
 ## Distributed platform runtime
 
-The multi-service research platform is a separate runtime:
+The multi-service platform is a separate runtime:
 
 ```bash
 docker compose -f infra/compose/docker-compose.dev.yml up --build
@@ -39,43 +39,41 @@ Its topology is:
 
 ```text
 Web -> Go API -> C++ coordinator -> Python worker(s)
-            \-> Python research writer
+            \-> Python experiment command writer
 ```
 
-with PostgreSQL, Redis, MinIO, MLflow, Prometheus, Grafana and OpenTelemetry development services supplied by the Compose file.
+PostgreSQL, Redis, MinIO, MLflow, Prometheus, Grafana and OpenTelemetry development services are supplied by the Compose stack.
 
-The distributed runtime and the root simulator share research concepts but are not interchangeable execution paths. A feature implemented in one path must not be reported as active in the other unless an explicit parity/integration test proves it.
+The two runtimes share algorithms, privacy semantics and dataset concepts, but they are not interchangeable execution paths. A feature implemented in one path must not be reported as active in the other unless parity/integration validation exists.
 
-## Research claim rule
+## Capability rule
 
-A capability may be labelled **implemented** only when source code exists. It may be labelled **validated** only when there is execution evidence appropriate to the claimed scope. Configuration, documentation, a test file, or CI YAML alone is not runtime evidence.
+A capability is **implemented** only when executable source exists. It is **validated** only when there is execution evidence appropriate to the claimed scope. Configuration, documentation, a test file, or CI YAML alone is not runtime evidence.
 
-Every publication-facing result must identify which runtime produced it:
+Every benchmark result must identify which runtime produced it:
 
 - `root-simulator`
 - `distributed-platform`
 
-and include the exact commit SHA, experiment specification/configuration, dataset/partition identity, random seeds and privacy-accounting assumptions.
+and retain the exact commit SHA, effective configuration, dataset/partition identity, random seed, partition hash and privacy parameters.
 
 ## Privacy boundary
 
-The root simulator currently supports client-level central DP for FedAvg and FedProx under its documented Poisson client-sampling assumptions.
+The root runtime supports client-level central DP for FedAvg and FedProx under Poisson client sampling and uniform client weighting.
 
-DP-enabled SCAFFOLD is intentionally fail-closed in the root runtime. SCAFFOLD control-variate state creates an additional state/release path whose client-level privacy effect has not yet been formally established in this runtime. Non-private SCAFFOLD remains available as an optimization baseline.
+DP-enabled SCAFFOLD is intentionally fail-closed. The control-variate state/release path is not included in the current client-level privacy guarantee. Non-private SCAFFOLD remains available.
 
-Sample-level DP, user/client-level DP, and adaptive-clipping statistics must keep separate mechanism ledgers. When two mechanisms protect the **same** neighboring relation and their releases are jointly claimed under one user/client-level guarantee, their RDP curves must be composed. Mechanisms protecting different neighboring relations must not be collapsed into one epsilon.
+Sample-level DP, client-level DP and private adaptive statistics must retain independent ledgers. When multiple releases protect the same neighboring relation and are reported under one client-level guarantee, their RDP costs must be composed. Mechanisms with different neighboring relations remain separately reported.
 
-## Target-epsilon experiments
+## Target-epsilon execution
 
-Publication experiments should define privacy budgets using target epsilon rather than hand-picked noise multipliers.
+When `dp.target_epsilon` is configured, `python main.py` recalibrates the Gaussian noise multiplier after runtime overrides are applied. This prevents a sigma calibrated for one round count or sample rate from being reused while still claiming the same privacy budget.
 
-When `dp.target_epsilon` is configured, `python main.py` recalibrates the Gaussian noise multiplier **after** all runtime overrides are applied. This matters because changing `--rounds` (or a runtime configuration's client sample rate) changes the privacy loss; a sigma calibrated for 50 rounds must not be silently reused for 100 rounds while still claiming the same epsilon.
+The effective runtime configuration records the final sigma, achieved epsilon and parameter source.
 
-The default research configuration targets approximately `epsilon=4` at `delta=1e-5`. The effective runtime config records the calibrated sigma and achieved epsilon.
+An explicit CLI `--noise` value is a manual override. In that case the effective runtime config clears `target_epsilon` so the system does not imply that a target budget was enforced.
 
-An explicit CLI `--noise` value is treated as a manual research override. In that case the effective runtime config clears `target_epsilon` so the system does not falsely imply that the requested budget was enforced.
-
-For standalone calibration or experiment planning, use:
+Standalone calibration:
 
 ```bash
 python scripts/calibrate_client_level_dp.py \
@@ -85,8 +83,16 @@ python scripts/calibrate_client_level_dp.py \
   --delta 1e-5
 ```
 
-The command returns a privacy-safe Gaussian noise multiplier for the root client-level RDP accountant.
+## Benchmark execution
+
+The real multi-seed runner is:
+
+```bash
+python scripts/run_benchmark_matrix.py --dry-run
+```
+
+Remove `--dry-run` to execute the matrix. Every cell launches the root runtime in a fresh process and writes its own config, logs, exact partition indices, partition manifest, round CSV files and `summary.json`.
 
 ## Precedence
 
-If another document contains a runtime statement that conflicts with this file, this file and executable code take precedence until that document is corrected. This rule exists specifically to avoid publication or thesis claims being based on stale architecture prose.
+If another document conflicts with this file, executable code and this runtime contract take precedence until the stale document is corrected.

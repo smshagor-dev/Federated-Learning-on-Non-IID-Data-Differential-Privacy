@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -40,7 +41,8 @@ class BenchmarkSummaryRow:
     benchmark_id: str
     dataset_id: str
     partition_id: str
-    partition_hash: str
+    partition_hashes_digest: str
+    partition_hash_count: int
     algorithm_id: str
     target_epsilon: float | None
     target_delta: float | None
@@ -64,7 +66,7 @@ class AlgorithmComparisonRow:
     benchmark_id: str
     dataset_id: str
     partition_id: str
-    partition_hash: str
+    partition_hashes_digest: str
     target_epsilon: float | None
     target_delta: float | None
     metric: str
@@ -90,7 +92,6 @@ SummaryKey = tuple[
     str,
     str,
     str,
-    str,
     float | None,
     float | None,
     str,
@@ -98,7 +99,6 @@ SummaryKey = tuple[
     str,
 ]
 ComparisonContext = tuple[
-    str,
     str,
     str,
     str,
@@ -139,6 +139,40 @@ def _validate_observation(observation: BenchmarkObservation) -> None:
             raise ValueError("private observation requires target_delta in (0, 1)")
 
 
+def _summary_key(observation: BenchmarkObservation) -> SummaryKey:
+    return (
+        observation.benchmark_id,
+        observation.dataset_id,
+        observation.partition_id,
+        observation.algorithm_id,
+        observation.target_epsilon,
+        observation.target_delta,
+        observation.metric,
+        observation.runtime_identity,
+        observation.commit_sha,
+    )
+
+
+def _comparison_context(observation: BenchmarkObservation) -> ComparisonContext:
+    return (
+        observation.benchmark_id,
+        observation.dataset_id,
+        observation.partition_id,
+        observation.target_epsilon,
+        observation.target_delta,
+        observation.metric,
+        observation.runtime_identity,
+        observation.commit_sha,
+    )
+
+
+def _partition_digest(seed_to_hash: dict[int, str]) -> str:
+    payload = "\n".join(
+        f"{seed}:{seed_to_hash[seed]}" for seed in sorted(seed_to_hash)
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def validate_observations(
     observations: Iterable[BenchmarkObservation],
     *,
@@ -157,7 +191,6 @@ def validate_observations(
             observation.benchmark_id,
             observation.dataset_id,
             observation.partition_id,
-            observation.partition_hash,
             observation.algorithm_id,
             observation.target_epsilon,
             observation.target_delta,
@@ -184,21 +217,6 @@ def validate_observations(
     return normalized
 
 
-def _summary_key(observation: BenchmarkObservation) -> SummaryKey:
-    return (
-        observation.benchmark_id,
-        observation.dataset_id,
-        observation.partition_id,
-        observation.partition_hash,
-        observation.algorithm_id,
-        observation.target_epsilon,
-        observation.target_delta,
-        observation.metric,
-        observation.runtime_identity,
-        observation.commit_sha,
-    )
-
-
 def summarize_observations(
     observations: Iterable[BenchmarkObservation],
     *,
@@ -210,14 +228,17 @@ def summarize_observations(
     normalized = validate_observations(
         observations, minimum_replicates=minimum_replicates
     )
-    grouped: dict[SummaryKey, list[float]] = defaultdict(list)
+    values: dict[SummaryKey, list[float]] = defaultdict(list)
+    hashes: dict[SummaryKey, dict[int, str]] = defaultdict(dict)
     for observation in normalized:
-        grouped[_summary_key(observation)].append(observation.value)
+        key = _summary_key(observation)
+        values[key].append(observation.value)
+        hashes[key][observation.seed] = observation.partition_hash
 
     rows: list[BenchmarkSummaryRow] = []
-    for key in sorted(grouped, key=str):
+    for key in sorted(values, key=str):
         summary = summarize_metric(
-            grouped[key],
+            values[key],
             confidence=confidence,
             bootstrap_samples=bootstrap_samples,
             seed=bootstrap_seed,
@@ -227,7 +248,6 @@ def summarize_observations(
             benchmark_id,
             dataset_id,
             partition_id,
-            partition_hash,
             algorithm_id,
             target_epsilon,
             target_delta,
@@ -240,7 +260,8 @@ def summarize_observations(
                 benchmark_id=benchmark_id,
                 dataset_id=dataset_id,
                 partition_id=partition_id,
-                partition_hash=partition_hash,
+                partition_hashes_digest=_partition_digest(hashes[key]),
+                partition_hash_count=len(hashes[key]),
                 algorithm_id=algorithm_id,
                 target_epsilon=target_epsilon,
                 target_delta=target_delta,
@@ -262,20 +283,6 @@ def summarize_observations(
     return tuple(rows)
 
 
-def _comparison_context(observation: BenchmarkObservation) -> ComparisonContext:
-    return (
-        observation.benchmark_id,
-        observation.dataset_id,
-        observation.partition_id,
-        observation.partition_hash,
-        observation.target_epsilon,
-        observation.target_delta,
-        observation.metric,
-        observation.runtime_identity,
-        observation.commit_sha,
-    )
-
-
 def compare_algorithms(
     observations: Iterable[BenchmarkObservation],
     *,
@@ -286,35 +293,52 @@ def compare_algorithms(
     analysis_seed: int = 0,
     minimum_replicates: int = DEFAULT_MINIMUM_REPLICATES,
 ) -> tuple[AlgorithmComparisonRow, ...]:
-    """Run matched-seed comparisons against one baseline algorithm."""
+    """Run matched-seed comparisons and verify exact partition parity."""
     if not baseline_algorithm.strip():
         raise ValueError("baseline_algorithm must be non-empty")
     normalized = validate_observations(
         observations, minimum_replicates=minimum_replicates
     )
 
-    values: dict[ComparisonContext, dict[str, dict[int, float]]] = defaultdict(
-        lambda: defaultdict(dict)
-    )
+    grouped: dict[
+        ComparisonContext, dict[str, dict[int, BenchmarkObservation]]
+    ] = defaultdict(lambda: defaultdict(dict))
     for observation in normalized:
-        values[_comparison_context(observation)][observation.algorithm_id][
+        grouped[_comparison_context(observation)][observation.algorithm_id][
             observation.seed
-        ] = observation.value
+        ] = observation
 
-    pending: list[tuple[ComparisonContext, str, PairedComparison]] = []
+    pending: list[
+        tuple[ComparisonContext, str, PairedComparison, dict[int, str]]
+    ] = []
     raw_p_values: dict[str, float] = {}
-    for context in sorted(values, key=str):
-        algorithms = values[context]
+    for context in sorted(grouped, key=str):
+        algorithms = grouped[context]
         if baseline_algorithm not in algorithms:
             raise ValueError(
                 f"baseline algorithm {baseline_algorithm!r} is missing for context {context!r}"
             )
+        baseline_rows = algorithms[baseline_algorithm]
         for candidate in sorted(algorithms):
             if candidate == baseline_algorithm:
                 continue
+            candidate_rows = algorithms[candidate]
+            if set(baseline_rows) != set(candidate_rows):
+                raise ValueError("paired algorithm comparison requires identical seed sets")
+            seed_hashes: dict[int, str] = {}
+            for seed in sorted(baseline_rows):
+                baseline_hash = baseline_rows[seed].partition_hash
+                candidate_hash = candidate_rows[seed].partition_hash
+                if baseline_hash != candidate_hash:
+                    raise ValueError(
+                        "matched algorithms used different exact partitions for "
+                        f"seed={seed}: {baseline_hash} != {candidate_hash}"
+                    )
+                seed_hashes[seed] = baseline_hash
+
             comparison = compare_paired_metrics(
-                algorithms[baseline_algorithm],
-                algorithms[candidate],
+                {seed: row.value for seed, row in baseline_rows.items()},
+                {seed: row.value for seed, row in candidate_rows.items()},
                 baseline_name=baseline_algorithm,
                 candidate_name=candidate,
                 confidence=confidence,
@@ -325,16 +349,15 @@ def compare_algorithms(
             )
             comparison_id = _comparison_id(context, candidate)
             raw_p_values[comparison_id] = comparison.p_value
-            pending.append((context, candidate, comparison))
+            pending.append((context, candidate, comparison, seed_hashes))
 
     adjusted = holm_adjust(raw_p_values)
     rows: list[AlgorithmComparisonRow] = []
-    for context, candidate, comparison in pending:
+    for context, candidate, comparison, seed_hashes in pending:
         (
             benchmark_id,
             dataset_id,
             partition_id,
-            partition_hash,
             target_epsilon,
             target_delta,
             metric,
@@ -346,7 +369,7 @@ def compare_algorithms(
                 benchmark_id=benchmark_id,
                 dataset_id=dataset_id,
                 partition_id=partition_id,
-                partition_hash=partition_hash,
+                partition_hashes_digest=_partition_digest(seed_hashes),
                 target_epsilon=target_epsilon,
                 target_delta=target_delta,
                 metric=metric,

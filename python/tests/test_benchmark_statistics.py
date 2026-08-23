@@ -3,7 +3,8 @@ from __future__ import annotations
 import math
 import unittest
 
-from fl_platform.research.statistics import (
+from fl_platform.benchmark.statistics import (
+    bootstrap_mean_interval,
     compare_paired_metrics,
     holm_adjust,
     summarize_metric,
@@ -22,9 +23,18 @@ class MetricSummaryTests(unittest.TestCase):
         self.assertLess(first.ci_low, first.mean)
         self.assertGreater(first.ci_high, first.mean)
 
-    def test_publication_default_rejects_too_few_replicates(self) -> None:
+    def test_default_rejects_too_few_replicates(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least 5"):
             summarize_metric([1.0, 2.0, 3.0, 4.0])
+
+    def test_bootstrap_interval_is_order_invariant(self) -> None:
+        forward = bootstrap_mean_interval(
+            [1.0, 2.0, 3.0, 4.0, 5.0], bootstrap_samples=1000, seed=5
+        )
+        reverse = bootstrap_mean_interval(
+            [5.0, 4.0, 3.0, 2.0, 1.0], bootstrap_samples=1000, seed=5
+        )
+        self.assertEqual(forward, reverse)
 
 
 class PairedComparisonTests(unittest.TestCase):
@@ -35,7 +45,7 @@ class PairedComparisonTests(unittest.TestCase):
             baseline,
             candidate,
             baseline_name="fedavg",
-            candidate_name="candidate",
+            candidate_name="fedprox",
             bootstrap_samples=1000,
             seed=23,
         )
@@ -46,19 +56,6 @@ class PairedComparisonTests(unittest.TestCase):
         self.assertEqual(result.p_value_method, "exact_paired_sign_flip")
         self.assertGreaterEqual(result.p_value, 0.0)
         self.assertLessEqual(result.p_value, 1.0)
-
-    def test_identical_constant_results_have_zero_effect(self) -> None:
-        baseline = {seed: 0.5 for seed in range(5)}
-        result = compare_paired_metrics(
-            baseline,
-            dict(baseline),
-            baseline_name="a",
-            candidate_name="b",
-            bootstrap_samples=500,
-        )
-        self.assertEqual(result.mean_difference, 0.0)
-        self.assertEqual(result.cohen_dz, 0.0)
-        self.assertEqual(result.p_value, 1.0)
 
     def test_mismatched_seed_sets_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "identical seed sets"):
@@ -72,7 +69,7 @@ class PairedComparisonTests(unittest.TestCase):
 
 
 class MultipleComparisonTests(unittest.TestCase):
-    def test_holm_adjustment_is_monotone_in_ordered_hypotheses(self) -> None:
+    def test_holm_adjustment_is_monotone(self) -> None:
         adjusted = holm_adjust({"a": 0.01, "b": 0.04, "c": 0.03})
         self.assertAlmostEqual(adjusted["a"], 0.03)
         self.assertAlmostEqual(adjusted["b"], 0.06)

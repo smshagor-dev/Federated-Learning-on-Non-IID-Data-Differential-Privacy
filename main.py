@@ -1,4 +1,4 @@
-"""Canonical root entry point for the single-machine research simulator.
+"""Canonical entry point for the single-machine federated-learning runtime.
 
 The distributed Go/C++/Python platform is a separate runtime documented in
 RUNTIME.md and launched through Docker Compose.
@@ -19,19 +19,18 @@ from experiment_runtime import (
     should_launch_gui,
     validate_config,
 )
-from federated.privacy_research import resolve_target_epsilon_config
+from federated.privacy_budget import resolve_target_epsilon_config
 
 
-def _enforce_research_privacy_boundaries(config: dict) -> None:
-    """Fail before execution when a privacy claim is not established."""
+def _enforce_privacy_boundaries(config: dict) -> None:
+    """Fail before execution when a requested privacy guarantee is unsupported."""
     algorithm = str(config["algorithm"]["name"]).lower()
     dp_enabled = bool(config["dp"]["enabled"])
     if dp_enabled and algorithm in {"scaffold", "all"}:
         raise ValueError(
-            "DP-enabled SCAFFOLD is disabled in the active root runtime until "
-            "the privacy effect of SCAFFOLD control-variate state/releases is "
-            "formally established. Use FedAvg/FedProx with client-level DP, "
-            "or run SCAFFOLD with DP disabled."
+            "DP-enabled SCAFFOLD is disabled in the root runtime until the privacy "
+            "effect of SCAFFOLD control-variate state/releases is formally covered. "
+            "Use FedAvg/FedProx with client-level DP, or run SCAFFOLD with DP disabled."
         )
 
 
@@ -81,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         manual_noise_override=args.noise is not None,
         warnings=warnings,
     )
-    _enforce_research_privacy_boundaries(config)
+    _enforce_privacy_boundaries(config)
     launch_gui = should_launch_gui(args, effective_argv) if argv is not None else False
     if launch_gui:
         try:
@@ -97,7 +96,9 @@ def main(argv: list[str] | None = None) -> int:
             raise
         for warning in warnings:
             print(f"WARNING: {warning}")
-        return int(launch_desktop_app(os.path.abspath(os.path.dirname(__file__)), args.config))
+        return int(
+            launch_desktop_app(os.path.abspath(os.path.dirname(__file__)), args.config)
+        )
 
     effective_config_path = write_effective_runtime_config(config)
     warnings.append(f"Effective runtime configuration archived at {effective_config_path}.")
