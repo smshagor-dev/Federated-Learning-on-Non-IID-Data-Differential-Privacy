@@ -10,6 +10,13 @@ message DatasetConfig {
   string name = 1;
   string partitioning = 2;
   double alpha = 3;
+  // Canonical partition parameters. These are additive so existing
+  // IID/Dirichlet callers keep the exact same wire representation while
+  // pathological/quantity-skew experiments can be represented without
+  // falling back to an opaque control-plane-only config.
+  uint32 classes_per_client = 4;
+  double quantity_skew_sigma = 5;
+  uint32 min_client_size = 6;
 }
 
 message ModelConfig {
