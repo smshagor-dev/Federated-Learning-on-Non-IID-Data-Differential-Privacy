@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -13,6 +14,8 @@ from federated.privacy_research import (
     epsilon_for_client_level_gaussian,
 )
 from federated.server import Server
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class PrivacyCalibrationTests(unittest.TestCase):
@@ -135,6 +138,26 @@ class ScaffoldPrivacyBoundaryTests(unittest.TestCase):
             dp_enabled=False,
         )
         self.assertEqual(server.algorithm, "scaffold")
+
+
+class ResearchContractTests(unittest.TestCase):
+    def test_runtime_contract_matches_executable_entrypoints(self) -> None:
+        runtime = (ROOT / "RUNTIME.md").read_text(encoding="utf-8")
+        main = (ROOT / "main.py").read_text(encoding="utf-8")
+        self.assertIn("python main.py", runtime)
+        self.assertIn("root-simulator", runtime)
+        self.assertIn("distributed-platform", runtime)
+        self.assertIn("from experiment_runtime import", main)
+        self.assertTrue((ROOT / "infra" / "compose" / "docker-compose.dev.yml").exists())
+
+    def test_phd_research_contract_contains_required_gates(self) -> None:
+        contract = (ROOT / "docs" / "research-correctness-contract.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("same neighboring relation", contract)
+        self.assertIn("target epsilon", contract)
+        self.assertIn("at least 5 independent seeds", contract)
+        self.assertIn("Synthetic label assignment is acceptable for unit tests", contract)
 
 
 if __name__ == "__main__":
