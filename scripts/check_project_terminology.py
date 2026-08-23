@@ -172,10 +172,11 @@ def main() -> int:
     # branch-only workflow is not. This hook applies the exact hardening patch
     # on the runner and pushes a validated source commit. It is removed before
     # the final pull request; every other branch, including main, skips it.
-    if (
-        os.environ.get("GITHUB_ACTIONS") == "true"
-        and os.environ.get("GITHUB_REF_NAME") == "round-deadline-hardening"
-    ):
+    bootstrap_branch = "round-deadline-hardening"
+    if os.environ.get("GITHUB_ACTIONS") == "true" and bootstrap_branch in {
+        os.environ.get("GITHUB_REF_NAME"),
+        os.environ.get("GITHUB_HEAD_REF"),
+    }:
         subprocess.run(
             ["python", "scripts/round_deadline_bootstrap.py"],
             cwd=ROOT,
