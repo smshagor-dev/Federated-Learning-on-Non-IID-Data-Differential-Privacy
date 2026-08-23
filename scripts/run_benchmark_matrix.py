@@ -2,8 +2,9 @@
 """Run repeatable multi-seed benchmarks against the real root FL runtime.
 
 Each benchmark cell launches ``main.py --cli`` in a fresh process and writes its
-own effective config, logs, exact client partition, round metrics, and machine
-summary. Completed cells can be resumed without rerunning them.
+own effective config, logs, exact client partition, round metrics, held-out
+client metrics, and machine summary. Completed cells can be resumed without
+rerunning them.
 """
 
 from __future__ import annotations
@@ -323,6 +324,28 @@ def _observations_from_summary(
         "fraction_clients_clipped": run.get("mean_fraction_clipped"),
         "aggregate_noise_norm": run.get("mean_aggregate_noise_norm"),
     }
+    client_evaluation = run.get("client_evaluation") or {}
+    metrics.update(
+        {
+            "mean_client_accuracy": client_evaluation.get("mean_client_accuracy"),
+            "weighted_client_accuracy": client_evaluation.get(
+                "weighted_client_accuracy"
+            ),
+            "median_client_accuracy": client_evaluation.get(
+                "median_client_accuracy"
+            ),
+            "p10_client_accuracy": client_evaluation.get("p10_client_accuracy"),
+            "worst_client_accuracy": client_evaluation.get("worst_client_accuracy"),
+            "best_client_accuracy": client_evaluation.get("best_client_accuracy"),
+            "client_accuracy_std": client_evaluation.get("client_accuracy_std"),
+            "client_accuracy_range": client_evaluation.get("client_accuracy_range"),
+            "jain_accuracy_index": client_evaluation.get("jain_accuracy_index"),
+            "mean_client_loss": client_evaluation.get("mean_client_loss"),
+            "weighted_client_loss": client_evaluation.get("weighted_client_loss"),
+            "p90_client_loss": client_evaluation.get("p90_client_loss"),
+            "worst_client_loss": client_evaluation.get("worst_client_loss"),
+        }
+    )
     if cell.target_epsilon is not None:
         metrics["final_epsilon"] = run.get("final_epsilon")
 
@@ -390,9 +413,7 @@ def main() -> int:
         },
     )
 
-    cells = list(
-        plan.expand(minimum_replicates=int(args.minimum_replicates))
-    )
+    cells = list(plan.expand(minimum_replicates=int(args.minimum_replicates)))
     if args.max_cells is not None:
         if args.max_cells <= 0:
             raise ValueError("max_cells must be > 0")
