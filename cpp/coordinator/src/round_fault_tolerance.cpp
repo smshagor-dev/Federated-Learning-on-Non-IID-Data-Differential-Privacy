@@ -118,8 +118,17 @@ bool RunInstance::enforce_round_fault_tolerance(double now_unix_s) {
         return false;
     }
 
-    if (config_.minimum_valid_results == 0 ||
-        config_.minimum_valid_results > config_.target_clients_per_round) {
+    const auto path = deadline_path(checkpoint_directory_, config_.run_id);
+    auto persisted = load_deadline_record(path);
+
+    // The sidecar carries the operator-requested minimum across rounds after
+    // this watchdog raises config_.minimum_valid_results to the full target to
+    // neutralize the legacy advance() early-finalization interpretation.
+    const std::uint32_t requested_minimum =
+        persisted.has_value() && persisted->run_id == config_.run_id
+            ? persisted->minimum_valid_results
+            : config_.minimum_valid_results;
+    if (requested_minimum == 0 || requested_minimum > config_.target_clients_per_round) {
         transition(fl::core::RunState::kFailed,
                    "invalid minimum_valid_results for selected cohort",
                    now_unix_s);
@@ -129,8 +138,6 @@ bool RunInstance::enforce_round_fault_tolerance(double now_unix_s) {
         return true;
     }
 
-    const auto path = deadline_path(checkpoint_directory_, config_.run_id);
-    auto persisted = load_deadline_record(path);
     DeadlineRecord deadline;
     if (persisted.has_value() && persisted->run_id == config_.run_id &&
         persisted->round_id == current_round_id_) {
@@ -141,19 +148,8 @@ bool RunInstance::enforce_round_fault_tolerance(double now_unix_s) {
         deadline.started_at_unix_s = now_unix_s;
         deadline.deadline_at_unix_s =
             now_unix_s + static_cast<double>(config_.round_timeout_seconds);
-        deadline.minimum_valid_results = config_.minimum_valid_results;
+        deadline.minimum_valid_results = requested_minimum;
         persist_deadline_record(path, deadline);
-    }
-
-    if (deadline.minimum_valid_results == 0 ||
-        deadline.minimum_valid_results > config_.target_clients_per_round) {
-        transition(fl::core::RunState::kFailed,
-                   "persisted minimum_valid_results is invalid for selected cohort",
-                   now_unix_s);
-        emit(CoordinatorEventType::kRunFailed,
-             "persisted minimum_valid_results is invalid for selected cohort",
-             now_unix_s);
-        return true;
     }
 
     round_started_at_unix_s_ = deadline.started_at_unix_s;
@@ -255,13 +251,14 @@ RoundFaultToleranceSnapshot RunInstance::round_fault_tolerance_snapshot(double n
 
     const auto path = deadline_path(checkpoint_directory_, config_.run_id);
     if (auto persisted = load_deadline_record(path);
-        persisted.has_value() && persisted->round_id == current_round_id_ &&
-        persisted->run_id == config_.run_id) {
+        persisted.has_value() && persisted->run_id == config_.run_id) {
         snapshot.minimum_valid_results = persisted->minimum_valid_results;
-        snapshot.round_started_at_unix_s = persisted->started_at_unix_s;
-        snapshot.round_deadline_at_unix_s = persisted->deadline_at_unix_s;
-        snapshot.timed_out_clients = persisted->timed_out_clients.size();
-        snapshot.deadline_reached = now_unix_s >= persisted->deadline_at_unix_s;
+        if (persisted->round_id == current_round_id_) {
+            snapshot.round_started_at_unix_s = persisted->started_at_unix_s;
+            snapshot.round_deadline_at_unix_s = persisted->deadline_at_unix_s;
+            snapshot.timed_out_clients = persisted->timed_out_clients.size();
+            snapshot.deadline_reached = now_unix_s >= persisted->deadline_at_unix_s;
+        }
     }
     return snapshot;
 }
