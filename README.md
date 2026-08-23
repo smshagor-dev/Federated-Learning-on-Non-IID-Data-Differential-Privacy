@@ -1,6 +1,6 @@
 # Federated Learning on Non-IID Data with Differential Privacy
 
-A multi-language federated-learning platform for training and benchmarking models across heterogeneous client data with differential privacy, deterministic partitioning, reproducible artifacts, and distributed-service components.
+A multi-language federated-learning platform for training and benchmarking models across heterogeneous client data with differential privacy, deterministic partitioning, held-out client evaluation, reproducible artifacts, and distributed-service components.
 
 ![Python](https://img.shields.io/badge/Python-PyTorch-3776AB?style=for-the-badge&logo=python)
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=cplusplus)
@@ -11,21 +11,23 @@ A multi-language federated-learning platform for training and benchmarking model
 [![CI](https://github.com/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy?style=flat-square)](LICENSE)
 
-## What the Project Provides
+## Platform Overview
 
 The repository contains two explicit execution paths:
 
-1. **Root runtime** — a single-machine federated-learning workflow for real MNIST/CIFAR-10 training, client partitioning, FedAvg/FedProx/SCAFFOLD, differential privacy, metrics, plots, manifests, and repeatable benchmark runs.
-2. **Distributed platform** — Go API/control-plane services, a C++ coordinator, Python workers, gRPC/Protocol Buffers, security components, persistence, observability, and Docker Compose infrastructure.
+1. **Root runtime** — single-machine federated orchestration for real torchvision datasets, heterogeneous client partitioning, FedAvg/FedProx/SCAFFOLD, client-level DP, held-out per-client evaluation, plots, manifests, checkpoints, and multi-seed benchmark matrices.
+2. **Distributed platform** — Go API/control-plane services, a C++ coordinator, Python workers, gRPC/Protocol Buffers, persistence, security components, observability, and Docker Compose infrastructure.
 
-The two paths share concepts but are not treated as identical. See [RUNTIME.md](RUNTIME.md) for the exact runtime boundary.
+The two paths are separate runtime identities. See [RUNTIME.md](RUNTIME.md) for the source-of-truth boundary.
 
-### Root runtime capabilities
+## Root Runtime Capabilities
 
 | Capability | Status |
 |---|---|
 | MNIST | Supported |
+| FashionMNIST | Supported |
 | CIFAR-10 | Supported |
+| CIFAR-100 | Supported |
 | IID partition | Supported |
 | Dirichlet label skew | Supported |
 | Pathological class skew | Supported |
@@ -38,44 +40,48 @@ The two paths share concepts but are not treated as identical. See [RUNTIME.md](
 | RDP accounting | Supported |
 | Poisson client sampling | Supported |
 | Fixed-size client sampling | Supported when DP is disabled |
-| Exact partition index archival | Supported |
-| Per-round CSV metrics | Supported |
+| Exact training partition archival | Supported |
+| Final model checkpoints | Supported |
+| Matched held-out client partition | Supported |
+| Per-client accuracy/loss metrics | Supported |
+| Worst-client and p10 metrics | Supported |
+| Jain fairness metric | Supported |
 | Machine-readable JSON summaries | Supported |
 | Multi-seed benchmark matrix | Supported |
 | Bootstrap confidence intervals | Supported |
 | Matched-seed algorithm comparison | Supported |
 | PySide6 desktop UI | Supported |
 
-## Architecture
+## Root Architecture
 
 ```text
-                         +----------------------+
-                         |      main.py         |
-                         +----------+-----------+
-                                    |
-                         +----------v-----------+
-                         | experiment_runtime.py|
-                         +----+-------------+---+
-                              |             |
-                    +---------v--+       +--v----------------+
-                    | data/      |       | federated/        |
-                    | partitioner|       | client + server   |
-                    +------+-----+       +--------+----------+
-                           |                      |
-                    +------v------+       +-------v-----------+
-                    | MNIST /     |       | FedAvg / FedProx  |
-                    | CIFAR-10    |       | / SCAFFOLD        |
-                    +-------------+       +-------+-----------+
-                                                  |
-                                         +--------v-----------+
-                                         | clipping + DP +    |
-                                         | RDP accounting     |
-                                         +--------+-----------+
-                                                  |
-                                         +--------v-----------+
-                                         | metrics / manifests|
-                                         | CSV / JSON / plots |
-                                         +--------------------+
+main.py
+  |
+  +--> config + runtime validation
+  |
+  +--> experiment_runtime.py
+  |      |
+  |      +--> data/partitioner.py
+  |      |      +--> MNIST / FashionMNIST / CIFAR-10 / CIFAR-100
+  |      |      +--> IID / Dirichlet / pathological / quantity skew
+  |      |
+  |      +--> federated/client.py
+  |      +--> federated/server.py
+  |      |      +--> FedAvg / FedProx / SCAFFOLD
+  |      |      +--> clipping / central Gaussian noise
+  |      |
+  |      +--> RDP accountant
+  |      +--> per-round metrics + plots + training partition artifacts
+  |
+  +--> final global-model checkpoint
+  |
+  +--> matched held-out client partition
+  |      +--> official test split only
+  |      +--> label proportions derived from training clients
+  |
+  +--> per-client accuracy/loss + fairness metrics
+  |
+  +--> summary.md + summary.json
 ```
 
 Distributed path:
@@ -106,7 +112,7 @@ Prometheus, Grafana, OpenTelemetry
 - Git
 - PyTorch-compatible CPU or GPU environment
 - Docker Desktop / Docker Engine for the distributed stack
-- CMake and C++20 toolchain when building native components directly
+- CMake and a C++20 toolchain for native components
 - Go toolchain for direct control-plane development
 
 ### Clone
@@ -131,13 +137,15 @@ pip install -r requirements.txt
 python main.py
 ```
 
+The desktop launches the same `main.py --cli --config ...` runtime used by terminal runs.
+
 ### CLI
 
 ```bash
 python main.py --cli
 ```
 
-### Example: FedAvg on MNIST without DP
+### MNIST + FedAvg + IID
 
 ```bash
 python main.py --cli \
@@ -147,7 +155,29 @@ python main.py --cli \
   --dp off
 ```
 
-### Example: FedProx with Dirichlet label skew and DP
+### FashionMNIST + FedProx + Dirichlet skew
+
+```bash
+python main.py --cli \
+  --dataset FASHIONMNIST \
+  --algo fedprox \
+  --partition dirichlet \
+  --alpha 0.1 \
+  --dp off
+```
+
+### CIFAR-100 + quantity skew
+
+```bash
+python main.py --cli \
+  --dataset CIFAR100 \
+  --algo fedavg \
+  --partition quantity_skew \
+  --quantity-skew-sigma 1.5 \
+  --dp off
+```
+
+### CIFAR-10 + FedProx + client-level DP
 
 ```bash
 python main.py --cli \
@@ -159,31 +189,22 @@ python main.py --cli \
   --rounds 50
 ```
 
-### Example: quantity skew
+## Datasets
 
-```bash
-python main.py --cli \
-  --dataset MNIST \
-  --algo fedavg \
-  --partition quantity_skew \
-  --quantity-skew-sigma 1.5 \
-  --dp off
-```
+The root runtime uses official torchvision train/test splits.
 
-### Example: pathological class skew
+| Dataset | Train samples | Test samples | Classes | Input channels |
+|---|---:|---:|---:|---:|
+| MNIST | 60,000 | 10,000 | 10 | 1 |
+| FashionMNIST | 60,000 | 10,000 | 10 | 1 |
+| CIFAR-10 | 50,000 | 10,000 | 10 | 3 |
+| CIFAR-100 | 50,000 | 10,000 | 100 | 3 |
 
-```bash
-python main.py --cli \
-  --dataset CIFAR10 \
-  --algo fedprox \
-  --partition pathological \
-  --classes-per-client 2 \
-  --dp off
-```
+MNIST and FashionMNIST are resized to `32x32`, allowing the same GroupNorm CNN family to be used across all four root datasets. The classifier output dimension is selected from the dataset class count.
 
-## Data Partitioning
+## Training Client Partitioning
 
-The root runtime partitions the actual training split loaded by torchvision.
+Training partitions are created only from the dataset training split.
 
 ### IID
 
@@ -191,9 +212,7 @@ All sample indices are shuffled with the configured seed and divided across clie
 
 ### Dirichlet label skew
 
-For every class, client proportions are drawn from a Dirichlet distribution.
-
-Smaller `alpha` values create stronger label concentration. For example:
+For every class, client proportions are sampled from a Dirichlet distribution.
 
 ```yaml
 data:
@@ -201,9 +220,11 @@ data:
   alpha: 0.1
 ```
 
+Smaller `alpha` values produce stronger realized label concentration.
+
 ### Pathological class skew
 
-Samples are sorted by label, divided into shards, and assigned so each client receives a small number of class-dominated shards.
+Samples are ordered by label, divided into shards, and assigned so clients receive a restricted class subset.
 
 ```yaml
 data:
@@ -213,7 +234,7 @@ data:
 
 ### Quantity skew
 
-Client sizes are drawn from log-normal weights while sample assignment remains label-agnostic.
+Client sample counts follow log-normal allocation weights while sample assignment remains label-agnostic.
 
 ```yaml
 data:
@@ -221,11 +242,11 @@ data:
   quantity_skew_sigma: 1.0
 ```
 
-Every strategy enforces `min_partition_size` and produces deterministic client assignments for a fixed dataset and seed.
+Every strategy is deterministic for a fixed dataset/configuration/seed and enforces the configured minimum client size.
 
-## Exact Partition Artifacts
+## Training Partition Artifacts
 
-Every CLI run writes the concrete partition used by training:
+Every root CLI run writes the exact client assignment:
 
 ```text
 results/partition/partition_indices.npz
@@ -235,29 +256,75 @@ results/partition/partition_manifest.json
 The manifest includes:
 
 - dataset name
-- partition strategy
-- partition parameters
+- strategy and parameters
 - partition seed
 - exact partition SHA-256
 - client sample counts
 - per-client label histograms
-- realized quantity skew
+- quantity coefficient of variation
 - normalized label entropy
 - Jensen-Shannon divergence to the global distribution
 - class coverage
 - effective label count
 
-This means a configured value such as `alpha=0.1` is not the only evidence retained; the actual realized split is also recorded.
+The concrete realized split is therefore retained independently of configuration labels such as `alpha=0.1`.
+
+## Held-out Client Evaluation
+
+Global test accuracy alone can hide large differences between clients. After training finishes, the root runtime evaluates the final global model separately for every client using only held-out test data.
+
+### How the evaluation split is constructed
+
+1. The official test split is loaded.
+2. For each class, the runtime measures how that class was distributed across training clients.
+3. Test examples of that class are allocated across clients using the same realized proportions.
+4. Integer allocation is deterministic.
+5. Every test example is assigned exactly once.
+6. No test example is duplicated.
+7. Every client receives at least one held-out sample when the test set is large enough; minimal deterministic redistribution is used only when proportional rounding would leave a client empty.
+
+This produces a client-level held-out view that follows the concrete heterogeneity of the training population without reusing training examples.
+
+### Client metrics
+
+For each final global model the runtime reports:
+
+- mean client accuracy
+- weighted client accuracy
+- median client accuracy
+- p10 client accuracy
+- worst-client accuracy
+- best-client accuracy
+- client-accuracy standard deviation
+- client-accuracy range
+- Jain accuracy index
+- mean client loss
+- weighted client loss
+- p90 client loss
+- worst-client loss
+
+The weighted client accuracy is checked against the global test accuracy because the client evaluation partitions form an exact non-overlapping cover of the same official test set.
+
+### Evaluation artifacts
+
+```text
+results/checkpoints/global_model_<algorithm>.pt
+results/evaluation_partition/partition_indices.npz
+results/evaluation_partition/partition_manifest.json
+results/client_evaluation_<algorithm>.csv
+```
+
+`summary.json` embeds the aggregated client metrics and references the concrete artifacts.
 
 ## Federated Algorithms
 
 ### FedAvg
 
-Selected clients train from the global model and return local model deltas. The server aggregates the updates into the next global model.
+Selected clients train from the global model and return local model deltas. The server aggregates their contributions into the next global model.
 
 ### FedProx
 
-FedProx adds a proximal term that penalizes local movement away from the current global model. The coefficient is configured through:
+FedProx adds a proximal term that limits local movement away from the current global model.
 
 ```yaml
 algorithm:
@@ -269,24 +336,22 @@ algorithm:
 
 SCAFFOLD uses control variates to reduce client drift. It is available in the root runtime when client-level DP is disabled.
 
-DP-enabled SCAFFOLD fails before execution because the current client-level privacy guarantee does not cover the additional control-variate state/release path.
+DP-enabled SCAFFOLD fails before execution because the current client-level privacy mechanism does not cover the additional control-variate state/release path.
 
 ## Differential Privacy
 
 The root private path uses trusted-server client-level central DP.
 
-For each selected client update:
+For each released communication round:
 
-1. compute the complete update delta;
-2. apply a global L2 clipping bound `C`;
-3. aggregate clipped client contributions;
-4. add central Gaussian noise;
-5. account privacy loss across released rounds with RDP;
-6. convert the accumulated RDP value to `(epsilon, delta)`.
+1. selected client updates are computed;
+2. complete client updates are clipped to a global L2 bound `C`;
+3. clipped contributions are aggregated;
+4. central Gaussian noise is applied;
+5. RDP is accumulated across rounds;
+6. RDP is converted to `(epsilon, delta)`.
 
 ### Target epsilon
-
-The default configuration can specify a privacy target:
 
 ```yaml
 dp:
@@ -296,9 +361,9 @@ dp:
   target_delta: 1.0e-5
 ```
 
-`main.py` recalibrates the Gaussian noise multiplier after runtime overrides are applied. Changing `--rounds` therefore does not silently reuse a noise multiplier calibrated for a different number of releases.
+`main.py` recalibrates the Gaussian noise multiplier after runtime overrides are applied. Changing the number of rounds therefore does not silently reuse a sigma calibrated for a different release count.
 
-The final effective values are archived in:
+The actual runtime parameters are archived in:
 
 ```text
 results/_effective_runtime_config.yaml
@@ -320,24 +385,24 @@ python scripts/calibrate_client_level_dp.py \
 python main.py --cli --noise 3.0
 ```
 
-When `--noise` is provided explicitly, the effective configuration clears `target_epsilon`. This prevents the output from implying that the target budget was enforced when the user manually selected sigma.
+When `--noise` is explicitly supplied, the effective configuration clears `target_epsilon` so the output does not imply that a target budget was enforced.
 
 ## Benchmark Matrix
 
-The repository includes a real multi-process benchmark runner. It does not fabricate benchmark values; each cell invokes `main.py --cli` and consumes the resulting `summary.json`.
+The benchmark runner invokes the actual root runtime in a separate process for each benchmark cell.
 
-### Inspect a benchmark plan
+### Plan only
 
 ```bash
 python scripts/run_benchmark_matrix.py --dry-run
 ```
 
-### Execute a benchmark
+### Execute
 
 ```bash
 python scripts/run_benchmark_matrix.py \
-  --benchmark-id mnist-fedavg-fedprox \
-  --datasets MNIST \
+  --benchmark-id multi-dataset-baseline \
+  --datasets MNIST,FASHIONMNIST,CIFAR10,CIFAR100 \
   --algorithms fedavg,fedprox \
   --partitions iid,dirichlet:0.1,quantity_skew:1.0 \
   --epsilons none,2,4,8 \
@@ -346,19 +411,20 @@ python scripts/run_benchmark_matrix.py \
   --resume
 ```
 
-Each benchmark condition requires at least five unique seeds by default.
+A benchmark condition requires at least five unique seeds by default.
 
 The aggregation layer provides:
 
-- mean
-- sample standard deviation
+- mean and sample standard deviation
 - median/min/max
 - deterministic percentile-bootstrap confidence intervals
 - matched-seed differences
 - Cohen's `dz`
 - paired sign-flip tests
 - Holm-Bonferroni adjusted p-values
-- exact per-seed partition-hash matching before algorithm comparison
+- exact per-seed training-partition hash verification
+
+Benchmark observations include global utility, runtime cost, privacy values, client drift, clipping behavior, and held-out client tail/fairness metrics.
 
 ### Benchmark output
 
@@ -381,16 +447,19 @@ benchmarks/runs/<benchmark-id>/
             ├── partition/
             │   ├── partition_indices.npz
             │   └── partition_manifest.json
+            ├── evaluation_partition/
+            │   ├── partition_indices.npz
+            │   └── partition_manifest.json
+            ├── checkpoints/
+            │   └── global_model_<algorithm>.pt
             ├── client_distribution.csv
+            ├── client_evaluation_<algorithm>.csv
             ├── run_<algorithm>.csv
             ├── summary.md
-            ├── summary.json
-            └── plots
+            └── summary.json
 ```
 
 ## Root Run Artifacts
-
-A normal CLI execution writes:
 
 ```text
 results/
@@ -398,7 +467,13 @@ results/
 ├── partition/
 │   ├── partition_indices.npz
 │   └── partition_manifest.json
+├── evaluation_partition/
+│   ├── partition_indices.npz
+│   └── partition_manifest.json
+├── checkpoints/
+│   └── global_model_<algorithm>.pt
 ├── client_distribution.csv
+├── client_evaluation_<algorithm>.csv
 ├── distribution.png
 ├── run_<algorithm>.csv
 ├── summary.md
@@ -406,32 +481,11 @@ results/
 └── generated plots
 ```
 
-`summary.json` is the machine-readable interface used by the benchmark runner.
-
-## Metrics
-
-The root runtime tracks metrics such as:
-
-- global test accuracy
-- global test loss
-- cohort size
-- participation rate
-- average client loss
-- raw client drift
-- clipped client drift
-- mean unclipped update norm
-- mean clipping factor
-- fraction of clients clipped
-- aggregate noise norm
-- client-model weight variance
-- current epsilon for private runs
-- wall-clock duration
+`summary.json` is the machine-readable interface consumed by the benchmark runner.
 
 ## Configuration
 
-The main configuration file is [config.yaml](config.yaml).
-
-Key sections:
+Main configuration: [config.yaml](config.yaml)
 
 ```yaml
 system:
@@ -466,6 +520,9 @@ dp:
   update_clip_norm: 1.5
   target_epsilon: 4.0
   target_delta: 1.0e-5
+
+evaluation:
+  eval_batch_size: 256
 ```
 
 ## Distributed Platform
@@ -476,7 +533,7 @@ Start the development stack with:
 docker compose -f infra/compose/docker-compose.dev.yml up --build
 ```
 
-The stack contains project services and supporting infrastructure including:
+The stack contains:
 
 - C++ gRPC coordinator
 - Go API/control plane
@@ -491,20 +548,21 @@ The stack contains project services and supporting infrastructure including:
 - Grafana
 - OpenTelemetry Collector
 
-The distributed path includes additional algorithm, privacy, security, identity, event, registry, and secure-aggregation components that are separate from the root runtime.
+Distributed-service capabilities remain separate from the single-machine root runtime unless explicit parity validation exists.
 
 ## Validation
 
-### Root tests
+### Root + Python tests
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
+python -m pytest tests python/tests
 ```
 
-### Python package tests
+### Ruff
 
 ```bash
-python -m pytest python/tests -q
+python -m ruff check .
+python -m ruff format --check .
 ```
 
 ### Go
@@ -530,13 +588,13 @@ ctest --test-dir build/cpp --output-on-failure
 python scripts/validate_repository_docs.py
 ```
 
-The GitHub Actions workflow also runs linting, formatting, type checks, native builds, sanitizers, protobuf checks, PKI verification, secret scanning, infrastructure validation, and security-runtime checks.
+GitHub Actions also runs native builds, formatting/type checks, sanitizers, protobuf validation, PKI verification, secret scanning, infrastructure validation, and security-runtime checks.
 
 ## Privacy and Security Boundaries
 
-Differential privacy guarantees depend on the exact adjacency definition, sampling model, clipping bound, noise multiplier, number of releases, weighting assumptions, and accountant implementation.
+Differential privacy guarantees depend on the exact adjacency definition, client-sampling model, clipping bound, noise multiplier, number of releases, weighting assumptions, and accountant implementation.
 
-Secure aggregation is not a general defense against malicious participants. In particular, it does not automatically prevent:
+Secure aggregation is not, by itself, a defense against:
 
 - model poisoning
 - Byzantine behavior
@@ -544,9 +602,9 @@ Secure aggregation is not a general defense against malicious participants. In p
 - Sybil clients
 - a fully compromised coordinator
 
-The project does not claim formal security certification, regulatory compliance, or a validated Internet-scale deployment.
+The project does not claim formal security certification, regulatory compliance, or validated Internet-scale deployment.
 
-See [docs/runtime-correctness.md](docs/runtime-correctness.md) for the enforced execution and benchmark boundaries.
+See [docs/runtime-correctness.md](docs/runtime-correctness.md) for enforced runtime and benchmark boundaries.
 
 ## Project Layout
 
@@ -559,6 +617,9 @@ See [docs/runtime-correctness.md](docs/runtime-correctness.md) for the enforced 
 ├── federated/
 ├── models/
 ├── utils/
+│   ├── client_evaluation.py
+│   ├── metrics.py
+│   └── partition_metrics.py
 ├── desktop/
 ├── python/
 │   └── src/fl_platform/
@@ -579,8 +640,8 @@ See [docs/runtime-correctness.md](docs/runtime-correctness.md) for the enforced 
 
 - The root runtime is single-machine orchestration rather than a real cross-device network deployment.
 - Root client-level DP currently supports FedAvg and FedProx, not SCAFFOLD.
-- The real root dataset set is currently MNIST and CIFAR-10.
-- IID, label skew, class skew and quantity skew are implemented in the root runtime; feature/covariate shift is not yet a root partition strategy.
+- IID, label skew, class skew, and quantity skew are implemented in the root runtime; feature/covariate shift is not yet a root partition strategy.
+- The desktop exposes the expanded dataset and partition choices; advanced quantity-skew tuning remains available through YAML/CLI configuration.
 - Secure aggregation and additional personalization algorithms use separate platform paths.
 - Production-scale orchestration and external security certification are not claimed.
 
