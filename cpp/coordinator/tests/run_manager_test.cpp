@@ -119,9 +119,10 @@ void run_round_runtime_hardening_tests() {
                                        106.0,
                                        reason),
               "round runtime: final cohort result accepted");
+        run.advance(106.0);
         check(run.snapshot().state == fl::core::RunState::kCompleted &&
                   run.snapshot().model_version == "v1",
-              "round runtime: full cohort finalizes before deadline");
+              "round runtime: full cohort finalizes on the next coordinator tick before deadline");
     }
 
     {
