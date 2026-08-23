@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import json
 import os
-from pathlib import Path
 from typing import Mapping
 
 import numpy as np
@@ -40,8 +39,6 @@ def _load_training_partition(path: str) -> dict[int, np.ndarray]:
 
 
 def _load_checkpoint(path: str) -> Mapping[str, torch.Tensor]:
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"global model checkpoint not found: {path}")
     try:
         checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     except TypeError:
@@ -82,6 +79,36 @@ def _append_client_table(summary_path: str, algorithm_rows: list[dict[str, objec
                 f"| {float(row['client_accuracy_std']):.4f} "
                 f"| {float(row['jain_accuracy_index']):.4f} |\n"
             )
+
+
+def _build_final_model(
+    *,
+    checkpoint_path: str,
+    config: dict,
+    num_classes: int,
+    in_channels: int,
+):
+    if not os.path.isfile(checkpoint_path):
+        # A missing checkpoint is valid only when every Poisson cohort was empty;
+        # in that case the final model is exactly the seeded initial model.
+        from experiment_runtime import set_seed
+
+        set_seed(int(config["system"]["seed"]))
+        return build_model(
+            str(config["model"]["name"]),
+            num_classes=num_classes,
+            in_channels=in_channels,
+            group_norm_groups=int(config["model"]["group_norm_groups"]),
+        )
+
+    model = build_model(
+        str(config["model"]["name"]),
+        num_classes=num_classes,
+        in_channels=in_channels,
+        group_norm_groups=int(config["model"]["group_norm_groups"]),
+    )
+    model.load_state_dict(_load_checkpoint(checkpoint_path), strict=True)
+    return model
 
 
 def evaluate_completed_run(config: dict) -> dict[str, object]:
@@ -140,13 +167,12 @@ def evaluate_completed_run(config: dict) -> dict[str, object]:
         checkpoint_path = os.path.join(
             results_dir, "checkpoints", f"global_model_{algorithm}.pt"
         )
-        model = build_model(
-            str(config["model"]["name"]),
+        model = _build_final_model(
+            checkpoint_path=checkpoint_path,
+            config=config,
             num_classes=num_classes,
             in_channels=in_channels,
-            group_norm_groups=int(config["model"]["group_norm_groups"]),
         )
-        model.load_state_dict(_load_checkpoint(checkpoint_path), strict=True)
         client_rows, client_summary = evaluate_client_partitions(
             model,
             test_set,
@@ -170,7 +196,7 @@ def evaluate_completed_run(config: dict) -> dict[str, object]:
         run["client_evaluation"] = {
             **summary_dict,
             "client_metrics_csv": client_csv,
-            "checkpoint": checkpoint_path,
+            "checkpoint": checkpoint_path if os.path.isfile(checkpoint_path) else None,
         }
         evaluation_rows.append({"algorithm": algorithm, **summary_dict})
 
