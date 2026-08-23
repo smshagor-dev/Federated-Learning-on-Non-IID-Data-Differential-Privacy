@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
 )
@@ -119,6 +120,39 @@ func TestCoordinatorConfigFromEnvRejectsUnrecognizedMode(t *testing.T) {
 			t.Fatal("expected an error for an unrecognized FL_TRANSPORT_MODE value")
 		}
 	})
+}
+
+func TestExecutionReconcileIntervalDefaultsToTwoSeconds(t *testing.T) {
+	t.Setenv("FL_EXECUTION_RECONCILE_INTERVAL", "")
+	interval, err := executionReconcileIntervalFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if interval != 2*time.Second {
+		t.Fatalf("interval=%s, want 2s", interval)
+	}
+}
+
+func TestExecutionReconcileIntervalAcceptsDurationOverride(t *testing.T) {
+	t.Setenv("FL_EXECUTION_RECONCILE_INTERVAL", "750ms")
+	interval, err := executionReconcileIntervalFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if interval != 750*time.Millisecond {
+		t.Fatalf("interval=%s, want 750ms", interval)
+	}
+}
+
+func TestExecutionReconcileIntervalRejectsInvalidValues(t *testing.T) {
+	for _, value := range []string{"not-a-duration", "0s", "-1s"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("FL_EXECUTION_RECONCILE_INTERVAL", value)
+			if _, err := executionReconcileIntervalFromEnv(); err == nil {
+				t.Fatalf("expected %q to be rejected", value)
+			}
+		})
+	}
 }
 
 // Sanity check that the coordinator package's own transport mode

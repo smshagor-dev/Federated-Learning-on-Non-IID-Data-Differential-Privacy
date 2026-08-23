@@ -33,7 +33,11 @@ def checkpoint_config(tmp_path: Path) -> dict:
             "sampling_strategy": "poisson",
             "aggregation_weighting": "uniform",
         },
-        "dp": {"enabled": True, "noise_multiplier": 1.2, "target_delta": 1e-5},
+        "dp": {
+            "enabled": True,
+            "noise_multiplier": 1.2,
+            "target_delta": 1e-5,
+        },
         "evaluation": {"eval_batch_size": 32},
         "execution_control": {"resume": False, "checkpoint_path": "ignored"},
     }
@@ -115,8 +119,14 @@ def test_checkpoint_restores_next_random_draws_and_accountant(tmp_path: Path) ->
     assert restored.elapsed_sec == pytest.approx(12.5)
     assert restored_server.round_count == 3
     assert restored_accountant.steps == 3
-    assert torch.allclose(restored_server.model.weight, torch.full_like(restored_server.model.weight, 2.5))
-    assert torch.allclose(restored_server.model.bias, torch.full_like(restored_server.model.bias, -0.75))
+    assert torch.allclose(
+        restored_server.model.weight,
+        torch.full_like(restored_server.model.weight, 2.5),
+    )
+    assert torch.allclose(
+        restored_server.model.bias,
+        torch.full_like(restored_server.model.bias, -0.75),
+    )
     assert restored_sampler.random() == pytest.approx(expected_sampler)
     assert random.random() == pytest.approx(expected_python)
     assert float(np.random.random()) == pytest.approx(expected_numpy)
@@ -149,7 +159,9 @@ def test_checkpoint_rejects_configuration_mismatch(tmp_path: Path) -> None:
             checkpoint,
             config=changed,
             algorithm="fedavg",
-            server=new_fedavg_server(torch.Generator(device="cpu").manual_seed(3)),
+            server=new_fedavg_server(
+                torch.Generator(device="cpu").manual_seed(3)
+            ),
             sampler=random.Random(4),
             privacy_generator=torch.Generator(device="cpu").manual_seed(5),
             accountant=MomentsAccountant(1.2, 0.5, 1e-5),

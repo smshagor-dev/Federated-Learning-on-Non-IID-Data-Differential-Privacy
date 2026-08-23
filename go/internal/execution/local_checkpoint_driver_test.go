@@ -2,6 +2,8 @@ package execution
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -129,8 +131,17 @@ func TestCheckpointLocalDriverHelperProcess(t *testing.T) {
 	for {
 		if _, err := os.Stat(pausePath); err == nil {
 			checkpointPath := filepath.Join(controlDir, "runtime-checkpoint.pt")
-			if err := os.WriteFile(checkpointPath, []byte("checkpoint\n"), 0o600); err != nil {
+			checkpointBytes := []byte("checkpoint\n")
+			if err := os.WriteFile(checkpointPath, checkpointBytes, 0o600); err != nil {
 				os.Exit(7)
+			}
+			digest := sha256.Sum256(checkpointBytes)
+			if err := os.WriteFile(
+				checkpointPath+".sha256",
+				[]byte(hex.EncodeToString(digest[:])+"\n"),
+				0o600,
+			); err != nil {
+				os.Exit(8)
 			}
 			marker := localPausedMarker{
 				SchemaVersion:   1,
@@ -141,15 +152,15 @@ func TestCheckpointLocalDriverHelperProcess(t *testing.T) {
 			}
 			markerBytes, marshalErr := json.Marshal(marker)
 			if marshalErr != nil {
-				os.Exit(8)
+				os.Exit(9)
 			}
 			if err := os.WriteFile(filepath.Join(controlDir, "paused.json"), append(markerBytes, '\n'), 0o600); err != nil {
-				os.Exit(9)
+				os.Exit(10)
 			}
 			os.Exit(localPausedExitCode)
 		}
 		if time.Now().After(deadline) {
-			os.Exit(10)
+			os.Exit(11)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

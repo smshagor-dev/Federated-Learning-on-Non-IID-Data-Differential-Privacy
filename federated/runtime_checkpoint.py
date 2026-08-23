@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import hmac
 import json
 import os
 import random
@@ -14,7 +15,8 @@ from typing import Any
 import numpy as np
 import torch
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+_CHECKPOINT_DIGEST_SUFFIX = ".sha256"
 
 
 class CheckpointError(RuntimeError):
@@ -39,6 +41,71 @@ def config_fingerprint(config: dict[str, Any]) -> str:
         ensure_ascii=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def checkpoint_digest_path(path: str | os.PathLike[str]) -> Path:
+    target = Path(path).resolve()
+    return target.with_name(target.name + _CHECKPOINT_DIGEST_SUFFIX)
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _verify_checkpoint_digest(target: Path) -> None:
+    digest_path = checkpoint_digest_path(target)
+    if not digest_path.is_file():
+        raise CheckpointError(f"runtime checkpoint digest is missing: {digest_path}")
+    expected = digest_path.read_text(encoding="utf-8").strip().lower()
+    if len(expected) != 64 or any(character not in "0123456789abcdef" for character in expected):
+        raise CheckpointError("runtime checkpoint digest file is malformed")
+    actual = _file_sha256(target)
+    if not hmac.compare_digest(actual, expected):
+        raise CheckpointError("runtime checkpoint SHA-256 digest mismatch")
+
+
+def _numpy_state_to_payload(state: tuple[Any, ...]) -> dict[str, Any]:
+    if len(state) != 5:
+        raise ValueError("unexpected NumPy random state shape")
+    bit_generator, keys, position, has_gauss, cached_gaussian = state
+    key_array = np.asarray(keys, dtype=np.uint32)
+    return {
+        "bit_generator": str(bit_generator),
+        "keys": [int(value) for value in key_array.tolist()],
+        "position": int(position),
+        "has_gauss": int(has_gauss),
+        "cached_gaussian": float(cached_gaussian),
+    }
+
+
+def _numpy_state_from_payload(payload: object) -> tuple[Any, ...]:
+    if not isinstance(payload, dict):
+        raise CheckpointError("checkpoint NumPy random state must be an object")
+    keys = payload.get("keys")
+    if not isinstance(keys, list) or not keys:
+        raise CheckpointError("checkpoint NumPy random keys are missing")
+    try:
+        key_array = np.asarray([int(value) for value in keys], dtype=np.uint32)
+        return (
+            str(payload["bit_generator"]),
+            key_array,
+            int(payload["position"]),
+            int(payload["has_gauss"]),
+            float(payload["cached_gaussian"]),
+        )
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise CheckpointError(f"decode checkpoint NumPy random state: {exc}") from exc
 
 
 def save_runtime_checkpoint(
@@ -71,7 +138,7 @@ def save_runtime_checkpoint(
         "server": server.export_runtime_state(),
         "sampler_state": sampler.getstate(),
         "python_random_state": random.getstate(),
-        "numpy_random_state": np.random.get_state(),
+        "numpy_random_state": _numpy_state_to_payload(np.random.get_state()),
         "torch_rng_state": torch.get_rng_state(),
         "cuda_rng_states": torch.cuda.get_rng_state_all()
         if torch.cuda.is_available()
@@ -83,6 +150,8 @@ def save_runtime_checkpoint(
     }
     torch.save(payload, temporary)
     os.replace(temporary, target)
+    digest = _file_sha256(target)
+    _write_text_atomic(checkpoint_digest_path(target), digest + "\n")
     return str(target)
 
 
@@ -100,8 +169,9 @@ def restore_runtime_checkpoint(
     target = Path(path).resolve()
     if not target.is_file():
         raise CheckpointError(f"runtime checkpoint does not exist: {target}")
+    _verify_checkpoint_digest(target)
     try:
-        payload = torch.load(target, map_location="cpu", weights_only=False)
+        payload = torch.load(target, map_location="cpu", weights_only=True)
     except Exception as exc:  # torch surfaces several deserialization exception types
         raise CheckpointError(f"load runtime checkpoint {target}: {exc}") from exc
     if not isinstance(payload, dict):
@@ -143,7 +213,7 @@ def restore_runtime_checkpoint(
     try:
         sampler.setstate(payload["sampler_state"])
         random.setstate(payload["python_random_state"])
-        np.random.set_state(payload["numpy_random_state"])
+        np.random.set_state(_numpy_state_from_payload(payload["numpy_random_state"]))
         torch.set_rng_state(payload["torch_rng_state"])
         cuda_states = payload.get("cuda_rng_states", [])
         if torch.cuda.is_available() and cuda_states:
@@ -164,7 +234,10 @@ def restore_runtime_checkpoint(
     else:
         if privacy_state is None:
             raise CheckpointError("checkpoint is missing privacy RNG state")
-        privacy_generator.set_state(privacy_state)
+        try:
+            privacy_generator.set_state(privacy_state)
+        except (TypeError, RuntimeError) as exc:
+            raise CheckpointError(f"restore privacy RNG state: {exc}") from exc
 
     accountant_steps = payload.get("accountant_steps")
     if accountant is None:

@@ -253,17 +253,12 @@ func (d *checkpointLocalDriver) waitForRun(backendRunID string, command interfac
 		run.status = StatusCanceled
 		run.lastError = nil
 	} else if isPausedExit(err) {
-		marker, markerErr := readLocalPauseEvidence(run)
-		if markerErr != nil {
+		if _, markerErr := readLocalPauseEvidence(run); markerErr != nil {
 			run.status = StatusFailed
 			run.lastError = markerErr
 		} else {
 			run.status = StatusPaused
 			run.lastError = nil
-			if marker.RoundsCompleted >= uint64(run.spec.Federation.Rounds) {
-				run.status = StatusFailed
-				run.lastError = errors.New("paused marker cannot represent a fully completed execution")
-			}
 		}
 	} else if err != nil {
 		run.status = StatusFailed
@@ -319,8 +314,8 @@ func readLocalPauseEvidence(run *localRun) (localPausedMarker, error) {
 	if marker.SchemaVersion != 1 || !strings.EqualFold(marker.Status, "PAUSED") {
 		return localPausedMarker{}, errors.New("paused marker has an unsupported schema or status")
 	}
-	if marker.RoundsCompleted == 0 || marker.RoundsCompleted >= uint64(run.spec.Federation.Rounds) {
-		return localPausedMarker{}, errors.New("paused marker rounds_completed is outside the resumable range")
+	if marker.RoundsCompleted == 0 || marker.RoundsCompleted > uint64(run.spec.Federation.Rounds) {
+		return localPausedMarker{}, errors.New("paused marker rounds_completed is outside the execution range")
 	}
 	if !strings.EqualFold(marker.Algorithm, run.spec.Algorithm.Name) {
 		return localPausedMarker{}, errors.New("paused marker algorithm does not match execution spec")
@@ -339,6 +334,9 @@ func readLocalPauseEvidence(run *localRun) (localPausedMarker, error) {
 	}
 	if _, err := os.Stat(expectedCheckpoint); err != nil {
 		return localPausedMarker{}, fmt.Errorf("paused checkpoint is unavailable: %w", err)
+	}
+	if err := verifyLocalCheckpointDigest(expectedCheckpoint); err != nil {
+		return localPausedMarker{}, fmt.Errorf("verify paused checkpoint digest: %w", err)
 	}
 	return marker, nil
 }
