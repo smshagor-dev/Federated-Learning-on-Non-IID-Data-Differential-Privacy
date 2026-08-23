@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,6 +79,27 @@ func helperCommand(_ string, _ string, specPath string) *exec.Cmd {
 	return command
 }
 
+func waitForLocalDriverStatus(t *testing.T, driver *LocalDriver, executionID string, expected Status) Snapshot {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		snapshot, err := driver.Get(context.Background(), executionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snapshot.Status == expected {
+			return snapshot
+		}
+		if snapshot.Status == StatusFailed && expected != StatusFailed {
+			t.Fatalf("local driver reported failed while waiting for %s", expected)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("local driver did not reach %s, status=%s", expected, snapshot.Status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func TestLocalDriverRunsSubprocessAndRequiresSummary(t *testing.T) {
 	root := localTestRepository(t)
 	driver, err := NewLocalDriver(LocalDriverConfig{
@@ -104,31 +126,101 @@ func TestLocalDriverRunsSubprocessAndRequiresSummary(t *testing.T) {
 		t.Fatalf("start status = %s", started.Status)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		snapshot, getErr := driver.Get(context.Background(), "exec-local-1")
-		if getErr != nil {
-			t.Fatal(getErr)
-		}
-		if snapshot.Status == StatusCompleted {
-			if snapshot.CurrentRound != uint64(spec.Federation.Rounds) {
-				t.Fatalf("completed round = %d", snapshot.CurrentRound)
-			}
-			break
-		}
-		if snapshot.Status == StatusFailed {
-			t.Fatal("local driver reported failed subprocess")
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("local subprocess did not complete, status=%s", snapshot.Status)
-		}
-		time.Sleep(10 * time.Millisecond)
+	snapshot := waitForLocalDriverStatus(t, driver, "exec-local-1", StatusCompleted)
+	if snapshot.CurrentRound != uint64(spec.Federation.Rounds) {
+		t.Fatalf("completed round = %d", snapshot.CurrentRound)
 	}
 	if _, err := os.Stat(filepath.Join(artifactRoot, "execution-control", "execution-spec.json")); err != nil {
 		t.Fatalf("canonical spec was not persisted: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(artifactRoot, "summary.json")); err != nil {
 		t.Fatalf("helper summary was not persisted: %v", err)
+	}
+}
+
+func TestLocalDriverRestoresCompletedRunAfterRestart(t *testing.T) {
+	root := localTestRepository(t)
+	stateRoot := filepath.Join(t.TempDir(), "local-state")
+	artifactRoot := filepath.Join(root, "artifacts", "restart-complete")
+	driver, err := NewLocalDriver(LocalDriverConfig{
+		RepositoryRoot: root,
+		StateRoot:      stateRoot,
+		CommandFactory: helperCommand,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := driver.Create(context.Background(), "exec-restart-complete", localDriverSpec(artifactRoot), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := driver.Start(context.Background(), "exec-restart-complete", ""); err != nil {
+		t.Fatal(err)
+	}
+	waitForLocalDriverStatus(t, driver, "exec-restart-complete", StatusCompleted)
+
+	restarted, err := NewLocalDriver(LocalDriverConfig{
+		RepositoryRoot: root,
+		StateRoot:      stateRoot,
+		CommandFactory: helperCommand,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := restarted.Get(context.Background(), "exec-restart-complete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Status != StatusCompleted || snapshot.CurrentRound != 2 {
+		t.Fatalf("recovered snapshot = %#v", snapshot)
+	}
+}
+
+func TestLocalDriverFailsUnreattachableRunningStateAfterRestart(t *testing.T) {
+	root := localTestRepository(t)
+	stateRoot := filepath.Join(t.TempDir(), "local-state")
+	driver, err := NewLocalDriver(LocalDriverConfig{
+		RepositoryRoot: root,
+		StateRoot:      stateRoot,
+		CommandFactory: helperCommand,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executionID := "exec-restart-running"
+	artifactRoot := filepath.Join(root, "artifacts", "restart-running")
+	if _, err := driver.Create(context.Background(), executionID, localDriverSpec(artifactRoot), ""); err != nil {
+		t.Fatal(err)
+	}
+	driver.mu.Lock()
+	run := driver.runs[executionID]
+	run.status = StatusRunning
+	run.pid = 424242
+	if err := driver.persistRunLocked(executionID, run); err != nil {
+		driver.mu.Unlock()
+		t.Fatal(err)
+	}
+	driver.mu.Unlock()
+
+	restarted, err := NewLocalDriver(LocalDriverConfig{
+		RepositoryRoot: root,
+		StateRoot:      stateRoot,
+		CommandFactory: helperCommand,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := restarted.Get(context.Background(), executionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Status != StatusFailed {
+		t.Fatalf("recovered status = %s, want FAILED", snapshot.Status)
+	}
+	restarted.mu.RLock()
+	lastError := restarted.runs[executionID].lastError
+	restarted.mu.RUnlock()
+	if lastError == nil || !strings.Contains(lastError.Error(), "could not be safely reattached") {
+		t.Fatalf("recovery error = %v", lastError)
 	}
 }
 
@@ -151,6 +243,31 @@ func TestLocalDriverRejectsDPWithFixedSampling(t *testing.T) {
 	}
 	if _, err := driver.Create(context.Background(), "exec-local-bad", spec, ""); err == nil {
 		t.Fatal("expected local DP with fixed sampling to be rejected")
+	}
+}
+
+func TestLocalDriverRejectsUnsupportedPrivacyBudgetSemantics(t *testing.T) {
+	root := localTestRepository(t)
+	driver, err := NewLocalDriver(LocalDriverConfig{RepositoryRoot: root, CommandFactory: helperCommand})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := localDriverSpec(filepath.Join(root, "artifacts", "budget"))
+	spec.Federation.SamplingStrategy = SamplingPoisson
+	spec.Privacy = PrivacySpec{
+		Mode: PrivacyUserLevel,
+		UserLevel: UserLevelPrivacySpec{
+			NoiseMultiplier:      1.2,
+			TargetDelta:          1e-5,
+			Accountant:           "rdp",
+			InitialClippingBound: 1,
+			WeightingStrategy:    "uniform",
+			EpsilonBudget:        4,
+		},
+	}
+	_, err = driver.Create(context.Background(), "exec-local-budget", spec, "")
+	if err == nil || !strings.Contains(err.Error(), "epsilon_budget") {
+		t.Fatalf("expected epsilon_budget rejection, got %v", err)
 	}
 }
 
