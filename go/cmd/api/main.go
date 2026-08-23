@@ -134,13 +134,14 @@ func main() {
 	server := httpapi.NewServerWithSecurityJournalPaths(services,
 		securityJournalPathFromEnv("FL_GO_SECURITY_EVENT_JOURNAL_PATH", dataDir, "security-events.jsonl"),
 		securityJournalPathFromEnv("FL_GO_SECURITY_AUDIT_JOURNAL_PATH", dataDir, "security-audit.jsonl"))
+	handler := httpapi.WithExecutionAPI(server.Handler(), services)
 
 	if coordinatorClient != nil {
 		log.Printf("go control-plane listening on :8080 with data dir %s, coordinator at %s", dataDir, os.Getenv("FL_COORDINATOR_ADDRESS"))
 	} else {
 		log.Printf("go control-plane listening on :8080 with data dir %s, coordinator not configured (set FL_COORDINATOR_ADDRESS)", dataDir)
 	}
-	if err := http.ListenAndServe(":8080", server.Handler()); err != nil {
+	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatal(err)
 	}
 }
