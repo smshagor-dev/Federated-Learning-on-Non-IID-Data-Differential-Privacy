@@ -27,6 +27,29 @@ def build_paths(project_root: str, config_path: str) -> AppPaths:
     )
 
 
+def _expand_experiment_choices(window: MainWindow) -> None:
+    """Keep the desktop form aligned with the executable root runtime."""
+    dataset_combo = window.experiment_page.dataset_combo
+    known_datasets = {
+        dataset_combo.itemText(index) for index in range(dataset_combo.count())
+    }
+    for dataset in ("MNIST", "FASHIONMNIST", "CIFAR10", "CIFAR100"):
+        if dataset not in known_datasets:
+            dataset_combo.addItem(dataset)
+
+    partition_combo = window.experiment_page.partition_combo
+    known_partitions = {
+        partition_combo.itemText(index) for index in range(partition_combo.count())
+    }
+    for partition in ("iid", "dirichlet", "pathological", "quantity_skew"):
+        if partition not in known_partitions:
+            partition_combo.addItem(partition)
+
+    # The page is constructed before these extended choices are added. Reload
+    # once so a saved config using an expanded dataset/partition is selected.
+    window.experiment_page.load_config(window.current_config, window.paths.config_path)
+
+
 def launch_desktop_app(project_root: str, config_path: str) -> int:
     app = QApplication.instance() or QApplication([])
     app.setWindowIcon(load_app_icon())
@@ -39,6 +62,7 @@ def launch_desktop_app(project_root: str, config_path: str) -> int:
     if preferences.last_results_dir:
         controller.results_service.set_results_dir(preferences.last_results_dir)
     window = MainWindow(paths, controller, preferences)
+    _expand_experiment_choices(window)
     window.show()
     window.gpu_label.setText("GPU: available" if _cuda_available() else "GPU: CPU mode")
     window.statusBar().showMessage(

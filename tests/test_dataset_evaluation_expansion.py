@@ -78,6 +78,21 @@ class MatchedEvaluationPartitionTests(unittest.TestCase):
         for client_id in first:
             np.testing.assert_array_equal(first[client_id], second[client_id])
 
+    def test_empty_clients_receive_unique_heldout_samples(self) -> None:
+        train = TargetDataset([0] * 100)
+        heldout = TargetDataset([0, 0, 0])
+        train_partition = {
+            0: np.arange(0, 98, dtype=np.int64),
+            1: np.asarray([98], dtype=np.int64),
+            2: np.asarray([99], dtype=np.int64),
+        }
+        result = partition_evaluation_by_train_distribution(
+            train, train_partition, heldout, seed=5
+        )
+        self.assertEqual([len(result[index]) for index in range(3)], [1, 1, 1])
+        assigned = np.concatenate([result[index] for index in range(3)])
+        self.assertEqual(set(assigned.tolist()), {0, 1, 2})
+
 
 class HeldoutClientMetricTests(unittest.TestCase):
     def test_client_metrics_report_tail_and_fairness(self) -> None:
@@ -114,11 +129,13 @@ class HeldoutClientMetricTests(unittest.TestCase):
 
 
 class RootCheckpointTests(unittest.TestCase):
-    def test_server_persists_latest_model_when_root_checkpointing_is_enabled(self) -> None:
-        previous = os.environ.get("FL_ROOT_CHECKPOINT_DIR")
+    def test_server_writes_checkpoint_only_after_final_aggregation_call(self) -> None:
+        previous_dir = os.environ.get("FL_ROOT_CHECKPOINT_DIR")
+        previous_rounds = os.environ.get("FL_ROOT_CHECKPOINT_ROUNDS")
         try:
             with tempfile.TemporaryDirectory() as directory:
                 os.environ["FL_ROOT_CHECKPOINT_DIR"] = directory
+                os.environ["FL_ROOT_CHECKPOINT_ROUNDS"] = "2"
                 model = torch.nn.Linear(1, 1, bias=False)
                 with torch.no_grad():
                     model.weight.zero_()
@@ -128,6 +145,7 @@ class RootCheckpointTests(unittest.TestCase):
                     algorithm="fedavg",
                     device=torch.device("cpu"),
                 )
+                path = os.path.join(directory, "global_model_fedavg.pt")
                 server.aggregate(
                     [
                         {
@@ -136,21 +154,30 @@ class RootCheckpointTests(unittest.TestCase):
                         }
                     ]
                 )
-                path = os.path.join(directory, "global_model_fedavg.pt")
+                self.assertFalse(os.path.isfile(path))
+
+                # An empty final cohort leaves the model unchanged but still must
+                # persist the final global state for post-run client evaluation.
+                server.aggregate([])
                 self.assertTrue(os.path.isfile(path))
                 try:
                     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
                 except TypeError:
                     checkpoint = torch.load(path, map_location="cpu")
                 self.assertEqual(checkpoint["algorithm"], "fedavg")
+                self.assertEqual(checkpoint["rounds_completed"], 2)
                 self.assertAlmostEqual(
                     float(checkpoint["state_dict"]["weight"].item()), 0.5
                 )
         finally:
-            if previous is None:
+            if previous_dir is None:
                 os.environ.pop("FL_ROOT_CHECKPOINT_DIR", None)
             else:
-                os.environ["FL_ROOT_CHECKPOINT_DIR"] = previous
+                os.environ["FL_ROOT_CHECKPOINT_DIR"] = previous_dir
+            if previous_rounds is None:
+                os.environ.pop("FL_ROOT_CHECKPOINT_ROUNDS", None)
+            else:
+                os.environ["FL_ROOT_CHECKPOINT_ROUNDS"] = previous_rounds
 
 
 if __name__ == "__main__":
