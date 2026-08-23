@@ -184,6 +184,7 @@ func TestRuntimeReconcileIngestsBackendEventsWhenSnapshotChanges(t *testing.T) {
 					"model_version": "v2",
 				},
 			},
+		},
 	}
 	service := NewExecutionService(
 		repo,

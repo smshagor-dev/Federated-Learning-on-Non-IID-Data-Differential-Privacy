@@ -69,7 +69,9 @@ void run_one_round(fl::coordinator::RunInstance& run, double& now) {
     run.submit_client_result(
         "worker-b", task_b.task_id, task_b.lease_id, make_result(task_b, 0.0), now, reason);
     now += 1.0;
-    run.advance(now);
+    if (run.snapshot().state == fl::core::RunState::kWaitingForClients) {
+        run.advance(now);
+    }
 }
 
 }  // namespace
@@ -83,7 +85,6 @@ void run_recovery_tests(const std::string& scratch_dir) {
 
     // ---- Control: uninterrupted two-round run ------------------------ //
     std::string control_model_version;
-    double control_weight_value = 0.0;
     {
         RunManager manager(coordinator_config,
                            scratch_dir + "/checkpoints_control",
@@ -123,20 +124,14 @@ void run_recovery_tests(const std::string& scratch_dir) {
                   "process A completes exactly round 1 before the simulated crash");
             check(run.snapshot().state == fl::core::RunState::kRunning,
                   "process A is resting in RUNNING, ready for round 2, at crash time");
-            // manager_a goes out of scope here: all in-memory state is
-            // gone, exactly like a killed process. Only the checkpoint
-            // file on disk survives.
         }
 
         {
             // "Process B": a fresh coordinator process. Recreates the run
-            // with the same original config (see run_manager.hpp's note
-            // on why the config itself isn't part of the checkpoint) and
-            // then restores round/model/optimizer state from disk before
-            // doing anything else.
+            // with the same original config and restores round/model state.
             RunManager manager_b(coordinator_config, checkpoint_dir, scaffold_dir);
             register_workers(manager_b);
-            manager_b.create_run(config, 100.0);  // fresh RunInstance, starts at CREATED/round 0
+            manager_b.create_run(config, 100.0);
             auto& run = manager_b.get("run-recover");
 
             run.restore_from_checkpoint();
@@ -147,8 +142,6 @@ void run_recovery_tests(const std::string& scratch_dir) {
             check(run.snapshot().state == fl::core::RunState::kRunning,
                   "restore_from_checkpoint recovers the resting RUNNING state");
 
-            // Continue from where process A left off. This must aggregate
-            // round 2 exactly once — not re-aggregate round 1.
             double now = 101.0;
             run_one_round(run, now);
 

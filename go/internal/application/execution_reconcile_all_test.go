@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"testing"
+	"time"
 
 	executiondomain "github.com/smshagor-dev/federated-learning-super-system/go/internal/execution"
 )
@@ -20,11 +21,20 @@ func TestReconcileBackendUpdatesActiveAndSkipsTerminalExecutions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	terminal, err := service.Create(ctx, "", validExecutionSpec())
-	if err != nil {
-		t.Fatal(err)
-	}
-	terminal, err = service.Cancel(ctx, terminal.ID, "operator", "trace")
+	// Seed a terminal execution directly. The shared test service uses a frozen
+	// clock, so creating a second lifecycle execution through service.Create
+	// would intentionally reuse the same time-derived ID and test ID generation
+	// rather than the reconciliation behavior this case is meant to cover.
+	now := time.Unix(100, 0).UTC()
+	terminal, err := service.repo.Create(ctx, executiondomain.Record{
+		ID:        "exec-terminal-reconcile",
+		Backend:   executiondomain.BackendDistributed,
+		Spec:      validExecutionSpec(),
+		Status:    executiondomain.StatusCanceled,
+		Revision:  1,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

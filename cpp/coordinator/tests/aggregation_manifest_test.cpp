@@ -83,7 +83,7 @@ void run_aggregation_manifest_tests() {
         manager.create_run(make_config("run-reject",
                                        fl::core::AggregationAlgorithm::kDitto,
                                        aggregation_manifest,
-                                       {tensor("shared", 2)}),
+                                       {tensor("shared")}),
                            0.0);
         auto& run = manager.get("run-reject");
         manager.worker_registry().register_worker(
@@ -128,7 +128,7 @@ void run_aggregation_manifest_tests() {
         manager.create_run(make_config("run-frozen",
                                        fl::core::AggregationAlgorithm::kFedSam,
                                        aggregation_manifest,
-                                       {tensor("shared", 2)}),
+                                       {tensor("shared")}),
                            0.0);
         auto& run = manager.get("run-frozen");
         manager.worker_registry().register_worker(

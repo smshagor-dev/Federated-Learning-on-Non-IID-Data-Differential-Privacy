@@ -33,6 +33,7 @@ from fl_platform.security.signing_identity import (
 from fl_platform.security.transport import WorkerTLSConfig
 from fl_platform.worker.configuration import WorkerConfig, load_worker_config
 from fl_platform.worker.coordinator_client import GrpcCoordinatorClient, RunSpec
+from fl_platform.worker.partition_aware_client import PartitionAwareGrpcCoordinatorClient
 from fl_platform.worker.service import WorkerLoopOptions, WorkerService
 
 logger = logging.getLogger("fl_platform.worker")
@@ -230,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         signing_identity is not None,
         bool(config.security_event_journal_path),
     )
-    client = GrpcCoordinatorClient(
+    client = PartitionAwareGrpcCoordinatorClient(
         config.coordinator_address,
         insecure=tls_config is None,
         tls_config=tls_config,
