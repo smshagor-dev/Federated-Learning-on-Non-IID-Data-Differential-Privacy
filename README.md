@@ -37,13 +37,6 @@ A multi-language federated-learning platform for training and benchmarking model
 ![Poisson Sampling](https://img.shields.io/badge/Sampling-Poisson-9333EA?style=flat-square)
 ![Fixed Sampling](https://img.shields.io/badge/Sampling-Fixed%20Without%20Replacement-9333EA?style=flat-square)
 
-![Desktop Simulation](https://img.shields.io/badge/Desktop-Simulation%20Ready-blue?style=flat-square)
-![Local Validation](https://img.shields.io/badge/Local%20Validation-Environment%20Dependent-yellow?style=flat-square)
-![Multi-Device](https://img.shields.io/badge/Multi--Device%20Deployment-Not%20Validated-orange?style=flat-square)
-![Security Audit](https://img.shields.io/badge/Formal%20Security%20Audit-Not%20Completed-orange?style=flat-square)
-![Production Certification](https://img.shields.io/badge/Production%20Certification-Not%20Certified-red?style=flat-square)
-![Research Status](https://img.shields.io/badge/Status-Research%20Platform-yellow?style=flat-square)
-
 ## Platform Overview
 
 The repository contains two explicit execution paths:
