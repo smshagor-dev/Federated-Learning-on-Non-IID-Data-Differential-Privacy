@@ -74,6 +74,8 @@ class BenchmarkPlan:
     schema_version: int = 1
 
     def validate(self, *, minimum_replicates: int = DEFAULT_MINIMUM_REPLICATES) -> None:
+        if minimum_replicates < 1:
+            raise ValueError("minimum_replicates must be >= 1")
         if not self.benchmark_id.strip():
             raise ValueError("benchmark_id must be non-empty")
         if not self.datasets or any(not value.strip() for value in self.datasets):
@@ -153,8 +155,10 @@ class BenchmarkPlan:
         )
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
-    def expand(self) -> tuple[BenchmarkCell, ...]:
-        self.validate()
+    def expand(
+        self, *, minimum_replicates: int = DEFAULT_MINIMUM_REPLICATES
+    ) -> tuple[BenchmarkCell, ...]:
+        self.validate(minimum_replicates=minimum_replicates)
         cells: list[BenchmarkCell] = []
         for dataset_id, algorithm_id, partition, epsilon, seed in itertools.product(
             self.datasets,
@@ -233,6 +237,7 @@ def build_benchmark_plan(
     rounds: int = 100,
     runtime_identity: str = "root-simulator",
     partitions: Iterable[BenchmarkPartition] | None = None,
+    minimum_replicates: int = DEFAULT_MINIMUM_REPLICATES,
 ) -> BenchmarkPlan:
     plan = BenchmarkPlan(
         benchmark_id=benchmark_id,
@@ -245,5 +250,5 @@ def build_benchmark_plan(
         rounds=rounds,
         runtime_identity=runtime_identity,
     )
-    plan.validate()
+    plan.validate(minimum_replicates=minimum_replicates)
     return plan
