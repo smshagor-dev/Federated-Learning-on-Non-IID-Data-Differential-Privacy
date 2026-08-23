@@ -131,8 +131,11 @@ def restore_runtime_checkpoint(
     server_state = payload.get("server")
     if not isinstance(server_state, dict):
         raise CheckpointError("runtime checkpoint server state is missing")
-    server.load_runtime_state(server_state)
-    if int(server._round_count) != rounds_completed:
+    try:
+        server.load_runtime_state(server_state)
+    except (TypeError, ValueError, RuntimeError) as exc:
+        raise CheckpointError(f"restore server runtime state: {exc}") from exc
+    if int(server.round_count) != rounds_completed:
         raise CheckpointError(
             "runtime checkpoint server round count does not match rounds_completed"
         )
@@ -150,8 +153,6 @@ def restore_runtime_checkpoint(
                 )
             torch.cuda.set_rng_state_all(cuda_states)
     except (KeyError, TypeError, ValueError) as exc:
-        if isinstance(exc, CheckpointError):
-            raise
         raise CheckpointError(f"restore runtime RNG state: {exc}") from exc
 
     privacy_state = payload.get("privacy_generator_state")
