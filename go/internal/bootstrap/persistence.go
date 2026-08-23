@@ -7,6 +7,7 @@ import (
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/auth"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/datasets"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/execution"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/experiments"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/models"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/observability"
@@ -19,6 +20,8 @@ type PersistencePaths struct {
 	Projects          string
 	Experiments       string
 	Runs              string
+	Executions        string
+	ExecutionEvents   string
 	Users             string
 	Sessions          string
 	AuditEvents       string
@@ -33,6 +36,8 @@ func PathsForDataDir(dataDir string) PersistencePaths {
 		Projects:          filepath.Join(dataDir, "projects.json"),
 		Experiments:       filepath.Join(dataDir, "experiments.json"),
 		Runs:              filepath.Join(dataDir, "runs.json"),
+		Executions:        filepath.Join(dataDir, "executions.json"),
+		ExecutionEvents:   filepath.Join(dataDir, "execution-events.jsonl"),
 		Users:             filepath.Join(dataDir, "users.json"),
 		Sessions:          filepath.Join(dataDir, "sessions.json"),
 		AuditEvents:       filepath.Join(dataDir, "audit-events.json"),
@@ -84,9 +89,25 @@ func NewPersistentServicesWithCoordinator(paths PersistencePaths, coordinatorCli
 	if err != nil {
 		return nil, err
 	}
+	executionRepo, err := execution.NewFileRepository(paths.Executions)
+	if err != nil {
+		return nil, err
+	}
+	executionJournal, err := execution.NewJournal(paths.ExecutionEvents)
+	if err != nil {
+		return nil, err
+	}
 	researchRepo := research.NewFileRepository(paths.ResearchRoot)
-	return application.NewServicesWithRegistries(
+	services := application.NewServicesWithRegistries(
 		projectRepo, experimentRepo, runRepo, userRepo, sessionRepo, auditRepo,
 		modelRepo, datasetRepo, researchRepo, nil, coordinatorClient, clock,
-	), nil
+	)
+	application.ConfigureExecutionEngine(
+		services,
+		executionRepo,
+		executionJournal,
+		coordinatorClient,
+		clock,
+	)
+	return services, nil
 }
