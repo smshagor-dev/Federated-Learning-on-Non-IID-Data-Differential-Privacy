@@ -17,6 +17,7 @@ SUPPORTED_PARTITION_STRATEGIES = {
     "quantity_skew",
 }
 SUPPORTED_RUNTIME_IDENTITIES = {"root-simulator", "distributed-platform"}
+ROOT_DATASETS = {"mnist", "fashionmnist", "cifar10", "cifar100"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,11 +68,19 @@ class BenchmarkPlan:
     primary_metrics: tuple[str, ...] = (
         "global_accuracy",
         "global_loss",
+        "mean_client_accuracy",
+        "p10_client_accuracy",
+        "worst_client_accuracy",
+        "client_accuracy_std",
+        "jain_accuracy_index",
+        "mean_client_loss",
+        "p90_client_loss",
+        "worst_client_loss",
         "final_epsilon",
         "communication_rounds",
         "wall_clock_seconds",
     )
-    schema_version: int = 1
+    schema_version: int = 2
 
     def validate(self, *, minimum_replicates: int = DEFAULT_MINIMUM_REPLICATES) -> None:
         if minimum_replicates < 1:
@@ -120,6 +129,14 @@ class BenchmarkPlan:
         if not self.primary_metrics or any(not metric.strip() for metric in self.primary_metrics):
             raise ValueError("primary_metrics must contain non-empty metric names")
         if self.runtime_identity == "root-simulator":
+            normalized_datasets = {value.lower() for value in self.datasets}
+            unsupported_datasets = normalized_datasets - ROOT_DATASETS
+            if unsupported_datasets:
+                raise ValueError(
+                    "root-simulator dataset is unsupported; "
+                    f"unsupported={sorted(unsupported_datasets)}, "
+                    f"supported={sorted(ROOT_DATASETS)}"
+                )
             unsupported_root = set(self.algorithms) - {"fedavg", "fedprox", "scaffold"}
             if unsupported_root:
                 raise ValueError(
