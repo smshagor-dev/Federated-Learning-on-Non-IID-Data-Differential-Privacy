@@ -104,6 +104,51 @@ class BenchmarkRunnerTests(unittest.TestCase):
             self.assertEqual(persisted_config["system"]["seed"], 23)
             self.assertEqual(persisted_cell["cell_id"], "cell-001")
 
+    def test_summary_extraction_includes_heldout_client_metrics(self) -> None:
+        summary = {
+            "partition": {"partition_hash": "partition-sha"},
+            "runs": [
+                {
+                    "algorithm": "fedavg",
+                    "final_acc": 0.8,
+                    "final_loss": 0.5,
+                    "elapsed_sec": 12.0,
+                    "mean_raw_drift": 1.0,
+                    "mean_clipped_drift": 0.8,
+                    "mean_fraction_clipped": 0.25,
+                    "mean_aggregate_noise_norm": 0.1,
+                    "final_epsilon": 3.9,
+                    "client_evaluation": {
+                        "mean_client_accuracy": 0.78,
+                        "weighted_client_accuracy": 0.8,
+                        "median_client_accuracy": 0.79,
+                        "p10_client_accuracy": 0.6,
+                        "worst_client_accuracy": 0.5,
+                        "best_client_accuracy": 0.95,
+                        "client_accuracy_std": 0.12,
+                        "client_accuracy_range": 0.45,
+                        "jain_accuracy_index": 0.97,
+                        "mean_client_loss": 0.55,
+                        "weighted_client_loss": 0.5,
+                        "p90_client_loss": 0.8,
+                        "worst_client_loss": 0.9,
+                    },
+                }
+            ],
+        }
+        observations = runner._observations_from_summary(
+            cell=self.cell(),
+            summary=summary,
+            commit_sha="commit-sha",
+            specification_hash="spec-sha",
+        )
+        by_metric = {observation.metric: observation.value for observation in observations}
+        self.assertAlmostEqual(by_metric["global_accuracy"], 0.8)
+        self.assertAlmostEqual(by_metric["p10_client_accuracy"], 0.6)
+        self.assertAlmostEqual(by_metric["worst_client_accuracy"], 0.5)
+        self.assertAlmostEqual(by_metric["jain_accuracy_index"], 0.97)
+        self.assertAlmostEqual(by_metric["worst_client_loss"], 0.9)
+
 
 if __name__ == "__main__":
     unittest.main()
