@@ -4,8 +4,8 @@ The base :class:`GrpcCoordinatorClient` remains the sole implementation of
 transport, coordinator-signature verification, replay protection, accepted-task
 journaling, privacy binding checks, and secure-aggregation task verification.
 This adapter only remembers the raw ``dataset_reference`` long enough to publish
-it to the deterministic dataset loader *after* ``super().acquire_task`` has
-successfully completed that existing verification pipeline.
+it to the deterministic dataset loader after ``super().acquire_task`` has
+successfully completed the existing task-acceptance pipeline.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from fl_platform.worker.dataset_loader import register_verified_partition_refere
 
 
 class PartitionAwareGrpcCoordinatorClient(GrpcCoordinatorClient):
-    """GrpcCoordinatorClient with verified dataset-partition handoff."""
+    """GrpcCoordinatorClient with accepted dataset-partition handoff."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
