@@ -17,7 +17,7 @@ func (s *ExecutionService) IngestBackendEvents(ctx context.Context, id string) (
 	if err != nil {
 		return executiondomain.Record{}, 0, err
 	}
-	if record.BackendRunID == "" {
+	if record.BackendRunID == "" || s.journal == nil {
 		return record, 0, nil
 	}
 	driver, err := s.drivers.Require(record.Backend)
@@ -85,6 +85,7 @@ func (s *ExecutionService) IngestBackendEvents(ctx context.Context, id string) (
 		return record, ingested, nil
 	}
 	record.BackendEventCursor = cursor
+	record.UpdatedAt = s.clock().UTC()
 	updated, err := s.repo.Update(ctx, record, record.Revision)
 	if err != nil {
 		return record, ingested, err
