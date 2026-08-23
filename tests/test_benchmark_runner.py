@@ -8,14 +8,13 @@ from pathlib import Path
 
 import yaml
 
-from python.src.fl_platform.benchmark.matrix import BenchmarkCell
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "run_benchmark_matrix.py"
 SPEC = importlib.util.spec_from_file_location("run_benchmark_matrix", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
+BenchmarkCell = runner.BenchmarkCell
 
 
 class BenchmarkRunnerTests(unittest.TestCase):
@@ -44,7 +43,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             },
         }
 
-    def cell(self, *, epsilon: float | None = 4.0) -> BenchmarkCell:
+    def cell(self, *, epsilon: float | None = 4.0):
         return BenchmarkCell(
             benchmark_id="bench",
             condition_id="condition",
