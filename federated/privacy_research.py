@@ -1,23 +1,23 @@
 """Research-grade privacy calibration and composition helpers.
 
-This module sits above :mod:`federated.dp_accountant` and provides two
-operations that are needed for defensible research experiments:
+This module sits above :mod:`federated.dp_accountant` and provides operations
+needed for defensible research experiments:
 
 * calibrate the Gaussian noise multiplier from a target epsilon instead of
   guessing ``sigma``;
-* compose RDP curves only when the mechanisms protect the same neighboring
+* resolve an experiment config against that target after CLI/UI overrides;
+* compose RDP curves only when mechanisms protect the same neighboring
   relation.
 
 It deliberately does not combine privacy guarantees that refer to different
-adjacency definitions.  Callers must state the adjacency explicitly.
+adjacency definitions. Callers must state the adjacency explicitly.
 """
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from typing import Iterable, Sequence
-
-import numpy as np
 
 from federated.dp_accountant import (
     DEFAULT_ORDERS,
@@ -62,6 +62,16 @@ class PrivacyCompositionResult:
     adjacency: str
 
 
+def _normalize_orders(orders: Iterable[int] | None) -> tuple[int, ...]:
+    source = DEFAULT_ORDERS if orders is None else orders
+    normalized = tuple(sorted(set(int(order) for order in source)))
+    if not normalized:
+        raise ValueError("At least one RDP order is required.")
+    if normalized[0] < 2:
+        raise ValueError("All RDP orders must be integers >= 2.")
+    return normalized
+
+
 def epsilon_for_client_level_gaussian(
     *,
     noise_multiplier: float,
@@ -75,7 +85,7 @@ def epsilon_for_client_level_gaussian(
         noise_multiplier=noise_multiplier,
         sample_rate=sample_rate,
         target_delta=delta,
-        orders=orders,
+        orders=_normalize_orders(orders),
     )
     accountant.step(steps)
     return accountant.get_epsilon()
@@ -97,9 +107,9 @@ def calibrate_noise_multiplier(
 
     Binary search is safe here because, for fixed sampling rate, number of
     steps and delta, the accountant's epsilon is monotone non-increasing in
-    the Gaussian noise multiplier.  The returned point is always on the
+    the Gaussian noise multiplier. The returned point is always on the
     privacy-safe side of the target (``achieved_epsilon <= target_epsilon``)
-    up to floating point precision.
+    up to floating-point precision.
     """
     if target_epsilon <= 0.0:
         raise ValueError("target_epsilon must be > 0.")
@@ -118,6 +128,8 @@ def calibrate_noise_multiplier(
     if max_iterations <= 0:
         raise ValueError("max_iterations must be > 0.")
 
+    normalized_orders: Sequence[int] = _normalize_orders(orders)
+
     if steps == 0 or sample_rate == 0.0:
         return NoiseCalibrationResult(
             target_epsilon=target_epsilon,
@@ -127,8 +139,6 @@ def calibrate_noise_multiplier(
             steps=steps,
             delta=delta,
         )
-
-    normalized_orders: Sequence[int] = tuple(orders or DEFAULT_ORDERS)
 
     def epsilon_at(sigma: float) -> float:
         return epsilon_for_client_level_gaussian(
@@ -140,8 +150,7 @@ def calibrate_noise_multiplier(
         )
 
     low = min_noise_multiplier
-    high = max(1.0, low * 2.0)
-    high = min(high, max_noise_multiplier)
+    high = min(max_noise_multiplier, max(1.0, low * 2.0))
 
     while epsilon_at(high) > target_epsilon and high < max_noise_multiplier:
         high = min(max_noise_multiplier, high * 2.0)
@@ -167,8 +176,6 @@ def calibrate_noise_multiplier(
         if high - low <= 1e-12 * max(1.0, high):
             break
 
-    # Re-evaluate the returned safe endpoint so the result is internally
-    # consistent even if the loop exited on the sigma-width criterion.
     achieved = epsilon_at(high)
     return NoiseCalibrationResult(
         target_epsilon=target_epsilon,
@@ -180,6 +187,53 @@ def calibrate_noise_multiplier(
     )
 
 
+def resolve_target_epsilon_config(
+    config: dict,
+    *,
+    manual_noise_override: bool = False,
+) -> tuple[dict, NoiseCalibrationResult | None]:
+    """Return an effective config with ``sigma`` calibrated after overrides.
+
+    Calibration happens *after* round/sample-rate overrides so the declared
+    target epsilon cannot silently drift when an experiment changes its
+    participation rate or number of rounds. An explicit CLI/manual sigma is
+    authoritative: in that case ``target_epsilon`` is cleared in the effective
+    runtime config to avoid reporting a target that was not actually enforced.
+    """
+    resolved = copy.deepcopy(config)
+    dp_cfg = resolved.setdefault("dp", {})
+    fed_cfg = resolved.setdefault("federated", {})
+
+    if not bool(dp_cfg.get("enabled", False)):
+        return resolved, None
+
+    if manual_noise_override:
+        if float(dp_cfg.get("noise_multiplier", 0.0)) < 0.0:
+            raise ValueError("dp.noise_multiplier must be >= 0 for a manual override.")
+        dp_cfg["target_epsilon"] = None
+        dp_cfg["privacy_parameter_source"] = "manual_noise_multiplier"
+        return resolved, None
+
+    target = dp_cfg.get("target_epsilon")
+    if target is None:
+        dp_cfg["privacy_parameter_source"] = "configured_noise_multiplier"
+        return resolved, None
+
+    target_epsilon = float(target)
+    epsilon_tolerance = float(dp_cfg.get("epsilon_tolerance", 1e-4))
+    result = calibrate_noise_multiplier(
+        target_epsilon=target_epsilon,
+        sample_rate=float(fed_cfg["sample_rate"]),
+        steps=int(fed_cfg["rounds"]),
+        delta=float(dp_cfg["target_delta"]),
+        epsilon_tolerance=epsilon_tolerance,
+    )
+    dp_cfg["noise_multiplier"] = result.noise_multiplier
+    dp_cfg["calibrated_epsilon"] = result.achieved_epsilon
+    dp_cfg["privacy_parameter_source"] = "target_epsilon_calibration"
+    return resolved, result
+
+
 def compose_same_adjacency_rdp(
     *,
     mechanisms: Sequence[RDPMechanism],
@@ -188,11 +242,10 @@ def compose_same_adjacency_rdp(
 ) -> PrivacyCompositionResult:
     """Compose RDP mechanisms only when their adjacency is identical.
 
-    This is the correct primitive for, for example, multiple released
-    client-level Gaussian mechanisms over the same add/remove-client
-    neighboring relation.  It intentionally refuses to combine sample-level
-    DP and client-level DP (or any other mismatched adjacency) into one
-    epsilon.
+    This is the correct primitive for multiple released client-level Gaussian
+    mechanisms over the same add/remove-client neighboring relation. It
+    intentionally refuses to combine sample-level DP and client-level DP (or
+    any other mismatched adjacency) into one epsilon.
     """
     if not mechanisms:
         raise ValueError("At least one mechanism is required.")
@@ -208,6 +261,8 @@ def compose_same_adjacency_rdp(
                 "Cannot compose mechanisms with different neighboring relations: "
                 f"{adjacency!r} vs {mechanism.adjacency!r}."
             )
+        if not mechanism.name.strip():
+            raise ValueError("Mechanism name must be non-empty.")
         if mechanism.steps < 0:
             raise ValueError(f"{mechanism.name}: steps must be >= 0.")
         if not 0.0 <= mechanism.sample_rate <= 1.0:
@@ -215,7 +270,7 @@ def compose_same_adjacency_rdp(
         if mechanism.noise_multiplier < 0.0:
             raise ValueError(f"{mechanism.name}: noise_multiplier must be >= 0.")
 
-    normalized_orders = tuple(int(order) for order in (orders or DEFAULT_ORDERS))
+    normalized_orders = _normalize_orders(orders)
     curves = [
         compute_rdp(
             q=mechanism.sample_rate,
@@ -236,7 +291,7 @@ def compose_same_adjacency_rdp(
         delta=delta,
         optimal_order=int(optimal_order),
         orders=normalized_orders,
-        total_rdp=tuple(float(value) for value in np.asarray(total_rdp)),
+        total_rdp=tuple(float(value) for value in total_rdp),
         mechanism_names=tuple(mechanism.name for mechanism in mechanisms),
         adjacency=adjacency,
     )

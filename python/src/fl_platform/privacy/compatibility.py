@@ -14,7 +14,8 @@ Classification meanings:
   EXPERIMENTAL — implemented, but with a documented open question about
                  correctness or a gap in test coverage; usable, not a
                  stated guarantee.
-  UNSUPPORTED  — not implemented; a run requesting this combination is
+  UNSUPPORTED  — not implemented or not privacy-proven for the claimed
+                 mechanism; a run requesting this combination is
                  rejected before it starts.
   DEFERRED     — explicitly out of scope for this phase (see
                  docs/known-limitations.md), not merely unimplemented by
@@ -125,23 +126,11 @@ SAMPLE_LEVEL_DP_COMPATIBILITY: dict[str, CompatibilityEntry] = {
     ),
 }
 
-# User-level DP clips and noises the *aggregate* client delta centrally
-# in C++, after local training completes — it is largely algorithm-
-# agnostic (see docs/user-level-dp.md), but two algorithm-specific
-# clarifications are needed before it can be called SUPPORTED for an
-# algorithm rather than merely EXPERIMENTAL:
-#   - scaffold submits a control-variate delta alongside the model
-#     delta; only the model delta is clipped/noised (control variates
-#     are coordination state, not privacy-sensitive model updates in the
-#     same sense) — implemented that way, but not covered by a
-#     dedicated test proving the control-variate channel is genuinely
-#     excluded from the clip/noise path.
-#   - ditto/per_fedavg produce a personalized model in addition to the
-#     global update; the global update is protected the same as fedavg's,
-#     but the personalized model is explicitly NOT protected by this
-#     mechanism (see docs/hybrid-dp.md) — EXPERIMENTAL until that
-#     boundary has its own test coverage, not because the global-update
-#     path itself is in doubt.
+# User-level DP clips and noises the client contribution centrally after
+# local training. Server-only optimizer variants remain compatible because
+# they operate after the private release. Algorithms that create additional
+# state or model outputs require an explicit proof that every release/state
+# path is covered by the claimed adjacency and accountant.
 USER_LEVEL_DP_COMPATIBILITY: dict[str, CompatibilityEntry] = {
     "fedavg": CompatibilityEntry(
         CompatibilityStatus.SUPPORTED,
@@ -165,9 +154,11 @@ USER_LEVEL_DP_COMPATIBILITY: dict[str, CompatibilityEntry] = {
         "server optimizer applies after clip+noise, unaffected",
     ),
     "scaffold": CompatibilityEntry(
-        CompatibilityStatus.EXPERIMENTAL,
-        "control-variate delta is excluded from clip/noise by construction but that "
-        "exclusion has no dedicated test yet",
+        CompatibilityStatus.UNSUPPORTED,
+        "SCAFFOLD maintains control-variate state in addition to the model update; "
+        "the current user-level accountant covers the clipped/noised model release "
+        "but no formal analysis proves the control-variate state/release path is "
+        "covered by the same client-level guarantee",
     ),
     "fedsam": CompatibilityEntry(
         CompatibilityStatus.SUPPORTED,

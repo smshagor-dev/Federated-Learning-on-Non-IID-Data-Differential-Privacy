@@ -30,6 +30,13 @@ func TestSampleLevelStatusKnownValues(t *testing.T) {
 	}
 }
 
+func TestUserLevelScaffoldFailsClosed(t *testing.T) {
+	entry := UserLevelStatus("scaffold")
+	if entry.Status != StatusUnsupported {
+		t.Errorf("scaffold user-level = %v, want unsupported until control-variate privacy is proven", entry.Status)
+	}
+}
+
 func TestUnknownAlgorithmReportsUnsupportedNotPanic(t *testing.T) {
 	entry := SampleLevelStatus("not-a-real-algorithm")
 	if entry.Status != StatusUnsupported {
@@ -45,10 +52,9 @@ func TestHybridStatusTakesTheWorseOfBothMechanisms(t *testing.T) {
 	if got := HybridStatus("fedavg").Status; got != StatusSupported {
 		t.Errorf("fedavg hybrid = %v, want supported", got)
 	}
-	// scaffold: sample-level unsupported, user-level experimental ->
-	// hybrid must be unsupported (the worse of the two).
+	// scaffold: sample-level and user-level are both unsupported.
 	if got := HybridStatus("scaffold").Status; got != StatusUnsupported {
-		t.Errorf("scaffold hybrid = %v, want unsupported (sample-level DP is unsupported for it)", got)
+		t.Errorf("scaffold hybrid = %v, want unsupported", got)
 	}
 	// ditto: sample-level deferred, user-level experimental -> hybrid
 	// must be deferred (deferred ranks worse than unsupported/experimental).

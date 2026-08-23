@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 import torch
 import torch.nn as nn
+import yaml
 
 from federated.privacy_research import (
     CLIENT_ADD_REMOVE_ADJACENCY,
@@ -11,8 +13,11 @@ from federated.privacy_research import (
     calibrate_noise_multiplier,
     compose_same_adjacency_rdp,
     epsilon_for_client_level_gaussian,
+    resolve_target_epsilon_config,
 )
 from federated.server import Server
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class PrivacyCalibrationTests(unittest.TestCase):
@@ -57,6 +62,47 @@ class PrivacyCalibrationTests(unittest.TestCase):
             delta=result.delta,
         )
         self.assertAlmostEqual(epsilon, result.achieved_epsilon, places=12)
+
+    def test_default_config_is_pinned_to_its_target_epsilon(self) -> None:
+        config = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
+        dp = config["dp"]
+        fed = config["federated"]
+        epsilon = epsilon_for_client_level_gaussian(
+            noise_multiplier=float(dp["noise_multiplier"]),
+            sample_rate=float(fed["sample_rate"]),
+            steps=int(fed["rounds"]),
+            delta=float(dp["target_delta"]),
+        )
+        target = float(dp["target_epsilon"])
+        tolerance = float(dp["epsilon_tolerance"])
+        self.assertLessEqual(epsilon, target + tolerance)
+        self.assertLess(target - epsilon, 1e-3)
+
+    def test_runtime_recalibrates_after_round_override(self) -> None:
+        config = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
+        original_sigma = float(config["dp"]["noise_multiplier"])
+        config["federated"]["rounds"] = 100
+        resolved, calibration = resolve_target_epsilon_config(config)
+        self.assertIsNotNone(calibration)
+        assert calibration is not None
+        self.assertGreater(float(resolved["dp"]["noise_multiplier"]), original_sigma)
+        self.assertLessEqual(
+            calibration.achieved_epsilon,
+            float(config["dp"]["target_epsilon"]) + 1e-10,
+        )
+        self.assertEqual(resolved["dp"]["privacy_parameter_source"], "target_epsilon_calibration")
+
+    def test_manual_noise_override_disables_target_in_effective_config(self) -> None:
+        config = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
+        config["dp"]["noise_multiplier"] = 3.25
+        resolved, calibration = resolve_target_epsilon_config(
+            config,
+            manual_noise_override=True,
+        )
+        self.assertIsNone(calibration)
+        self.assertEqual(resolved["dp"]["noise_multiplier"], 3.25)
+        self.assertIsNone(resolved["dp"]["target_epsilon"])
+        self.assertEqual(resolved["dp"]["privacy_parameter_source"], "manual_noise_multiplier")
 
 
 class PrivacyCompositionTests(unittest.TestCase):
@@ -135,6 +181,26 @@ class ScaffoldPrivacyBoundaryTests(unittest.TestCase):
             dp_enabled=False,
         )
         self.assertEqual(server.algorithm, "scaffold")
+
+
+class ResearchContractTests(unittest.TestCase):
+    def test_runtime_contract_matches_executable_entrypoints(self) -> None:
+        runtime = (ROOT / "RUNTIME.md").read_text(encoding="utf-8")
+        main = (ROOT / "main.py").read_text(encoding="utf-8")
+        self.assertIn("python main.py", runtime)
+        self.assertIn("root-simulator", runtime)
+        self.assertIn("distributed-platform", runtime)
+        self.assertIn("from experiment_runtime import", main)
+        self.assertTrue((ROOT / "infra" / "compose" / "docker-compose.dev.yml").exists())
+
+    def test_phd_research_contract_contains_required_gates(self) -> None:
+        contract = (ROOT / "docs" / "research-correctness-contract.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("same neighboring relation", contract)
+        self.assertIn("target epsilon", contract)
+        self.assertIn("at least 5 independent seeds", contract)
+        self.assertIn("Synthetic label assignment is acceptable for unit tests", contract)
 
 
 if __name__ == "__main__":

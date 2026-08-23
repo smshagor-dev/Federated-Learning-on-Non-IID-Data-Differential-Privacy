@@ -6,6 +6,10 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
+RUNTIME_CONTRACT = ROOT / "RUNTIME.md"
+RESEARCH_CONTRACT = ROOT / "docs" / "research-correctness-contract.md"
+MAIN = ROOT / "main.py"
+COMPOSE = ROOT / "infra" / "compose" / "docker-compose.dev.yml"
 PROHIBITED_PHRASE = re.compile(
     r"research" + r"[ -]" + r"projects?",
     re.IGNORECASE,
@@ -34,6 +38,55 @@ def iter_local_links(text: str) -> list[str]:
             continue
         links.append(target)
     return links
+
+
+def validate_research_contracts(errors: list[str]) -> None:
+    if not RUNTIME_CONTRACT.exists():
+        errors.append("RUNTIME.md is required as the canonical runtime source of truth.")
+        return
+    if not RESEARCH_CONTRACT.exists():
+        errors.append("docs/research-correctness-contract.md is required.")
+        return
+    if not MAIN.exists():
+        errors.append("main.py is required by the root runtime contract.")
+        return
+    if not COMPOSE.exists():
+        errors.append("infra/compose/docker-compose.dev.yml is required by the distributed runtime contract.")
+        return
+
+    runtime_text = RUNTIME_CONTRACT.read_text(encoding="utf-8")
+    research_text = RESEARCH_CONTRACT.read_text(encoding="utf-8")
+    main_text = MAIN.read_text(encoding="utf-8")
+
+    required_runtime_fragments = (
+        "python main.py",
+        "root-simulator",
+        "distributed-platform",
+        "docker compose -f infra/compose/docker-compose.dev.yml up --build",
+        "DP-enabled SCAFFOLD is intentionally fail-closed",
+    )
+    for fragment in required_runtime_fragments:
+        if fragment not in runtime_text:
+            errors.append(f"RUNTIME.md is missing required research contract text: {fragment!r}")
+
+    required_research_fragments = (
+        "same neighboring relation",
+        "target epsilon",
+        "at least 5 independent seeds",
+        "Synthetic label assignment is acceptable for unit tests",
+    )
+    for fragment in required_research_fragments:
+        if fragment not in research_text:
+            errors.append(
+                "docs/research-correctness-contract.md is missing required text: "
+                f"{fragment!r}"
+            )
+
+    if "from experiment_runtime import" not in main_text:
+        errors.append(
+            "RUNTIME.md declares the root research simulator, but main.py no longer imports experiment_runtime. "
+            "Update the runtime contract and executable atomically."
+        )
 
 
 def main() -> int:
@@ -80,13 +133,15 @@ def main() -> int:
         if not candidate.exists():
             errors.append(f"README link target does not exist: {target}")
 
+    validate_research_contracts(errors)
+
     if errors:
-        print("README validation failed:\n")
+        print("Repository documentation validation failed:\n")
         for error in errors:
             print(f"- {error}")
         return 1
 
-    print("README validation passed")
+    print("Repository documentation validation passed")
     return 0
 
 
