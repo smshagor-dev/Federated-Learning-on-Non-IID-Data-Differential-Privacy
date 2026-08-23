@@ -7,9 +7,9 @@ The reference format is versioned as ``fl-partition-v1://synthetic?...`` and
 supports the same four strategies accepted by the execution specification:
 IID, Dirichlet label skew, pathological class restriction, and quantity skew.
 
-Raw samples still never traverse the coordinator.  A verified task only
-selects deterministic shard semantics; the worker reconstructs its samples
-locally from the signed partition parameters, client id, and seed.
+Raw samples still never traverse the coordinator. A verified task only selects
+deterministic shard semantics; the worker reconstructs its samples locally from
+the signed partition parameters, client id, and seed.
 """
 
 from __future__ import annotations
@@ -24,7 +24,9 @@ import torch
 from torch.utils.data import Dataset
 
 _CANONICAL_REFERENCE_PREFIX = "fl-partition-v1://"
-_SUPPORTED_STRATEGIES = frozenset({"iid", "dirichlet", "pathological", "quantity_skew"})
+_SUPPORTED_STRATEGIES = frozenset(
+    {"iid", "dirichlet", "pathological", "quantity_skew"}
+)
 _ALLOWED_QUERY_KEYS = frozenset(
     {
         "dataset",
@@ -49,14 +51,15 @@ def _stable_hash(value: str) -> int:
     return hash_value
 
 
-def register_verified_partition_reference(client_id: str, dataset_reference: str) -> None:
-    """Publish a coordinator-verified partition reference for one client.
+def register_verified_partition_reference(
+    client_id: str, dataset_reference: str
+) -> None:
+    """Publish a coordinator-accepted partition reference for one client.
 
-    ``PartitionAwareGrpcCoordinatorClient`` calls this only after the base
-    gRPC client has completed the existing signed-task verification pipeline.
-    Keeping this registry outside ``ClientTrainingTask`` avoids changing that
-    long-lived transport dataclass while still letting the existing training
-    runner consume the authenticated dataset semantics.
+    ``PartitionAwareGrpcCoordinatorClient`` calls this only after the base gRPC
+    client has completed its existing task acceptance pipeline. When coordinator
+    signing is configured, that pipeline includes signature, trust-bundle,
+    replay, and accepted-task-journal verification before this function runs.
     """
     client_id = client_id.strip()
     dataset_reference = dataset_reference.strip()
@@ -69,7 +72,7 @@ def register_verified_partition_reference(client_id: str, dataset_reference: str
 
 
 def clear_verified_partition_references() -> None:
-    """Test helper: clear process-local verified partition bindings."""
+    """Test helper: clear process-local accepted partition bindings."""
     with _REFERENCE_LOCK:
         _VERIFIED_REFERENCE_BY_CLIENT.clear()
 
@@ -98,7 +101,9 @@ class PartitionManifest:
     image_size: int = 32
 
 
-def _single(query: dict[str, list[str]], name: str, *, default: str | None = None) -> str:
+def _single(
+    query: dict[str, list[str]], name: str, *, default: str | None = None
+) -> str:
     values = query.get(name)
     if values is None:
         if default is None:
@@ -158,7 +163,8 @@ def _parse_partition_reference(dataset_reference: str) -> _PartitionReference:
     query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True)
     unknown = sorted(set(query) - _ALLOWED_QUERY_KEYS)
     if unknown:
-        raise ValueError(f"canonical partition reference has unknown fields: {', '.join(unknown)}")
+        names = ", ".join(unknown)
+        raise ValueError(f"canonical partition reference has unknown fields: {names}")
 
     dataset_id = _single(query, "dataset").strip()
     strategy = _single(query, "strategy").strip().lower()
@@ -200,17 +206,12 @@ def _parse_partition_reference(dataset_reference: str) -> _PartitionReference:
 
 
 def _quantity_skew_count(
-    base_sample_count: int, client_seed: int, sigma: float, minimum_client_size: int
+    base_sample_count: int,
+    client_seed: int,
+    sigma: float,
+    minimum_client_size: int,
 ) -> int:
-    """Deterministic bounded log-normal quantity skew for synthetic shards.
-
-    The distributed integration dataset has no global downloaded corpus to
-    repartition, so quantity skew is represented by varying each local shard's
-    size around ``base_sample_count``.  The log-normal mean is normalized to
-    one and the generated count is bounded to 32x the base size to prevent a
-    malformed/high-sigma task from allocating unbounded worker memory.  An
-    explicitly configured minimum remains authoritative.
-    """
+    """Return a deterministic bounded log-normal synthetic shard size."""
     rng = np.random.default_rng(client_seed)
     factor = float(rng.lognormal(mean=-0.5 * sigma * sigma, sigma=sigma))
     count = max(1, int(round(base_sample_count * factor)))
@@ -243,21 +244,28 @@ class SyntheticImageDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
 
         label_rng = np.random.default_rng(manifest.seed ^ 0x9E3779B97F4A7C15)
         if manifest.partition_strategy == "dirichlet":
-            concentration = np.full(manifest.num_classes, manifest.alpha, dtype=np.float64)
+            concentration = np.full(
+                manifest.num_classes, manifest.alpha, dtype=np.float64
+            )
             probabilities = label_rng.dirichlet(concentration)
             labels = label_rng.choice(
-                manifest.num_classes, size=manifest.sample_count, p=probabilities
+                manifest.num_classes,
+                size=manifest.sample_count,
+                p=probabilities,
             )
         elif manifest.partition_strategy == "pathological":
             class_count = min(manifest.classes_per_client, manifest.num_classes)
             allowed = label_rng.choice(
-                manifest.num_classes, size=class_count, replace=False
+                manifest.num_classes,
+                size=class_count,
+                replace=False,
             )
             labels = label_rng.choice(allowed, size=manifest.sample_count)
         else:
-            labels = label_rng.integers(
-                0, manifest.num_classes, size=manifest.sample_count, endpoint=False
-            )
+            # Preserve the original worker dataset exactly for legacy/IID
+            # tasks: labels were index % num_classes before partition parity.
+            # Quantity skew changes only the shard size, not this label rule.
+            labels = np.arange(manifest.sample_count) % manifest.num_classes
         self._targets = torch.as_tensor(labels, dtype=torch.long)
 
     def __len__(self) -> int:
@@ -276,14 +284,16 @@ def load_partition(
 
 
 def manifest_for_client(
-    dataset_reference: str, client_id: str, seed: int, sample_count: int = 32
+    dataset_reference: str,
+    client_id: str,
+    seed: int,
+    sample_count: int = 32,
 ) -> PartitionManifest:
-    """Build a deterministic shard manifest from the verified task contract.
+    """Build a deterministic shard manifest from the accepted task contract.
 
     Legacy ``synthetic:<client>`` references remain backward-compatible IID
-    shards.  When a verified canonical reference has been registered for the
-    client, it takes precedence and supplies the execution seed and partition
-    parameters for deterministic cross-process replay.
+    shards. When a canonical reference has been accepted for the client, it
+    takes precedence and supplies the execution seed and partition parameters.
     """
     if sample_count <= 0:
         raise ValueError("sample_count must be positive")
