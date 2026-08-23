@@ -65,6 +65,11 @@ class UserLevelCompatibilityTests(unittest.TestCase):
             user_level_status("fedavg").status, CompatibilityStatus.SUPPORTED
         )
 
+    def test_scaffold_is_unsupported_until_control_variate_privacy_is_proven(self) -> None:
+        entry = user_level_status("scaffold")
+        self.assertEqual(entry.status, CompatibilityStatus.UNSUPPORTED)
+        self.assertIn("control-variate", entry.reason)
+
     def test_personalization_algorithms_are_experimental_not_unsupported(self) -> None:
         # Global-update path works; the personalization boundary is
         # untested — EXPERIMENTAL (usable), not UNSUPPORTED (blocked).
@@ -80,7 +85,7 @@ class HybridCompatibilityTests(unittest.TestCase):
     def test_hybrid_takes_the_worse_of_the_two_statuses(self) -> None:
         # fedavg: sample=SUPPORTED, user=SUPPORTED -> SUPPORTED
         self.assertEqual(hybrid_status("fedavg").status, CompatibilityStatus.SUPPORTED)
-        # scaffold: sample=UNSUPPORTED, user=EXPERIMENTAL -> UNSUPPORTED
+        # scaffold: both sample-level and user-level are unsupported.
         self.assertEqual(
             hybrid_status("scaffold").status, CompatibilityStatus.UNSUPPORTED
         )
