@@ -131,11 +131,14 @@ func (d *DistributedDriver) ListWorkers(ctx context.Context) ([]Worker, error) {
 }
 
 func validateDistributedMapping(spec Spec) error {
+	// All canonical partition strategies are now represented in the
+	// experiment wire contract. Keep this explicit so a future strategy
+	// cannot silently degrade to IID on an older coordinator/worker path.
 	switch spec.Dataset.Partition.Strategy {
-	case "iid", "dirichlet":
+	case "iid", "dirichlet", "pathological", "quantity_skew":
 	default:
 		return fmt.Errorf(
-			"%w: distributed coordinator RunConfiguration currently carries only partitioning and alpha; strategy %q requires additional wire fields",
+			"%w: distributed partition strategy %q is not mapped to the coordinator",
 			ErrUnsupportedMapping,
 			spec.Dataset.Partition.Strategy,
 		)
@@ -256,12 +259,15 @@ func canonicalCoordinatorRequest(executionID string, spec Spec) (coordinator.Can
 			RequestID: executionID + ":" + hash,
 			Privacy:   privacy,
 		},
-		DatasetName:         spec.Dataset.Name,
-		DatasetPartitioning: spec.Dataset.Partition.Strategy,
-		DatasetAlpha:        spec.Dataset.Partition.Alpha,
-		ModelName:           spec.Model.Name,
-		ModelUpdateFormat:   spec.Model.UpdateFormat,
-		AlgorithmMu:         spec.Algorithm.Mu,
+		DatasetName:              spec.Dataset.Name,
+		DatasetPartitioning:      spec.Dataset.Partition.Strategy,
+		DatasetAlpha:             spec.Dataset.Partition.Alpha,
+		DatasetClassesPerClient:  spec.Dataset.Partition.ClassesPerClient,
+		DatasetQuantitySkewSigma: spec.Dataset.Partition.QuantitySkewSigma,
+		DatasetMinClientSize:     spec.Dataset.Partition.MinimumClientSize,
+		ModelName:                spec.Model.Name,
+		ModelUpdateFormat:        spec.Model.UpdateFormat,
+		AlgorithmMu:              spec.Algorithm.Mu,
 	}, nil
 }
 
