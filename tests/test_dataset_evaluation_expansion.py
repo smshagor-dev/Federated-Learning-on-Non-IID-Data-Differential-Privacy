@@ -114,11 +114,13 @@ class HeldoutClientMetricTests(unittest.TestCase):
 
 
 class RootCheckpointTests(unittest.TestCase):
-    def test_server_persists_latest_model_when_root_checkpointing_is_enabled(self) -> None:
-        previous = os.environ.get("FL_ROOT_CHECKPOINT_DIR")
+    def test_server_writes_checkpoint_only_after_final_aggregation_call(self) -> None:
+        previous_dir = os.environ.get("FL_ROOT_CHECKPOINT_DIR")
+        previous_rounds = os.environ.get("FL_ROOT_CHECKPOINT_ROUNDS")
         try:
             with tempfile.TemporaryDirectory() as directory:
                 os.environ["FL_ROOT_CHECKPOINT_DIR"] = directory
+                os.environ["FL_ROOT_CHECKPOINT_ROUNDS"] = "2"
                 model = torch.nn.Linear(1, 1, bias=False)
                 with torch.no_grad():
                     model.weight.zero_()
@@ -128,6 +130,7 @@ class RootCheckpointTests(unittest.TestCase):
                     algorithm="fedavg",
                     device=torch.device("cpu"),
                 )
+                path = os.path.join(directory, "global_model_fedavg.pt")
                 server.aggregate(
                     [
                         {
@@ -136,21 +139,30 @@ class RootCheckpointTests(unittest.TestCase):
                         }
                     ]
                 )
-                path = os.path.join(directory, "global_model_fedavg.pt")
+                self.assertFalse(os.path.isfile(path))
+
+                # An empty final cohort leaves the model unchanged but still must
+                # persist the final global state for post-run client evaluation.
+                server.aggregate([])
                 self.assertTrue(os.path.isfile(path))
                 try:
                     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
                 except TypeError:
                     checkpoint = torch.load(path, map_location="cpu")
                 self.assertEqual(checkpoint["algorithm"], "fedavg")
+                self.assertEqual(checkpoint["rounds_completed"], 2)
                 self.assertAlmostEqual(
                     float(checkpoint["state_dict"]["weight"].item()), 0.5
                 )
         finally:
-            if previous is None:
+            if previous_dir is None:
                 os.environ.pop("FL_ROOT_CHECKPOINT_DIR", None)
             else:
-                os.environ["FL_ROOT_CHECKPOINT_DIR"] = previous
+                os.environ["FL_ROOT_CHECKPOINT_DIR"] = previous_dir
+            if previous_rounds is None:
+                os.environ.pop("FL_ROOT_CHECKPOINT_ROUNDS", None)
+            else:
+                os.environ["FL_ROOT_CHECKPOINT_ROUNDS"] = previous_rounds
 
 
 if __name__ == "__main__":
