@@ -73,6 +73,24 @@ PostgreSQL, Redis, MinIO, MLflow, Prometheus, Grafana and OpenTelemetry developm
 
 The two runtimes share algorithms, privacy semantics and dataset concepts, but they are not interchangeable execution paths. A feature implemented in one path must not be reported as active in the other unless parity/integration validation exists.
 
+## Execution control plane
+
+The Go API exposes the durable execution lifecycle under `/api/v1/executions`. Canonical execution records keep backend identity, immutable specification hash, backend run ID, current round, model version, worker counts, timestamps, revision and lifecycle status.
+
+At process startup, configured backends receive a recovery reconciliation pass. This pass is allowed to reconcile transitional records because the previous control-plane process may have stopped in the middle of a lifecycle operation.
+
+After startup, the control plane runs automatic runtime reconciliation every two seconds by default. The interval can be changed with a positive Go duration:
+
+```bash
+FL_EXECUTION_RECONCILE_INTERVAL=5s
+```
+
+Periodic reconciliation intentionally skips `STARTING`, `PAUSING`, `RESUMING` and `CANCELING` records. This prevents a background backend snapshot from overwriting a lifecycle request that is actively changing state. Stable executions such as `RUNNING` and `PAUSED` are refreshed automatically, so backend completion and round/worker/model changes do not depend on a client manually requesting `?refresh=true`.
+
+A temporary reconciliation failure on one configured backend does not stop reconciliation of other backends. Per-execution and per-backend failures are logged and retried on later cycles.
+
+For the local backend, Pause is checkpoint-safe at communication-round boundaries. The canonical execution process writes a deterministic runtime checkpoint and PAUSED marker before exiting with its dedicated pause status. Resume validates the checkpoint evidence and relaunches from that exact round state. Checkpoint bytes are verified against their SHA-256 sidecar before restore and before the Go control plane accepts PAUSED/RESUME evidence. SHA-256 detects changed/corrupted bytes; it is not a keyed authenticity mechanism against an actor who can rewrite both files.
+
 ## Capability rule
 
 A capability is **implemented** only when executable source exists. It is **validated** only when there is execution evidence appropriate to the claimed scope. Configuration, documentation, a test file, or CI YAML alone is not runtime evidence.
