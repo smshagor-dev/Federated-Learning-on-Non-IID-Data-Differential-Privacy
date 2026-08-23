@@ -33,8 +33,8 @@ func (s *ExecutionService) ReconcileBackend(ctx context.Context, backend executi
 // records whose control-plane lifecycle operation is currently transitional so
 // a poll cannot race an in-flight Start/Pause/Resume/Cancel request and write an
 // older backend snapshot over that request. Secure-aggregation security events
-// are checked on every stable tick because a session deadline can expire while
-// the ordinary run snapshot remains WAITING_FOR_CLIENTS.
+// and deadlines are checked on every stable tick because a secure session can
+// expire while the ordinary run snapshot remains WAITING_FOR_CLIENTS.
 func (s *ExecutionService) ReconcileRuntimeBackend(ctx context.Context, backend executiondomain.Backend) (ReconcileSummary, error) {
 	return s.reconcileBackend(ctx, backend, false)
 }
@@ -116,6 +116,35 @@ func (s *ExecutionService) reconcileBackend(ctx context.Context, backend executi
 		}
 		record = withSecurity
 
+		// The secure-session watchdog is independent of worker polling. It
+		// actively expires stuck key-advertisement/masked-update sessions,
+		// including COHORT_FROZEN sessions with zero masked contributions.
+		// This must run before the ordinary backend snapshot reconciliation:
+		// a WAITING_FOR_CLIENTS snapshot can remain unchanged indefinitely
+		// while the secure protocol has already crossed its deadline.
+		beforeWatchdogRevision := record.Revision
+		withWatchdog, _, watchdogErr := s.SweepSecureAggregationDeadlines(ctx, record.ID)
+		if watchdogErr != nil {
+			if executionUpdated {
+				summary.Updated++
+			}
+			summary.Failures = append(summary.Failures, ReconcileFailure{
+				ExecutionID: record.ID,
+				Error:       watchdogErr.Error(),
+			})
+			continue
+		}
+		if withWatchdog.Revision > beforeWatchdogRevision {
+			executionUpdated = true
+		}
+		if withWatchdog.Terminal() {
+			if executionUpdated {
+				summary.Updated++
+			}
+			continue
+		}
+		record = withWatchdog
+
 		beforeBackendRevision := record.Revision
 		updated, reconcileErr := s.Reconcile(ctx, record.ID)
 		if reconcileErr != nil {
@@ -136,8 +165,9 @@ func (s *ExecutionService) reconcileBackend(ctx context.Context, backend executi
 		// Startup always performs one event catch-up for active executions.
 		// The periodic loop only polls the ordinary coordinator event stream
 		// when the backend snapshot changed. Secure-session aborts use the
-		// separate security-journal pass above and therefore do not depend on
-		// an ordinary state/model/round transition to become visible.
+		// separate security-journal/watchdog passes above and therefore do
+		// not depend on an ordinary state/model/round transition to become
+		// visible.
 		if includeTransitional || backendStateUpdated {
 			withEvents, _, ingestErr := s.IngestBackendEvents(ctx, updated.ID)
 			if ingestErr != nil {
