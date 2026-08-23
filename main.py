@@ -23,6 +23,7 @@ from utils.client_evaluation import evaluate_completed_run
 from utils.runtime_args import parse_args
 
 _CHECKPOINT_DIR_ENV = "FL_ROOT_CHECKPOINT_DIR"
+_CHECKPOINT_ROUNDS_ENV = "FL_ROOT_CHECKPOINT_ROUNDS"
 
 
 def _enforce_privacy_boundaries(config: dict) -> None:
@@ -79,7 +80,9 @@ def _run_with_client_evaluation(config: dict) -> None:
     checkpoint_dir = os.path.join(results_dir, "checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
     previous_checkpoint_dir = os.environ.get(_CHECKPOINT_DIR_ENV)
+    previous_checkpoint_rounds = os.environ.get(_CHECKPOINT_ROUNDS_ENV)
     os.environ[_CHECKPOINT_DIR_ENV] = checkpoint_dir
+    os.environ[_CHECKPOINT_ROUNDS_ENV] = str(config["federated"]["rounds"])
     try:
         run_cli(config)
         evaluation = evaluate_completed_run(config)
@@ -92,6 +95,10 @@ def _run_with_client_evaluation(config: dict) -> None:
             os.environ.pop(_CHECKPOINT_DIR_ENV, None)
         else:
             os.environ[_CHECKPOINT_DIR_ENV] = previous_checkpoint_dir
+        if previous_checkpoint_rounds is None:
+            os.environ.pop(_CHECKPOINT_ROUNDS_ENV, None)
+        else:
+            os.environ[_CHECKPOINT_ROUNDS_ENV] = previous_checkpoint_rounds
 
 
 def main(argv: list[str] | None = None) -> int:
