@@ -78,7 +78,9 @@ def _partition_values(value: str) -> tuple[BenchmarkPartition, ...]:
         if lower.startswith("dirichlet:"):
             alpha = float(lower.split(":", 1)[1])
             partitions.append(
-                BenchmarkPartition(f"dirichlet-{alpha:g}", "dirichlet", {"alpha": alpha})
+                BenchmarkPartition(
+                    f"dirichlet-{alpha:g}", "dirichlet", {"alpha": alpha}
+                )
             )
             continue
         if lower.startswith("pathological:"):
@@ -115,7 +117,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--benchmark-id", default="fl-benchmark")
     parser.add_argument("--datasets", type=_csv_values, default=("MNIST",))
-    parser.add_argument("--algorithms", type=_csv_values, default=("fedavg", "fedprox"))
+    parser.add_argument(
+        "--algorithms", type=_csv_values, default=("fedavg", "fedprox")
+    )
     parser.add_argument(
         "--partitions",
         type=_partition_values,
@@ -139,6 +143,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baseline", default="fedavg")
     parser.add_argument("--bootstrap-samples", type=int, default=10_000)
     parser.add_argument("--analysis-seed", type=int, default=2026)
+    parser.add_argument(
+        "--minimum-replicates",
+        type=int,
+        default=5,
+        help="Minimum unique seeds required per aggregated benchmark condition.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--keep-going", action="store_true")
@@ -174,7 +184,9 @@ def _config_hash(config: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _cell_config(base: dict[str, Any], cell: BenchmarkCell, results_dir: Path) -> dict[str, Any]:
+def _cell_config(
+    base: dict[str, Any], cell: BenchmarkCell, results_dir: Path
+) -> dict[str, Any]:
     config = json.loads(json.dumps(base))
     config.setdefault("system", {})
     config.setdefault("data", {})
@@ -350,6 +362,8 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
 
 def main() -> int:
     args = parse_args()
+    if args.minimum_replicates < 1:
+        raise ValueError("minimum_replicates must be >= 1")
     config_path = (_REPO_ROOT / args.config).resolve()
     base_config = _load_yaml(config_path)
     plan = BenchmarkPlan(
@@ -363,7 +377,7 @@ def main() -> int:
         rounds=int(args.rounds),
         runtime_identity="root-simulator",
     )
-    plan.validate()
+    plan.validate(minimum_replicates=int(args.minimum_replicates))
 
     benchmark_root = (_REPO_ROOT / args.output_dir / plan.benchmark_id).resolve()
     benchmark_root.mkdir(parents=True, exist_ok=True)
@@ -371,11 +385,14 @@ def main() -> int:
         benchmark_root / "plan.json",
         {
             "plan_hash": plan.plan_hash(),
+            "minimum_replicates": int(args.minimum_replicates),
             **plan.canonical_payload(),
         },
     )
 
-    cells = list(plan.expand())
+    cells = list(
+        plan.expand(minimum_replicates=int(args.minimum_replicates))
+    )
     if args.max_cells is not None:
         if args.max_cells <= 0:
             raise ValueError("max_cells must be > 0")
@@ -439,6 +456,7 @@ def main() -> int:
         observations,
         bootstrap_samples=int(args.bootstrap_samples),
         bootstrap_seed=int(args.analysis_seed),
+        minimum_replicates=int(args.minimum_replicates),
     )
     summary_rows = [summary_row_dict(row) for row in summaries]
     _write_json(benchmark_root / "summary.json", summary_rows)
@@ -451,6 +469,7 @@ def main() -> int:
             baseline_algorithm=args.baseline,
             bootstrap_samples=int(args.bootstrap_samples),
             analysis_seed=int(args.analysis_seed),
+            minimum_replicates=int(args.minimum_replicates),
         )
         comparison_rows = [comparison_row_dict(row) for row in comparisons]
         _write_json(benchmark_root / "comparisons.json", comparison_rows)
