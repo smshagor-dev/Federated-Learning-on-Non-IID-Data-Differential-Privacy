@@ -1,4 +1,8 @@
-"""Desktop-first entry point for the root federated research runtime."""
+"""Canonical root entry point for the single-machine research simulator.
+
+The distributed Go/C++/Python platform is a separate runtime documented in
+RUNTIME.md and launched through Docker Compose.
+"""
 
 from __future__ import annotations
 
@@ -15,10 +19,24 @@ from experiment_runtime import (
 )
 
 
+def _enforce_research_privacy_boundaries(config: dict) -> None:
+    """Fail before execution when a privacy claim is not established."""
+    algorithm = str(config["algorithm"]["name"]).lower()
+    dp_enabled = bool(config["dp"]["enabled"])
+    if dp_enabled and algorithm in {"scaffold", "all"}:
+        raise ValueError(
+            "DP-enabled SCAFFOLD is disabled in the active root runtime until "
+            "the privacy effect of SCAFFOLD control-variate state/releases is "
+            "formally established. Use FedAvg/FedProx with client-level DP, "
+            "or run SCAFFOLD with DP disabled."
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     effective_argv = [] if argv is None else argv
     args = parse_args(effective_argv)
     config, warnings = validate_config(apply_overrides(load_config(args.config), args))
+    _enforce_research_privacy_boundaries(config)
     launch_gui = should_launch_gui(args, effective_argv) if argv is not None else False
     if launch_gui:
         try:
