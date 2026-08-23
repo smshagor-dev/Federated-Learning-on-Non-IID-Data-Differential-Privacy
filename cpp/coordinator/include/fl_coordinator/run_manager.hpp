@@ -152,17 +152,6 @@ struct RoundSnapshot {
     double round_deadline_at_unix_s{0.0};
 };
 
-struct RoundFaultToleranceSnapshot {
-    std::uint64_t round_id{0};
-    std::size_t completed_clients{0};
-    std::size_t failed_clients{0};
-    std::size_t timed_out_clients{0};
-    std::uint32_t minimum_valid_results{0};
-    double round_started_at_unix_s{0.0};
-    double round_deadline_at_unix_s{0.0};
-    bool deadline_reached{false};
-};
-
 class RunInstance {
   public:
     RunInstance(RunConfig config,
@@ -211,16 +200,6 @@ class RunInstance {
     void cancel(const std::string& reason, const std::string& trace_id, double now_unix_s);
     void advance(double now_unix_s);
 
-    // Enforces the absolute communication-round deadline independently of
-    // worker polling. The live coordinator drives this from a watchdog. A
-    // deadline record is persisted separately from the main coordinator
-    // checkpoint so process restart cannot silently grant a fresh timeout.
-    // Returns true when this call changes the run state by finalizing or
-    // failing the round.
-    bool enforce_round_fault_tolerance(double now_unix_s);
-    [[nodiscard]] RoundFaultToleranceSnapshot round_fault_tolerance_snapshot(
-        double now_unix_s) const;
-
     [[nodiscard]] std::optional<DispatchedTask> acquire_task(const std::string& worker_id,
                                                              double now_unix_s);
 
@@ -267,6 +246,20 @@ class RunInstance {
     [[nodiscard]] PrivacyProjection privacy_projection() const;
 
   private:
+    // Definitions for these legacy entry points are produced by the runtime
+    // wrapper from the previous implementation. They are intentionally
+    // private: external callers continue to use only the hardened methods.
+    void advance_legacy(double now_unix_s);
+    [[nodiscard]] std::optional<DispatchedTask> acquire_task_legacy(
+        const std::string& worker_id,
+        double now_unix_s);
+    bool submit_client_result_legacy(const std::string& worker_id,
+                                     const std::string& task_id,
+                                     const std::string& lease_id,
+                                     ClientResultSubmission result,
+                                     double now_unix_s,
+                                     std::string& reason);
+
     void transition(fl::core::RunState next, const std::string& reason, double now_unix_s);
     void begin_round(double now_unix_s);
     void finalize_round(double now_unix_s);
@@ -326,6 +319,7 @@ class RunManager {
     explicit RunManager(CoordinatorConfig config,
                         std::string checkpoint_root_directory,
                         std::string scaffold_state_root_directory);
+    ~RunManager();
 
     std::string create_run(RunConfig config, double now_unix_s);
 
@@ -342,6 +336,8 @@ class RunManager {
     [[nodiscard]] ClientAlgorithmStateStore& scaffold_store() { return *scaffold_store_; }
 
   private:
+    std::string create_run_legacy(RunConfig config, double now_unix_s);
+
     CoordinatorConfig config_;
     std::string checkpoint_root_directory_;
     std::string scaffold_state_root_directory_;
