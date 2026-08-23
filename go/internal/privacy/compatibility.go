@@ -90,7 +90,9 @@ var SampleLevelDPCompatibility = map[string]CompatibilityEntry{
 }
 
 // UserLevelDPCompatibility mirrors compatibility.py's
-// USER_LEVEL_DP_COMPATIBILITY dict.
+// USER_LEVEL_DP_COMPATIBILITY dict. Algorithms with an additional
+// state/release path are blocked unless the stated user-level accountant
+// has a formal argument covering that path.
 var UserLevelDPCompatibility = map[string]CompatibilityEntry{
 	"fedavg": {
 		StatusSupported,
@@ -113,9 +115,11 @@ var UserLevelDPCompatibility = map[string]CompatibilityEntry{
 		"server optimizer applies after clip+noise, unaffected",
 	},
 	"scaffold": {
-		StatusExperimental,
-		"control-variate delta is excluded from clip/noise by construction but that " +
-			"exclusion has no dedicated test yet",
+		StatusUnsupported,
+		"SCAFFOLD maintains control-variate state in addition to the model update; " +
+			"the current user-level accountant covers the clipped/noised model release " +
+			"but no formal analysis proves the control-variate state/release path is " +
+			"covered by the same client-level guarantee",
 	},
 	"fedsam": {
 		StatusSupported,
