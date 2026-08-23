@@ -92,9 +92,35 @@ func (s *ExecutionService) ReconcileSecureAggregationSecurityEvents(
 			}
 			canceled, cancelErr := s.Cancel(ctx, record.ID, cancelReason, event.TraceID)
 			if cancelErr != nil {
-				// Do not advance the cursor. The next reconciliation pass must
-				// retry the same authoritative abort event.
-				return record, processed, cancelErr
+				// A terminal backend transition can race this cancellation. Refresh
+				// once: if the backend is already terminal, the secure abort has
+				// achieved its fail-closed outcome and the cursor can advance. For
+				// any non-terminal/unavailable result we leave the cursor untouched
+				// so the authoritative abort event is retried next pass.
+				reconciled, reconcileErr := s.Reconcile(ctx, record.ID)
+				if reconcileErr == nil && reconciled.Terminal() {
+					metadata["cancel_error"] = cancelErr.Error()
+					reconciled.SecurityEventCursor = cursor
+					reconciled.UpdatedAt = s.clock().UTC()
+					updated, persistErr := s.repo.Update(ctx, reconciled, reconciled.Revision)
+					if persistErr != nil {
+						return reconciled, processed, persistErr
+					}
+					s.appendEvent(updated,
+						"SECURE_AGGREGATION_ABORT_OBSERVED_AFTER_TERMINAL",
+						event.TraceID,
+						cancelReason,
+						metadata)
+					return updated, processed, nil
+				}
+				if reconcileErr != nil {
+					return record, processed, fmt.Errorf(
+						"secure abort cancellation failed (%v); backend refresh also failed: %w",
+						cancelErr,
+						reconcileErr,
+					)
+				}
+				return canceled, processed, cancelErr
 			}
 			canceled.SecurityEventCursor = cursor
 			canceled.UpdatedAt = s.clock().UTC()
