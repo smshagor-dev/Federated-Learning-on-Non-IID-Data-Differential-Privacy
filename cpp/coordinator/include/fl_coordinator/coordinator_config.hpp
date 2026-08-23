@@ -1,5 +1,11 @@
 #pragma once
 
+// run_manager.cpp preserves the legacy implementation through a narrow macro
+// wrapper around a handful of RunManager/RunInstance method names. The legacy
+// source includes <algorithm>; loading it here first prevents the wrapper's
+// temporary `advance` macro from rewriting std::ranges::advance inside the
+// standard library on GCC/libstdc++ builds.
+#include <algorithm>
 #include <cstdint>
 
 namespace fl::coordinator {
