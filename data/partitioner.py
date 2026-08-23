@@ -1,8 +1,10 @@
 """Dataset loading and deterministic federated client partitioning.
 
 Supported datasets:
-  * CIFAR-10
   * MNIST
+  * FashionMNIST
+  * CIFAR-10
+  * CIFAR-100
 
 Supported partition strategies:
   * iid
@@ -26,17 +28,33 @@ from torchvision import datasets, transforms
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+SUPPORTED_DATASETS = ("MNIST", "FASHIONMNIST", "CIFAR10", "CIFAR100")
+
 _CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
 _CIFAR10_STD = (0.2470, 0.2435, 0.2616)
+_CIFAR100_MEAN = (0.5071, 0.4867, 0.4408)
+_CIFAR100_STD = (0.2675, 0.2565, 0.2761)
 _MNIST_MEAN = (0.1307,)
 _MNIST_STD = (0.3081,)
+_FASHION_MNIST_MEAN = (0.2860,)
+_FASHION_MNIST_STD = (0.3530,)
+
+
+def _grayscale_transform(mean: tuple[float], std: tuple[float]):
+    return transforms.Compose(
+        [
+            transforms.Resize((32, 32)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ]
+    )
 
 
 def get_dataset(
     name: str, data_root: str = "./data_raw"
 ) -> Tuple[torch.utils.data.Dataset, torch.utils.data.Dataset, int, int]:
     """Load a torchvision dataset for the root FL runtime."""
-    name = name.upper()
+    name = name.upper().replace("-", "").replace("_", "")
     os.makedirs(data_root, exist_ok=True)
 
     if name == "CIFAR10":
@@ -51,14 +69,23 @@ def get_dataset(
         )
         return train_set, test_set, 10, 3
 
-    if name == "MNIST":
+    if name == "CIFAR100":
         transform = transforms.Compose(
             [
-                transforms.Resize((32, 32)),
                 transforms.ToTensor(),
-                transforms.Normalize(_MNIST_MEAN, _MNIST_STD),
+                transforms.Normalize(_CIFAR100_MEAN, _CIFAR100_STD),
             ]
         )
+        train_set = datasets.CIFAR100(
+            data_root, train=True, download=True, transform=transform
+        )
+        test_set = datasets.CIFAR100(
+            data_root, train=False, download=True, transform=transform
+        )
+        return train_set, test_set, 100, 3
+
+    if name == "MNIST":
+        transform = _grayscale_transform(_MNIST_MEAN, _MNIST_STD)
         train_set = datasets.MNIST(
             data_root, train=True, download=True, transform=transform
         )
@@ -67,7 +94,19 @@ def get_dataset(
         )
         return train_set, test_set, 10, 1
 
-    raise ValueError(f"Unsupported dataset '{name}'. Choose 'CIFAR10' or 'MNIST'.")
+    if name == "FASHIONMNIST":
+        transform = _grayscale_transform(_FASHION_MNIST_MEAN, _FASHION_MNIST_STD)
+        train_set = datasets.FashionMNIST(
+            data_root, train=True, download=True, transform=transform
+        )
+        test_set = datasets.FashionMNIST(
+            data_root, train=False, download=True, transform=transform
+        )
+        return train_set, test_set, 10, 1
+
+    raise ValueError(
+        f"Unsupported dataset '{name}'. Choose one of {SUPPORTED_DATASETS}."
+    )
 
 
 def extract_targets(dataset: torch.utils.data.Dataset) -> np.ndarray:
@@ -203,14 +242,7 @@ def partition_quantity_skew(
     seed: int = 42,
     min_partition_size: int = 10,
 ) -> Dict[int, np.ndarray]:
-    """Create client-size skew while keeping sample assignment label-agnostic.
-
-    Client sizes are drawn from log-normal weights. Every client first receives
-    ``min_partition_size`` samples; the remaining samples are allocated by a
-    multinomial draw using the normalized log-normal weights. Sample indices are
-    globally shuffled before slicing, so quantity skew is introduced without an
-    explicit label-skew mechanism.
-    """
+    """Create client-size skew while keeping sample assignment label-agnostic."""
     if quantity_skew_sigma < 0.0:
         raise ValueError("quantity_skew_sigma must be >= 0")
     dataset_size = len(dataset)
@@ -247,12 +279,111 @@ def client_label_histograms(
     targets = extract_targets(dataset)
     histograms: dict[str, dict[int, int]] = {}
     for client_id, indices in sorted(client_dict.items()):
-        labels, counts = np.unique(targets[np.asarray(indices, dtype=np.int64)], return_counts=True)
+        labels, counts = np.unique(
+            targets[np.asarray(indices, dtype=np.int64)], return_counts=True
+        )
         histograms[f"client-{client_id}"] = {
             int(label): int(count)
             for label, count in zip(labels, counts, strict=True)
         }
     return histograms
+
+
+def _largest_remainder_allocation(total: int, weights: np.ndarray) -> np.ndarray:
+    """Allocate an integer total proportionally while preserving the exact sum."""
+    if total < 0:
+        raise ValueError("total must be >= 0")
+    weights = np.asarray(weights, dtype=np.float64)
+    if weights.ndim != 1 or len(weights) == 0:
+        raise ValueError("weights must be a non-empty one-dimensional array")
+    if np.any(weights < 0.0) or not np.all(np.isfinite(weights)):
+        raise ValueError("weights must be finite and non-negative")
+    weight_sum = float(weights.sum())
+    probabilities = (
+        np.full(len(weights), 1.0 / len(weights), dtype=np.float64)
+        if weight_sum == 0.0
+        else weights / weight_sum
+    )
+    exact = probabilities * total
+    allocated = np.floor(exact).astype(np.int64)
+    remainder = int(total - allocated.sum())
+    if remainder:
+        fractions = exact - allocated
+        order = np.argsort(-fractions, kind="stable")
+        allocated[order[:remainder]] += 1
+    return allocated
+
+
+def partition_evaluation_by_train_distribution(
+    train_dataset: torch.utils.data.Dataset,
+    train_client_dict: Mapping[int, np.ndarray],
+    evaluation_dataset: torch.utils.data.Dataset,
+    seed: int = 42,
+) -> Dict[int, np.ndarray]:
+    """Build held-out client partitions that mirror each training client's labels.
+
+    For every label, the evaluation samples are allocated across clients in the
+    same proportions observed for that label in the training partition. This
+    preserves the realized client heterogeneity much more faithfully than
+    independently re-running a partition generator on the test set.
+    """
+    if not train_client_dict:
+        raise ValueError("train_client_dict must contain at least one client")
+
+    client_ids = tuple(sorted(int(client_id) for client_id in train_client_dict))
+    if client_ids != tuple(range(len(client_ids))):
+        raise ValueError("client ids must be contiguous integers starting at zero")
+
+    train_targets = extract_targets(train_dataset)
+    evaluation_targets = extract_targets(evaluation_dataset)
+    evaluation_classes = np.unique(evaluation_targets)
+    rng = np.random.default_rng(seed)
+    result_lists: list[list[int]] = [[] for _ in client_ids]
+
+    for class_id in evaluation_classes:
+        class_eval_indices = np.where(evaluation_targets == class_id)[0]
+        rng.shuffle(class_eval_indices)
+        train_counts = np.asarray(
+            [
+                np.count_nonzero(
+                    train_targets[
+                        np.asarray(train_client_dict[client_id], dtype=np.int64)
+                    ]
+                    == class_id
+                )
+                for client_id in client_ids
+            ],
+            dtype=np.float64,
+        )
+        allocations = _largest_remainder_allocation(len(class_eval_indices), train_counts)
+        offset = 0
+        for client_id, count in enumerate(allocations.tolist()):
+            next_offset = offset + int(count)
+            if count:
+                result_lists[client_id].extend(
+                    int(index) for index in class_eval_indices[offset:next_offset]
+                )
+            offset = next_offset
+        if offset != len(class_eval_indices):
+            raise RuntimeError("evaluation class allocation did not consume all samples")
+
+    result = {
+        client_id: np.asarray(sorted(indices), dtype=np.int64)
+        for client_id, indices in enumerate(result_lists)
+    }
+    empty_clients = [client_id for client_id, indices in result.items() if len(indices) == 0]
+    if empty_clients:
+        raise RuntimeError(
+            "matched held-out evaluation produced empty client partitions; "
+            f"reduce client count or use a larger evaluation set: {empty_clients}"
+        )
+
+    assigned = np.concatenate([result[client_id] for client_id in client_ids])
+    if len(assigned) != len(evaluation_dataset):
+        raise RuntimeError("evaluation partition did not assign every sample exactly once")
+    if len(np.unique(assigned)) != len(assigned):
+        raise RuntimeError("evaluation partition assigned at least one sample twice")
+    return result
 
 
 def partition_fingerprint(client_dict: Mapping[int, np.ndarray]) -> str:
@@ -303,7 +434,8 @@ def plot_distribution(
     axis.set_ylabel("Number of samples")
     axis.set_title("Per-client class distribution")
     axis.set_xticks(x_values)
-    axis.legend(ncol=5, fontsize=8, loc="upper right")
+    if num_classes <= 20:
+        axis.legend(ncol=min(5, num_classes), fontsize=8, loc="upper right")
     figure.tight_layout()
     figure.savefig(save_path)
     plt.close(figure)
