@@ -122,16 +122,19 @@ func reconcileExecutionBackend(services *application.Services, backend execution
 	)
 }
 
-func executionReconcileIntervalFromEnv() time.Duration {
+func executionReconcileIntervalFromEnv() (time.Duration, error) {
 	raw := os.Getenv("FL_EXECUTION_RECONCILE_INTERVAL")
 	if raw == "" {
-		return defaultExecutionReconcileInterval
+		return defaultExecutionReconcileInterval, nil
 	}
 	interval, err := time.ParseDuration(raw)
 	if err != nil || interval <= 0 {
-		log.Fatalf("FL_EXECUTION_RECONCILE_INTERVAL must be a positive Go duration, got %q", raw)
+		return 0, fmt.Errorf(
+			"FL_EXECUTION_RECONCILE_INTERVAL must be a positive Go duration, got %q",
+			raw,
+		)
 	}
-	return interval
+	return interval, nil
 }
 
 func startExecutionRuntimeReconciler(services *application.Services) {
@@ -139,7 +142,10 @@ func startExecutionRuntimeReconciler(services *application.Services) {
 	if !ok {
 		log.Fatal("persistent execution engine was not configured")
 	}
-	interval := executionReconcileIntervalFromEnv()
+	interval, err := executionReconcileIntervalFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
 	go func() {
 		err := engine.RunRuntimeReconciler(
 			context.Background(),
