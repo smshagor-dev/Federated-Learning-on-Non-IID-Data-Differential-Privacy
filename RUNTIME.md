@@ -17,15 +17,42 @@ runs the single-machine federated-learning workflow defined by:
 - `federated/`
 - `data/`
 - `models/`
+- `utils/`
 - `desktop/`
 
-It supports real MNIST and CIFAR-10 datasets, deterministic client partitioning, FedAvg/FedProx/SCAFFOLD execution, central client-level DP for the supported algorithms, round metrics, exact partition manifests, and machine-readable result summaries.
+The root runtime supports real torchvision training on:
+
+- MNIST
+- FashionMNIST
+- CIFAR-10
+- CIFAR-100
+
+It provides deterministic IID, Dirichlet label-skew, pathological class-skew, and quantity-skew client partitions; FedAvg/FedProx/SCAFFOLD execution; central client-level DP for the supported algorithms; exact partition manifests; final model checkpoints; global test metrics; matched held-out per-client evaluation; and machine-readable result summaries.
 
 For terminal-only execution:
 
 ```bash
 python main.py --cli
 ```
+
+## Held-out client evaluation
+
+After the final communication round, the root CLI persists the final global model once and builds a held-out client partition from the official dataset test split.
+
+For each class, test samples are assigned across clients according to the label proportions realized in the training partition. The evaluation split therefore reflects the concrete client heterogeneity used for training without evaluating on training examples.
+
+The runtime writes:
+
+```text
+results/checkpoints/global_model_<algorithm>.pt
+results/evaluation_partition/partition_indices.npz
+results/evaluation_partition/partition_manifest.json
+results/client_evaluation_<algorithm>.csv
+```
+
+`summary.json` also contains client-level accuracy/loss summaries including mean, p10, worst-client, dispersion, and Jain fairness metrics.
+
+The weighted held-out client accuracy is validated against the global test accuracy because the held-out client partitions form an exact, non-overlapping cover of the official test set.
 
 ## Distributed platform runtime
 
@@ -85,13 +112,15 @@ python scripts/calibrate_client_level_dp.py \
 
 ## Benchmark execution
 
-The real multi-seed runner is:
+The multi-seed runner is:
 
 ```bash
 python scripts/run_benchmark_matrix.py --dry-run
 ```
 
-Remove `--dry-run` to execute the matrix. Every cell launches the root runtime in a fresh process and writes its own config, logs, exact partition indices, partition manifest, round CSV files and `summary.json`.
+Remove `--dry-run` to execute the matrix. Every cell launches the root runtime in a fresh process and writes its own config, logs, training partition, held-out evaluation partition, final model checkpoint, per-client evaluation CSV, round CSV files and `summary.json`.
+
+Benchmark observations include global metrics and held-out client metrics, so algorithm comparisons can measure average utility and client-level tail performance under the same concrete data split.
 
 ## Precedence
 
