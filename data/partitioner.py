@@ -314,6 +314,70 @@ def _largest_remainder_allocation(total: int, weights: np.ndarray) -> np.ndarray
     return allocated
 
 
+def _repair_empty_evaluation_clients(
+    *,
+    result_lists: list[list[int]],
+    train_targets: np.ndarray,
+    train_client_dict: Mapping[int, np.ndarray],
+    evaluation_targets: np.ndarray,
+) -> None:
+    """Give empty clients one class-consistent held-out sample when possible."""
+    empty_clients = [
+        client_id for client_id, indices in enumerate(result_lists) if not indices
+    ]
+    for client_id in empty_clients:
+        train_indices = np.asarray(train_client_dict[client_id], dtype=np.int64)
+        labels, counts = np.unique(train_targets[train_indices], return_counts=True)
+        preferred_labels = [
+            int(label)
+            for label, _count in sorted(
+                zip(labels.tolist(), counts.tolist(), strict=True),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ]
+
+        moved = False
+        for class_id in preferred_labels:
+            donor_candidates: list[tuple[int, int, int]] = []
+            for donor_id, donor_indices in enumerate(result_lists):
+                if donor_id == client_id or len(donor_indices) <= 1:
+                    continue
+                class_positions = [
+                    position
+                    for position, sample_index in enumerate(donor_indices)
+                    if int(evaluation_targets[sample_index]) == class_id
+                ]
+                if class_positions:
+                    donor_candidates.append(
+                        (len(class_positions), len(donor_indices), donor_id)
+                    )
+            if not donor_candidates:
+                continue
+            _class_count, _total_count, donor_id = max(donor_candidates)
+            donor_indices = result_lists[donor_id]
+            position = next(
+                position
+                for position, sample_index in enumerate(donor_indices)
+                if int(evaluation_targets[sample_index]) == class_id
+            )
+            result_lists[client_id].append(donor_indices.pop(position))
+            moved = True
+            break
+
+        if not moved:
+            donors = [
+                (len(indices), donor_id)
+                for donor_id, indices in enumerate(result_lists)
+                if donor_id != client_id and len(indices) > 1
+            ]
+            if not donors:
+                raise RuntimeError(
+                    "cannot create a non-empty held-out partition for every client"
+                )
+            _size, donor_id = max(donors)
+            result_lists[client_id].append(result_lists[donor_id].pop())
+
+
 def partition_evaluation_by_train_distribution(
     train_dataset: torch.utils.data.Dataset,
     train_client_dict: Mapping[int, np.ndarray],
@@ -322,10 +386,10 @@ def partition_evaluation_by_train_distribution(
 ) -> Dict[int, np.ndarray]:
     """Build held-out client partitions that mirror each training client's labels.
 
-    For every label, the evaluation samples are allocated across clients in the
-    same proportions observed for that label in the training partition. This
-    preserves the realized client heterogeneity much more faithfully than
-    independently re-running a partition generator on the test set.
+    For every label, evaluation samples are allocated across clients in the same
+    proportions observed for that label in the training partition. If integer
+    rounding leaves a tiny client with zero held-out samples, one sample is moved
+    from a donor, preferring labels already present in that client's training data.
     """
     if not train_client_dict:
         raise ValueError("train_client_dict must contain at least one client")
@@ -333,6 +397,10 @@ def partition_evaluation_by_train_distribution(
     client_ids = tuple(sorted(int(client_id) for client_id in train_client_dict))
     if client_ids != tuple(range(len(client_ids))):
         raise ValueError("client ids must be contiguous integers starting at zero")
+    if len(evaluation_dataset) < len(client_ids):
+        raise ValueError(
+            "evaluation dataset must contain at least one sample per client"
+        )
 
     train_targets = extract_targets(train_dataset)
     evaluation_targets = extract_targets(evaluation_dataset)
@@ -355,7 +423,9 @@ def partition_evaluation_by_train_distribution(
             ],
             dtype=np.float64,
         )
-        allocations = _largest_remainder_allocation(len(class_eval_indices), train_counts)
+        allocations = _largest_remainder_allocation(
+            len(class_eval_indices), train_counts
+        )
         offset = 0
         for client_id, count in enumerate(allocations.tolist()):
             next_offset = offset + int(count)
@@ -367,16 +437,19 @@ def partition_evaluation_by_train_distribution(
         if offset != len(class_eval_indices):
             raise RuntimeError("evaluation class allocation did not consume all samples")
 
+    _repair_empty_evaluation_clients(
+        result_lists=result_lists,
+        train_targets=train_targets,
+        train_client_dict=train_client_dict,
+        evaluation_targets=evaluation_targets,
+    )
+
     result = {
         client_id: np.asarray(sorted(indices), dtype=np.int64)
         for client_id, indices in enumerate(result_lists)
     }
-    empty_clients = [client_id for client_id, indices in result.items() if len(indices) == 0]
-    if empty_clients:
-        raise RuntimeError(
-            "matched held-out evaluation produced empty client partitions; "
-            f"reduce client count or use a larger evaluation set: {empty_clients}"
-        )
+    if any(len(indices) == 0 for indices in result.values()):
+        raise RuntimeError("held-out evaluation contains an empty client partition")
 
     assigned = np.concatenate([result[client_id] for client_id in client_ids])
     if len(assigned) != len(evaluation_dataset):
