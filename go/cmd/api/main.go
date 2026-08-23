@@ -17,6 +17,8 @@ import (
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/transport/httpapi"
 )
 
+const defaultExecutionReconcileInterval = 2 * time.Second
+
 func newCoordinatorClient() coordinator.Client {
 	address := os.Getenv("FL_COORDINATOR_ADDRESS")
 	if address == "" {
@@ -120,6 +122,61 @@ func reconcileExecutionBackend(services *application.Services, backend execution
 	)
 }
 
+func executionReconcileIntervalFromEnv() time.Duration {
+	raw := os.Getenv("FL_EXECUTION_RECONCILE_INTERVAL")
+	if raw == "" {
+		return defaultExecutionReconcileInterval
+	}
+	interval, err := time.ParseDuration(raw)
+	if err != nil || interval <= 0 {
+		log.Fatalf("FL_EXECUTION_RECONCILE_INTERVAL must be a positive Go duration, got %q", raw)
+	}
+	return interval
+}
+
+func startExecutionRuntimeReconciler(services *application.Services) {
+	engine, ok := application.ExecutionEngineFor(services)
+	if !ok {
+		log.Fatal("persistent execution engine was not configured")
+	}
+	interval := executionReconcileIntervalFromEnv()
+	go func() {
+		err := engine.RunRuntimeReconciler(
+			context.Background(),
+			interval,
+			func(results []application.RuntimeReconcileResult) {
+				for _, result := range results {
+					if result.Error != "" {
+						log.Printf("%s execution runtime reconciliation failed: %s", result.Backend, result.Error)
+						continue
+					}
+					for _, failure := range result.Summary.Failures {
+						log.Printf(
+							"%s execution runtime reconciliation failed: execution_id=%s error=%s",
+							result.Backend,
+							failure.ExecutionID,
+							failure.Error,
+						)
+					}
+					if result.Summary.Updated > 0 {
+						log.Printf(
+							"%s execution runtime reconciliation: checked=%d updated=%d failures=%d",
+							result.Backend,
+							result.Summary.Checked,
+							result.Summary.Updated,
+							len(result.Summary.Failures),
+						)
+					}
+				}
+			},
+		)
+		if err != nil {
+			log.Printf("execution runtime reconciler stopped: %v", err)
+		}
+	}()
+	log.Printf("execution runtime reconciler enabled: interval=%s", interval)
+}
+
 func configureLocalExecution(services *application.Services, dataDir string) {
 	if os.Getenv("FL_LOCAL_EXECUTION_ENABLED") != "true" {
 		return
@@ -163,6 +220,7 @@ func main() {
 		reconcileExecutionBackend(services, execution.BackendDistributed, "distributed")
 	}
 	configureLocalExecution(services, dataDir)
+	startExecutionRuntimeReconciler(services)
 	services.Research.SetWriter(newResearchCommandClient())
 	server := httpapi.NewServerWithSecurityJournalPaths(services,
 		securityJournalPathFromEnv("FL_GO_SECURITY_EVENT_JOURNAL_PATH", dataDir, "security-events.jsonl"),
