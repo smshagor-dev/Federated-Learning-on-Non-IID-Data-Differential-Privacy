@@ -105,9 +105,30 @@ func reconcileRecoveredLocalRun(run *localRun) bool {
 	}
 	summaryPath := filepath.Join(run.spec.Artifacts.Root, "summary.json")
 	_, summaryErr := os.Stat(summaryPath)
-	if summaryErr == nil {
-		changed := run.status != StatusCompleted || run.pid != 0 || run.lastError != nil || run.cancelRequested
-		run.status = StatusCompleted
+	hasSummary := summaryErr == nil
+
+	// Persisted terminal states are authoritative. A stale summary artifact
+	// must never turn a canceled or failed execution into a successful one.
+	switch run.status {
+	case StatusCanceled:
+		changed := run.pid != 0 || run.cancelRequested
+		run.pid = 0
+		run.cancelRequested = false
+		return changed
+	case StatusFailed:
+		changed := run.pid != 0 || run.cancelRequested
+		run.pid = 0
+		run.cancelRequested = false
+		return changed
+	case StatusCompleted:
+		if !hasSummary {
+			run.status = StatusFailed
+			run.pid = 0
+			run.cancelRequested = false
+			run.lastError = errors.New("persisted local execution was COMPLETED but summary.json is missing")
+			return true
+		}
+		changed := run.pid != 0 || run.lastError != nil || run.cancelRequested
 		run.pid = 0
 		run.lastError = nil
 		run.cancelRequested = false
@@ -116,17 +137,31 @@ func reconcileRecoveredLocalRun(run *localRun) bool {
 			changed = true
 		}
 		return changed
-	}
-
-	if run.status == StatusCompleted {
-		run.status = StatusFailed
+	case StatusCreated:
+		// CREATED remains startable. A pre-existing summary is not sufficient
+		// to infer that this particular persisted execution was launched.
+		changed := run.pid != 0 || run.cancelRequested
 		run.pid = 0
-		run.lastError = errors.New("persisted local execution was COMPLETED but summary.json is missing")
-		return true
+		run.cancelRequested = false
+		return changed
 	}
 
+	// For an active state, a durable summary proves the child finished after
+	// the last state write. Without that evidence, the control plane cannot
+	// safely reattach to the process, so fail closed instead of leaving a
+	// ghost RUNNING execution.
 	switch run.status {
 	case StatusStarting, StatusRunning, StatusPausing, StatusPaused, StatusResuming, StatusCanceling:
+		if hasSummary {
+			run.status = StatusCompleted
+			run.pid = 0
+			run.lastError = nil
+			run.cancelRequested = false
+			if run.modelVersion == "" {
+				run.modelVersion = run.spec.Model.Version
+			}
+			return true
+		}
 		run.status = StatusFailed
 		run.pid = 0
 		run.cancelRequested = false
