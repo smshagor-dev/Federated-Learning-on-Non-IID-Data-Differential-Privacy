@@ -2,14 +2,40 @@
 
 A multi-language federated-learning platform for training and benchmarking models across heterogeneous client data with differential privacy, deterministic partitioning, held-out client evaluation, reproducible artifacts, and distributed-service components.
 
-![Python](https://img.shields.io/badge/Python-PyTorch-3776AB?style=for-the-badge&logo=python)
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=cplusplus)
 ![Go](https://img.shields.io/badge/Go-Control%20Plane-00ADD8?style=for-the-badge&logo=go)
+![Python](https://img.shields.io/badge/Python-PySide6%20Dashboard-3776AB?style=for-the-badge&logo=python)
+![PyTorch](https://img.shields.io/badge/PyTorch-ML%20Runtime-EE4C2C?style=for-the-badge&logo=pytorch)
+![CMake](https://img.shields.io/badge/CMake-Build%20System-064F8C?style=for-the-badge&logo=cmake)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker)
-![gRPC](https://img.shields.io/badge/gRPC-Protocol%20Buffers-244C5A?style=for-the-badge)
 
 [![CI](https://github.com/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy?style=flat-square)](LICENSE)
+
+![Federated Learning](https://img.shields.io/badge/Federated-Learning-2563EB?style=flat-square)
+![Non-IID Data](https://img.shields.io/badge/Non--IID-Data%20Heterogeneity-7C3AED?style=flat-square)
+![Differential Privacy](https://img.shields.io/badge/Differential-Privacy-0F766E?style=flat-square)
+![Client-Level DP](https://img.shields.io/badge/Client--Level-Differential%20Privacy-059669?style=flat-square)
+![RDP Accounting](https://img.shields.io/badge/RDP-Privacy%20Accounting-0891B2?style=flat-square)
+![Secure Aggregation](https://img.shields.io/badge/Secure-Aggregation-334155?style=flat-square)
+![Personalized FL](https://img.shields.io/badge/Personalized-Federated%20Learning-C026D3?style=flat-square)
+![Distributed Systems](https://img.shields.io/badge/Distributed-Federated%20Runtime-4B5563?style=flat-square)
+![gRPC](https://img.shields.io/badge/gRPC-Protocol%20Buffers-244C5A?style=flat-square)
+![Experiment Tracking](https://img.shields.io/badge/Experiment-Reproducibility-0369A1?style=flat-square)
+
+![FedAvg](https://img.shields.io/badge/FedAvg-Supported-16A34A?style=flat-square)
+![FedProx](https://img.shields.io/badge/FedProx-Supported-16A34A?style=flat-square)
+![SCAFFOLD](https://img.shields.io/badge/SCAFFOLD-Supported-16A34A?style=flat-square)
+![Per-FedAvg](https://img.shields.io/badge/Per--FedAvg-Auxiliary-F59E0B?style=flat-square)
+![FedSAM](https://img.shields.io/badge/FedSAM-Auxiliary-F59E0B?style=flat-square)
+![Ditto](https://img.shields.io/badge/Ditto-Auxiliary-F59E0B?style=flat-square)
+
+![MNIST](https://img.shields.io/badge/Dataset-MNIST-0284C7?style=flat-square)
+![CIFAR-10](https://img.shields.io/badge/Dataset-CIFAR--10-0284C7?style=flat-square)
+![Dirichlet Partition](https://img.shields.io/badge/Partition-Dirichlet%20Label%20Skew-EA580C?style=flat-square)
+![Pathological Partition](https://img.shields.io/badge/Partition-Pathological%20Shards-EA580C?style=flat-square)
+![Poisson Sampling](https://img.shields.io/badge/Sampling-Poisson-9333EA?style=flat-square)
+![Fixed Sampling](https://img.shields.io/badge/Sampling-Fixed%20Without%20Replacement-9333EA?style=flat-square)
 
 ## Platform Overview
 

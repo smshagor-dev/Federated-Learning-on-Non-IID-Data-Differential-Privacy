@@ -18,20 +18,21 @@ const (
 )
 
 type Record struct {
-	ID                 string     `json:"id"`
-	ExperimentID       string     `json:"experiment_id,omitempty"`
-	Backend            Backend    `json:"backend"`
-	Spec               Spec       `json:"spec"`
-	SpecHash           string     `json:"spec_hash"`
-	Status             Status     `json:"status"`
-	BackendRunID       string     `json:"backend_run_id,omitempty"`
-	BackendEventCursor string     `json:"backend_event_cursor,omitempty"`
-	CurrentRound       uint64     `json:"current_round"`
-	MaxRounds          uint32     `json:"max_rounds"`
-	ModelVersion       string     `json:"model_version,omitempty"`
-	RegisteredWorkers  uint32     `json:"registered_workers"`
-	HealthyWorkers     uint32     `json:"healthy_workers"`
-	LastError          string     `json:"last_error,omitempty"`
+	ID                  string     `json:"id"`
+	ExperimentID        string     `json:"experiment_id,omitempty"`
+	Backend             Backend    `json:"backend"`
+	Spec                Spec       `json:"spec"`
+	SpecHash            string     `json:"spec_hash"`
+	Status              Status     `json:"status"`
+	BackendRunID        string     `json:"backend_run_id,omitempty"`
+	BackendEventCursor  string     `json:"backend_event_cursor,omitempty"`
+	SecurityEventCursor string     `json:"security_event_cursor,omitempty"`
+	CurrentRound        uint64     `json:"current_round"`
+	MaxRounds           uint32     `json:"max_rounds"`
+	ModelVersion        string     `json:"model_version,omitempty"`
+	RegisteredWorkers   uint32     `json:"registered_workers"`
+	HealthyWorkers      uint32     `json:"healthy_workers"`
+	LastError           string     `json:"last_error,omitempty"`
 	Revision           uint64     `json:"revision"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
