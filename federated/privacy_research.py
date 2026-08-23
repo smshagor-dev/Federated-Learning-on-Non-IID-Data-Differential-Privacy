@@ -63,7 +63,8 @@ class PrivacyCompositionResult:
 
 
 def _normalize_orders(orders: Iterable[int] | None) -> tuple[int, ...]:
-    normalized = tuple(sorted(set(int(order) for order in (orders or DEFAULT_ORDERS))))
+    source = DEFAULT_ORDERS if orders is None else orders
+    normalized = tuple(sorted(set(int(order) for order in source)))
     if not normalized:
         raise ValueError("At least one RDP order is required.")
     if normalized[0] < 2:
