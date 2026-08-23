@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/application"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/bootstrap"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
+	"github.com/smshagor-dev/federated-learning-super-system/go/internal/execution"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/research"
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/transport/httpapi"
 )
@@ -120,6 +122,32 @@ func newResearchCommandClient() research.CommandClient {
 	return research.NewHTTPCommandClient(url, secret, serviceIdentity, 10*time.Second)
 }
 
+func configureLocalExecution(services *application.Services) {
+	if os.Getenv("FL_LOCAL_EXECUTION_ENABLED") != "true" {
+		return
+	}
+	repositoryRoot := os.Getenv("FL_LOCAL_EXECUTION_REPOSITORY_ROOT")
+	if repositoryRoot == "" {
+		log.Fatal("FL_LOCAL_EXECUTION_ENABLED=true requires FL_LOCAL_EXECUTION_REPOSITORY_ROOT")
+	}
+	pythonExecutable := os.Getenv("FL_LOCAL_EXECUTION_PYTHON")
+	localDriver, err := execution.NewLocalDriver(execution.LocalDriverConfig{
+		RepositoryRoot:   repositoryRoot,
+		PythonExecutable: pythonExecutable,
+	})
+	if err != nil {
+		log.Fatalf("configure local execution backend: %v", err)
+	}
+	engine, ok := application.ExecutionEngineFor(services)
+	if !ok {
+		log.Fatal("persistent execution engine was not configured")
+	}
+	if err := engine.RegisterDriver(execution.BackendLocal, localDriver); err != nil {
+		log.Fatalf("register local execution backend: %v", err)
+	}
+	log.Printf("local execution backend enabled: repository_root=%s python=%s", repositoryRoot, pythonExecutable)
+}
+
 func main() {
 	dataDir := os.Getenv("FL_CONTROL_PLANE_DATA_DIR")
 	if dataDir == "" {
@@ -130,6 +158,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap persistent services: %v", err)
 	}
+	configureLocalExecution(services)
 	services.Research.SetWriter(newResearchCommandClient())
 	server := httpapi.NewServerWithSecurityJournalPaths(services,
 		securityJournalPathFromEnv("FL_GO_SECURITY_EVENT_JOURNAL_PATH", dataDir, "security-events.jsonl"),
