@@ -138,20 +138,32 @@ func reconcileRecoveredLocalRun(run *localRun) bool {
 		}
 		return changed
 	case StatusCreated:
-		// CREATED remains startable. A pre-existing summary is not sufficient
-		// to infer that this particular persisted execution was launched.
 		changed := run.pid != 0 || run.cancelRequested
 		run.pid = 0
 		run.cancelRequested = false
 		return changed
+	case StatusPaused:
+		// PAUSED is recoverable only when both the durable marker and exact
+		// round-boundary checkpoint still validate against the execution spec.
+		if _, err := readLocalPauseEvidence(run); err != nil {
+			run.status = StatusFailed
+			run.pid = 0
+			run.cancelRequested = false
+			run.lastError = fmt.Errorf("recover paused local execution: %w", err)
+			return true
+		}
+		changed := run.pid != 0 || run.cancelRequested || run.lastError != nil
+		run.pid = 0
+		run.cancelRequested = false
+		run.lastError = nil
+		return changed
 	}
 
-	// For an active state, a durable summary proves the child finished after
-	// the last state write. Without that evidence, the control plane cannot
-	// safely reattach to the process, so fail closed instead of leaving a
-	// ghost RUNNING execution.
+	// For an in-flight state, a durable summary proves the child finished after
+	// the last state write. Without completion evidence, this process cannot be
+	// safely reattached across a control-plane restart and must fail closed.
 	switch run.status {
-	case StatusStarting, StatusRunning, StatusPausing, StatusPaused, StatusResuming, StatusCanceling:
+	case StatusStarting, StatusRunning, StatusPausing, StatusResuming, StatusCanceling:
 		if hasSummary {
 			run.status = StatusCompleted
 			run.pid = 0

@@ -47,13 +47,16 @@ _ALGO_LABELS = {
 
 
 class CSVLogger:
-    def __init__(self, csv_path: str) -> None:
+    def __init__(self, csv_path: str, *, append: bool = False) -> None:
         self.csv_path = csv_path
         os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
-        self._file = open(csv_path, "w", newline="", encoding="utf-8")
+        existing = append and os.path.isfile(csv_path) and os.path.getsize(csv_path) > 0
+        mode = "a" if append else "w"
+        self._file = open(csv_path, mode, newline="", encoding="utf-8")
         self._writer = csv.DictWriter(self._file, fieldnames=FIELDNAMES)
-        self._writer.writeheader()
-        self._file.flush()
+        if not existing:
+            self._writer.writeheader()
+            self._file.flush()
 
     def log(self, row: dict) -> None:
         clean = {key: row.get(key, "") for key in FIELDNAMES}
