@@ -98,6 +98,28 @@ func newResearchCommandClient() research.CommandClient {
 	return research.NewHTTPCommandClient(url, secret, serviceIdentity, 10*time.Second)
 }
 
+func reconcileExecutionBackend(services *application.Services, backend execution.Backend, label string) {
+	engine, ok := application.ExecutionEngineFor(services)
+	if !ok {
+		log.Fatal("persistent execution engine was not configured")
+	}
+	summary, err := engine.ReconcileBackend(context.Background(), backend)
+	if err != nil {
+		log.Fatalf("reconcile %s executions during startup: %v", label, err)
+	}
+	for _, failure := range summary.Failures {
+		log.Printf("%s execution startup reconciliation failed: execution_id=%s error=%s", label, failure.ExecutionID, failure.Error)
+	}
+	log.Printf(
+		"%s execution startup reconciliation: checked=%d updated=%d skipped=%d failures=%d",
+		label,
+		summary.Checked,
+		summary.Updated,
+		summary.Skipped,
+		len(summary.Failures),
+	)
+}
+
 func configureLocalExecution(services *application.Services, dataDir string) {
 	if os.Getenv("FL_LOCAL_EXECUTION_ENABLED") != "true" {
 		return
@@ -123,22 +145,8 @@ func configureLocalExecution(services *application.Services, dataDir string) {
 	if err := engine.RegisterDriver(execution.BackendLocal, localDriver); err != nil {
 		log.Fatalf("register local execution backend: %v", err)
 	}
-	reconcileSummary, err := engine.ReconcileBackend(context.Background(), execution.BackendLocal)
-	if err != nil {
-		log.Fatalf("reconcile local executions during startup: %v", err)
-	}
-	for _, failure := range reconcileSummary.Failures {
-		log.Printf("local execution startup reconciliation failed: execution_id=%s error=%s", failure.ExecutionID, failure.Error)
-	}
-	log.Printf(
-		"local execution backend enabled: repository_root=%s state_root=%s python=%s reconciled_checked=%d reconciled_updated=%d reconciled_failures=%d",
-		repositoryRoot,
-		stateRoot,
-		pythonExecutable,
-		reconcileSummary.Checked,
-		reconcileSummary.Updated,
-		len(reconcileSummary.Failures),
-	)
+	reconcileExecutionBackend(services, execution.BackendLocal, "local")
+	log.Printf("local execution backend enabled: repository_root=%s state_root=%s python=%s", repositoryRoot, stateRoot, pythonExecutable)
 }
 
 func main() {
@@ -150,6 +158,9 @@ func main() {
 	services, err := bootstrap.NewPersistentServicesWithCoordinator(bootstrap.PathsForDataDir(dataDir), coordinatorClient, nil)
 	if err != nil {
 		log.Fatalf("bootstrap persistent services: %v", err)
+	}
+	if coordinatorClient != nil {
+		reconcileExecutionBackend(services, execution.BackendDistributed, "distributed")
 	}
 	configureLocalExecution(services, dataDir)
 	services.Research.SetWriter(newResearchCommandClient())
