@@ -22,6 +22,53 @@ type Repository interface {
 	Update(ctx context.Context, record Record, expectedRevision uint64) (Record, error)
 }
 
+type InMemoryRepository struct {
+	mu    sync.RWMutex
+	items map[string]Record
+}
+
+func NewInMemoryRepository() *InMemoryRepository {
+	return &InMemoryRepository{items: map[string]Record{}}
+}
+
+func (r *InMemoryRepository) Create(_ context.Context, record Record) (Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.items[record.ID]; exists {
+		return Record{}, ErrRevisionConflict
+	}
+	if record.Revision == 0 {
+		record.Revision = 1
+	}
+	r.items[record.ID] = record
+	return record, nil
+}
+
+func (r *InMemoryRepository) List(_ context.Context) ([]Record, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return sortedRecords(r.items), nil
+}
+
+func (r *InMemoryRepository) Get(_ context.Context, id string) (Record, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	record, ok := r.items[id]
+	return record, ok, nil
+}
+
+func (r *InMemoryRepository) Update(_ context.Context, record Record, expectedRevision uint64) (Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current, exists := r.items[record.ID]
+	if !exists || current.Revision != expectedRevision {
+		return Record{}, ErrRevisionConflict
+	}
+	record.Revision = expectedRevision + 1
+	r.items[record.ID] = record
+	return record, nil
+}
+
 type FileRepository struct {
 	mu    sync.RWMutex
 	path  string
@@ -60,17 +107,7 @@ func (r *FileRepository) Create(_ context.Context, record Record) (Record, error
 func (r *FileRepository) List(_ context.Context) ([]Record, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	records := make([]Record, 0, len(r.items))
-	for _, record := range r.items {
-		records = append(records, record)
-	}
-	sort.Slice(records, func(i, j int) bool {
-		if records[i].CreatedAt.Equal(records[j].CreatedAt) {
-			return records[i].ID < records[j].ID
-		}
-		return records[i].CreatedAt.Before(records[j].CreatedAt)
-	})
-	return records, nil
+	return sortedRecords(r.items), nil
 }
 
 func (r *FileRepository) Get(_ context.Context, id string) (Record, bool, error) {
@@ -98,8 +135,12 @@ func (r *FileRepository) Update(_ context.Context, record Record, expectedRevisi
 }
 
 func (r *FileRepository) persistLocked() error {
-	records := make([]Record, 0, len(r.items))
-	for _, record := range r.items {
+	return storage.SaveJSON(r.path, sortedRecords(r.items))
+}
+
+func sortedRecords(items map[string]Record) []Record {
+	records := make([]Record, 0, len(items))
+	for _, record := range items {
 		records = append(records, record)
 	}
 	sort.Slice(records, func(i, j int) bool {
@@ -108,7 +149,7 @@ func (r *FileRepository) persistLocked() error {
 		}
 		return records[i].CreatedAt.Before(records[j].CreatedAt)
 	})
-	return storage.SaveJSON(r.path, records)
+	return records
 }
 
 type Journal struct {
