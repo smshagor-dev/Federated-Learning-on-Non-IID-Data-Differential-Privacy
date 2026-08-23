@@ -5,6 +5,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+import yaml
 
 from federated.privacy_research import (
     CLIENT_ADD_REMOVE_ADJACENCY,
@@ -60,6 +61,21 @@ class PrivacyCalibrationTests(unittest.TestCase):
             delta=result.delta,
         )
         self.assertAlmostEqual(epsilon, result.achieved_epsilon, places=12)
+
+    def test_default_config_is_pinned_to_its_target_epsilon(self) -> None:
+        config = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
+        dp = config["dp"]
+        fed = config["federated"]
+        epsilon = epsilon_for_client_level_gaussian(
+            noise_multiplier=float(dp["noise_multiplier"]),
+            sample_rate=float(fed["sample_rate"]),
+            steps=int(fed["rounds"]),
+            delta=float(dp["target_delta"]),
+        )
+        target = float(dp["target_epsilon"])
+        tolerance = float(dp["epsilon_tolerance"])
+        self.assertLessEqual(epsilon, target + tolerance)
+        self.assertLess(target - epsilon, 1e-3)
 
 
 class PrivacyCompositionTests(unittest.TestCase):
