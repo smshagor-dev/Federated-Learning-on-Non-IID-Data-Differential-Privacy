@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
@@ -30,6 +31,9 @@ func (d *DistributedDriver) ListSecureAggregationSessions(
 			pageSize,
 		)
 		if err != nil {
+			if errors.Is(err, coordinator.ErrFailedPrecondition) {
+				return nil, nil
+			}
 			return nil, err
 		}
 		for _, summary := range summaries {
