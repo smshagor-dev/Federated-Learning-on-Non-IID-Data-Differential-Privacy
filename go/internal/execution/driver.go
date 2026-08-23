@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 var (
@@ -30,6 +31,26 @@ type Worker struct {
 	GPUCount            uint32
 	SupportedAlgorithms []string
 	LastHeartbeatUnixS  float64
+}
+
+// BackendEvent is transport-neutral coordinator/runtime observability. EventID
+// must be stable within one backend run so the control plane can persist a
+// resume cursor and journal events idempotently across process restarts.
+type BackendEvent struct {
+	EventID   string
+	Type      string
+	Round     uint64
+	Reason    string
+	TraceID   string
+	Metadata  map[string]string
+	Timestamp time.Time
+}
+
+// EventSource is an optional capability implemented by backends that expose a
+// resumable event stream. It is deliberately separate from Driver so local
+// backends without a stream keep the lifecycle contract unchanged.
+type EventSource interface {
+	PollEvents(ctx context.Context, backendRunID, afterEventID string) ([]BackendEvent, error)
 }
 
 // Driver is the lifecycle contract every execution backend must satisfy.
