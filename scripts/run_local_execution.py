@@ -179,6 +179,18 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
                 "local root backend does not claim a cryptographically secure "
                 "Gaussian RNG"
             )
+        epsilon_budget = _finite_float(
+            user_level.get("epsilon_budget", 0.0),
+            "privacy.user_level.epsilon_budget",
+        )
+        if epsilon_budget < 0.0:
+            raise ValueError("privacy.user_level.epsilon_budget must be non-negative")
+        if epsilon_budget > 0.0:
+            raise ValueError(
+                "local root backend does not yet implement epsilon_budget stop-policy "
+                "enforcement; target_epsilon calibration is intentionally not treated "
+                "as the same contract"
+            )
 
     optimizer = _required_mapping(spec["optimizer"], "optimizer")
     evaluation = _required_mapping(spec["evaluation"], "evaluation")
@@ -250,6 +262,7 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
     config["model"]["name"] = "cnn"
 
     config["dp"]["enabled"] = privacy_mode == "user_level_dp"
+    config["dp"]["target_epsilon"] = None
     if privacy_mode == "user_level_dp":
         config["dp"]["update_clip_norm"] = _finite_float(
             user_level.get("initial_clipping_bound"),
@@ -269,15 +282,6 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
         if target_delta >= 1.0:
             raise ValueError("privacy.user_level.target_delta must lie in (0, 1)")
         config["dp"]["target_delta"] = target_delta
-        epsilon_budget = _finite_float(
-            user_level.get("epsilon_budget", 0.0),
-            "privacy.user_level.epsilon_budget",
-        )
-        if epsilon_budget < 0.0:
-            raise ValueError("privacy.user_level.epsilon_budget must be non-negative")
-        config["dp"]["target_epsilon"] = epsilon_budget if epsilon_budget > 0 else None
-    else:
-        config["dp"]["target_epsilon"] = None
 
     config["evaluation"]["eval_batch_size"] = _positive_int(
         evaluation.get("evaluation_batch_size"),
