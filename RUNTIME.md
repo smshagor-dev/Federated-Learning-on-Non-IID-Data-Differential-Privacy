@@ -67,7 +67,15 @@ Sample-level DP, user/client-level DP, and adaptive-clipping statistics must kee
 
 ## Target-epsilon experiments
 
-Publication experiments should define privacy budgets using target epsilon rather than hand-picked noise multipliers. Use:
+Publication experiments should define privacy budgets using target epsilon rather than hand-picked noise multipliers.
+
+When `dp.target_epsilon` is configured, `python main.py` recalibrates the Gaussian noise multiplier **after** all runtime overrides are applied. This matters because changing `--rounds` (or a runtime configuration's client sample rate) changes the privacy loss; a sigma calibrated for 50 rounds must not be silently reused for 100 rounds while still claiming the same epsilon.
+
+The default research configuration targets approximately `epsilon=4` at `delta=1e-5`. The effective runtime config records the calibrated sigma and achieved epsilon.
+
+An explicit CLI `--noise` value is treated as a manual research override. In that case the effective runtime config clears `target_epsilon` so the system does not falsely imply that the requested budget was enforced.
+
+For standalone calibration or experiment planning, use:
 
 ```bash
 python scripts/calibrate_client_level_dp.py \
@@ -77,7 +85,7 @@ python scripts/calibrate_client_level_dp.py \
   --delta 1e-5
 ```
 
-The command returns a privacy-safe Gaussian noise multiplier for the root client-level RDP accountant. The returned sigma should be copied into the experiment configuration and archived with the experiment specification.
+The command returns a privacy-safe Gaussian noise multiplier for the root client-level RDP accountant.
 
 ## Precedence
 
