@@ -301,22 +301,35 @@ func (s *ExecutionService) Reconcile(ctx context.Context, id string) (executiond
 	}
 	beforeStatus := record.Status
 	beforeRound := record.CurrentRound
+	beforeModelVersion := record.ModelVersion
+	beforeRegisteredWorkers := record.RegisteredWorkers
+	beforeHealthyWorkers := record.HealthyWorkers
+	beforeCompletedAt := record.CompletedAt
 	record = s.applySnapshot(record, snapshot)
 	now := s.clock().UTC()
-	record.UpdatedAt = now
 	if record.Terminal() && record.CompletedAt == nil {
 		record.CompletedAt = &now
 	}
-	if record.Status == beforeStatus && record.CurrentRound == beforeRound && record.ModelVersion == snapshot.ModelVersion && record.RegisteredWorkers == snapshot.RegisteredWorkers && record.HealthyWorkers == snapshot.HealthyWorkers {
+	changed := record.Status != beforeStatus ||
+		record.CurrentRound != beforeRound ||
+		record.ModelVersion != beforeModelVersion ||
+		record.RegisteredWorkers != beforeRegisteredWorkers ||
+		record.HealthyWorkers != beforeHealthyWorkers ||
+		(beforeCompletedAt == nil && record.CompletedAt != nil)
+	if !changed {
 		return record, nil
 	}
+	record.UpdatedAt = now
 	record, err = s.repo.Update(ctx, record, record.Revision)
 	if err != nil {
 		return executiondomain.Record{}, err
 	}
 	s.appendEvent(record, "EXECUTION_RECONCILED", "", "", map[string]string{
-		"previous_status": string(beforeStatus),
-		"previous_round":  fmt.Sprintf("%d", beforeRound),
+		"previous_status":             string(beforeStatus),
+		"previous_round":              fmt.Sprintf("%d", beforeRound),
+		"previous_model_version":      beforeModelVersion,
+		"previous_registered_workers": fmt.Sprintf("%d", beforeRegisteredWorkers),
+		"previous_healthy_workers":    fmt.Sprintf("%d", beforeHealthyWorkers),
 	})
 	return record, nil
 }
