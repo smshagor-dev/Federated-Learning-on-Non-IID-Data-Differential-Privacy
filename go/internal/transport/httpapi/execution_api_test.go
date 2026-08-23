@@ -69,6 +69,7 @@ func executionAPISpec() executiondomain.Spec {
 			LocalEpochs:           1,
 			BatchSize:             8,
 			Weighting:             "uniform",
+			SamplingStrategy:      executiondomain.SamplingFixedWithoutReplacement,
 			SchedulingMode:        executiondomain.SchedulingSynchronous,
 			RoundTimeoutSeconds:   30,
 			TaskLeaseSeconds:      15,
