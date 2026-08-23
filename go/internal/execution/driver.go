@@ -82,6 +82,29 @@ type SecurityEventSource interface {
 	PollSecurityEvents(ctx context.Context, afterEventID string, limit uint32) (SecurityEventPage, error)
 }
 
+// SecureAggregationSession is the deadline/lifecycle subset needed by the
+// independent control-plane watchdog. It intentionally excludes keys, masks,
+// shares, signatures, and tensor payloads.
+type SecureAggregationSession struct {
+	SessionID                     string
+	BackendRunID                  string
+	RoundID                       uint64
+	State                         string
+	KeyAdvertisementCount         uint64
+	MaskedContributionCount       uint64
+	KeyAdvertisementDeadlineUnixS float64
+	MaskedUpdateDeadlineUnixS     float64
+	SessionExpiryUnixS            float64
+}
+
+// SecureAggregationSessionController is an optional distributed-backend
+// capability used to drive protocol deadlines even when no worker is polling
+// AcquireTask. Local backends do not implement it.
+type SecureAggregationSessionController interface {
+	ListSecureAggregationSessions(ctx context.Context, backendRunID string) ([]SecureAggregationSession, error)
+	AbortSecureAggregationSession(ctx context.Context, sessionID, reason string) error
+}
+
 // Driver is the lifecycle contract every execution backend must satisfy.
 // Local and distributed backends may have very different transports, but
 // lifecycle state, snapshots, and failure semantics converge here.
