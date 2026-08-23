@@ -17,6 +17,7 @@ from experiment_runtime import (
     should_launch_gui,
     validate_config,
 )
+from federated.privacy_research import resolve_target_epsilon_config
 
 
 def _enforce_research_privacy_boundaries(config: dict) -> None:
@@ -32,10 +33,42 @@ def _enforce_research_privacy_boundaries(config: dict) -> None:
         )
 
 
+def _resolve_effective_privacy_config(
+    config: dict,
+    *,
+    manual_noise_override: bool,
+    warnings: list[str],
+) -> dict:
+    resolved, calibration = resolve_target_epsilon_config(
+        config,
+        manual_noise_override=manual_noise_override,
+    )
+    if calibration is not None:
+        warnings.append(
+            "Calibrated client-level DP noise from target epsilon after all runtime "
+            f"overrides: target_epsilon={calibration.target_epsilon:.6g}, "
+            f"achieved_epsilon={calibration.achieved_epsilon:.6g}, "
+            f"sigma={calibration.noise_multiplier:.8g}, "
+            f"q={calibration.sample_rate:.6g}, rounds={calibration.steps}, "
+            f"delta={calibration.delta:.6g}."
+        )
+    elif manual_noise_override and bool(resolved["dp"].get("enabled", False)):
+        warnings.append(
+            "Explicit --noise override selected; target_epsilon is disabled in the "
+            "effective runtime config and privacy is reported from the supplied sigma."
+        )
+    return resolved
+
+
 def main(argv: list[str] | None = None) -> int:
     effective_argv = [] if argv is None else argv
     args = parse_args(effective_argv)
     config, warnings = validate_config(apply_overrides(load_config(args.config), args))
+    config = _resolve_effective_privacy_config(
+        config,
+        manual_noise_override=args.noise is not None,
+        warnings=warnings,
+    )
     _enforce_research_privacy_boundaries(config)
     launch_gui = should_launch_gui(args, effective_argv) if argv is not None else False
     if launch_gui:
