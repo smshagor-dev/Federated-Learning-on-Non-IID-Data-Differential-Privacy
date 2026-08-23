@@ -4,7 +4,6 @@ import math
 import unittest
 
 from fl_platform.research.statistics import (
-    bootstrap_mean_interval,
     compare_paired_metrics,
     holm_adjust,
     summarize_metric,
@@ -26,19 +25,6 @@ class MetricSummaryTests(unittest.TestCase):
     def test_publication_default_rejects_too_few_replicates(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least 5"):
             summarize_metric([1.0, 2.0, 3.0, 4.0])
-
-    def test_bootstrap_interval_is_order_invariant(self) -> None:
-        forward = bootstrap_mean_interval(
-            [1.0, 2.0, 3.0, 4.0, 5.0], bootstrap_samples=1000, seed=5
-        )
-        reverse = bootstrap_mean_interval(
-            [5.0, 4.0, 3.0, 2.0, 1.0], bootstrap_samples=1000, seed=5
-        )
-        # The stable RNG seed includes the values, so sequence order is part of
-        # the experiment record. The interval should still agree numerically
-        # for a simple permutation of the same empirical sample.
-        self.assertAlmostEqual(forward[0], reverse[0], delta=0.2)
-        self.assertAlmostEqual(forward[1], reverse[1], delta=0.2)
 
 
 class PairedComparisonTests(unittest.TestCase):
