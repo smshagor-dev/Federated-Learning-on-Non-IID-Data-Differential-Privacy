@@ -12,7 +12,7 @@ const (
 	StatusPaused    Status = "PAUSED"
 	StatusResuming  Status = "RESUMING"
 	StatusCanceling Status = "CANCELING"
-	StatusCanceled Status = "CANCELED"
+	StatusCanceled  Status = "CANCELED"
 	StatusCompleted Status = "COMPLETED"
 	StatusFailed    Status = "FAILED"
 )
@@ -33,11 +33,11 @@ type Record struct {
 	RegisteredWorkers   uint32     `json:"registered_workers"`
 	HealthyWorkers      uint32     `json:"healthy_workers"`
 	LastError           string     `json:"last_error,omitempty"`
-	Revision            uint64     `json:"revision"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
-	StartedAt           *time.Time `json:"started_at,omitempty"`
-	CompletedAt         *time.Time `json:"completed_at,omitempty"`
+	Revision           uint64     `json:"revision"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+	StartedAt          *time.Time `json:"started_at,omitempty"`
+	CompletedAt        *time.Time `json:"completed_at,omitempty"`
 }
 
 func (r Record) Terminal() bool {
