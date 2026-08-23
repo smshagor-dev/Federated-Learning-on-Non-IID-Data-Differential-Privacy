@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -122,7 +123,22 @@ func configureLocalExecution(services *application.Services, dataDir string) {
 	if err := engine.RegisterDriver(execution.BackendLocal, localDriver); err != nil {
 		log.Fatalf("register local execution backend: %v", err)
 	}
-	log.Printf("local execution backend enabled: repository_root=%s state_root=%s python=%s", repositoryRoot, stateRoot, pythonExecutable)
+	reconcileSummary, err := engine.ReconcileBackend(context.Background(), execution.BackendLocal)
+	if err != nil {
+		log.Fatalf("reconcile local executions during startup: %v", err)
+	}
+	for _, failure := range reconcileSummary.Failures {
+		log.Printf("local execution startup reconciliation failed: execution_id=%s error=%s", failure.ExecutionID, failure.Error)
+	}
+	log.Printf(
+		"local execution backend enabled: repository_root=%s state_root=%s python=%s reconciled_checked=%d reconciled_updated=%d reconciled_failures=%d",
+		repositoryRoot,
+		stateRoot,
+		pythonExecutable,
+		reconcileSummary.Checked,
+		reconcileSummary.Updated,
+		len(reconcileSummary.Failures),
+	)
 }
 
 func main() {
