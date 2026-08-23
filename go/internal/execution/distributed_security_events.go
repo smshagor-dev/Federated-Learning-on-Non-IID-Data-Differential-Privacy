@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/coordinator"
@@ -29,6 +30,13 @@ func (d *DistributedDriver) PollSecurityEvents(
 		SubjectType:  secureAggregationSubjectType,
 	})
 	if err != nil {
+		// Older/minimal coordinator deployments may not configure the
+		// security-event journal. That absence must not break ordinary
+		// execution reconciliation; transport/authentication failures still
+		// propagate because they indicate a real control-plane problem.
+		if errors.Is(err, coordinator.ErrFailedPrecondition) {
+			return SecurityEventPage{}, nil
+		}
 		return SecurityEventPage{}, err
 	}
 
