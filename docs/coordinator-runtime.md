@@ -63,3 +63,9 @@ See [coordinator-recovery.md](coordinator-recovery.md).
 * `RejectedError`/`RunManagerError` messages are returned verbatim to
   callers (useful for debugging a local dev stack; would need review
   before ever being exposed to an untrusted caller).
+
+## Round deadline and retry fault tolerance
+
+Distributed rounds use `round_timeout_seconds` as an absolute wall-clock deadline. `minimum_valid_results` is a deadline or settlement quorum, not a fastest-client early-release target. Before the deadline the coordinator waits for the full selected cohort unless all remaining tasks are permanently settled. At the deadline unresolved clients are recorded as timed out; the accepted partial cohort is aggregated only when the quorum is met, otherwise the run fails without publishing a new model.
+
+The deadline, timeout classification, active leases, accepted results, and per-client retry-attempt counters are checkpointed. A coordinator restart preserves both the original deadline and the remaining retry budget. The production gRPC server advances all runs from a watchdog even when no workers are polling; set `FL_ROUND_WATCHDOG_INTERVAL_MS` from 1 to 60000 milliseconds (default `1000`).

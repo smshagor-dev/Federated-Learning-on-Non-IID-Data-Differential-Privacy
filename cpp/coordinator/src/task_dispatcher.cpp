@@ -7,16 +7,25 @@ TaskDispatcherError::TaskDispatcherError(const std::string& what) : std::runtime
 TaskDispatcher::TaskDispatcher(std::uint32_t lease_seconds, std::uint32_t max_retries)
     : lease_seconds_(lease_seconds), max_retries_(max_retries) {}
 
-void TaskDispatcher::enqueue(const std::vector<ClientTaskDescriptor>& descriptors) {
+void TaskDispatcher::enqueue(const std::vector<ClientTaskDescriptor>& descriptors,
+                             const std::map<std::string, std::uint32_t>& initial_attempts) {
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto& descriptor : descriptors) {
         const auto task_id = "task-" + std::to_string(++task_sequence_);
         DispatchedTask task;
         task.task_id = task_id;
         task.descriptor = descriptor;
-        task.state = TaskState::kPending;
+        if (const auto attempt = initial_attempts.find(descriptor.client_id);
+            attempt != initial_attempts.end()) {
+            task.attempt = attempt->second;
+        }
+        if (task.attempt > 0 && task.attempt >= max_retries_) {
+            task.state = TaskState::kFailed;
+        } else {
+            task.state = TaskState::kPending;
+            pending_queue_.push_back(task_id);
+        }
         tasks_[task_id] = std::move(task);
-        pending_queue_.push_back(task_id);
     }
 }
 

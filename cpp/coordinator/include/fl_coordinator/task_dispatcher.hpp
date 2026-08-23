@@ -128,7 +128,8 @@ class TaskDispatcher {
   public:
     TaskDispatcher(std::uint32_t lease_seconds, std::uint32_t max_retries);
 
-    void enqueue(const std::vector<ClientTaskDescriptor>& descriptors);
+    void enqueue(const std::vector<ClientTaskDescriptor>& descriptors,
+                 const std::map<std::string, std::uint32_t>& initial_attempts = {});
 
     // Returns std::nullopt if there is nothing pending. Enforces one
     // active task per worker: a worker that already holds a leased task

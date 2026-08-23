@@ -34,6 +34,7 @@ void run_fixed_point_encoding_tests();
 void run_pairwise_mask_tests();
 void run_cohort_state_machine_tests();
 void run_secure_aggregation_session_store_tests(const std::string& scratch_dir);
+void run_round_fault_tolerance_tests(const std::string& scratch_dir);
 }  // namespace fl::coordinator::testing
 
 namespace {
@@ -122,9 +123,13 @@ int main(int argc, char** argv) {
     guarded("[27/29] pairwise_mask", fl::coordinator::testing::run_pairwise_mask_tests);
     guarded("[28/29] cohort_state_machine",
             fl::coordinator::testing::run_cohort_state_machine_tests);
-    guarded("[29/29] secure_aggregation_session_store", [&]() {
+    guarded("[29/30] secure_aggregation_session_store", [&]() {
         fl::coordinator::testing::run_secure_aggregation_session_store_tests(
             scratch_dir + "/secure_aggregation_session_store");
+    });
+    guarded("[30/30] round_fault_tolerance", [&]() {
+        fl::coordinator::testing::run_round_fault_tolerance_tests(scratch_dir +
+                                                                  "/round_fault_tolerance");
     });
 
     return fl::coordinator::testing::g_failures == 0 ? 0 : 1;

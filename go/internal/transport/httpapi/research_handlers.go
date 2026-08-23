@@ -533,14 +533,14 @@ func (s *Server) handleResearchExperimentDetailStream(w http.ResponseWriter, r *
 		}
 		streamID++
 		return writeSSEJSONFrame(w, flusher, fmt.Sprintf("research-detail-%s-%d", experimentID, streamID), "snapshot", map[string]any{
-			"experiment":              projectExperimentView(session.User.Role, experiment),
-			"runs":                    runs,
-			"metrics":                 metrics,
-			"events":                  events,
-			"artifacts":               artifacts,
-			"recovered_metric_count":  recoveredMetrics,
-			"recovered_event_count":   recoveredEvents,
-			"generated_at":            time.Now().UTC().Format(time.RFC3339),
+			"experiment":             projectExperimentView(session.User.Role, experiment),
+			"runs":                   runs,
+			"metrics":                metrics,
+			"events":                 events,
+			"artifacts":              artifacts,
+			"recovered_metric_count": recoveredMetrics,
+			"recovered_event_count":  recoveredEvents,
+			"generated_at":           time.Now().UTC().Format(time.RFC3339),
 		})
 	}
 

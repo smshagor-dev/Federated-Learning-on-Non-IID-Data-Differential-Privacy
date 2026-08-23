@@ -304,6 +304,9 @@ class RunInstance {
         double lease_expires_at_unix_s{0.0};
     };
     std::map<std::string, ActiveLease> active_leases_;
+    // Highest lease attempt already issued for each client in the current round.
+    // Checkpointed so a coordinator restart never resets max_task_retries.
+    std::map<std::string, std::uint32_t> client_retry_attempts_;
 
     std::set<std::string> failed_clients_;
     // Subset of failed_clients_ whose failure reason is the absolute round

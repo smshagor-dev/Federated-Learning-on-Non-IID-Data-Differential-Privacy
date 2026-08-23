@@ -446,7 +446,7 @@ std::optional<grpc::Status> reject_if_worker_identity_mismatch(grpc::ServerConte
 // existing direct-call test pattern keeps working for these new RPCs
 // too.
 std::optional<grpc::Status> reject_if_not_go_api_service_identity(grpc::ServerContext* context,
-                                                                 TransportMode transport_mode) {
+                                                                  TransportMode transport_mode) {
     if (context == nullptr) {
         return std::nullopt;
     }

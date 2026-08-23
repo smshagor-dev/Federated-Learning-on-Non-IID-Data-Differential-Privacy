@@ -371,6 +371,13 @@ RunInstance::RunInstance(RunConfig config,
       scaffold_store_(scaffold_store),
       checkpoint_directory_(std::move(checkpoint_directory)),
       global_model_(make_zero_collection(config_.manifest)) {
+    const auto selectable_clients =
+        std::min<std::size_t>(config_.target_clients_per_round, config_.client_ids.size());
+    if (config_.minimum_valid_results == 0 || config_.minimum_valid_results > selectable_clients) {
+        throw RunManagerError(
+            "minimum_valid_results must be between 1 and the selectable cohort size");
+    }
+
     // Privacy Engineering phase: see docs/user-level-dp.md. Sample rate
     // is the client-level subsampling rate (target cohort size / total
     // client pool) — the same q the subsampled-Gaussian RDP formula
@@ -517,7 +524,7 @@ RunSnapshot RunInstance::snapshot() const {
 
 std::optional<RoundSnapshot> RunInstance::round_snapshot(std::uint64_t round_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (round_id != current_round_id_ || !dispatcher_) {
+    if (round_id != current_round_id_) {
         return std::nullopt;
     }
     RoundSnapshot snapshot;
@@ -525,9 +532,20 @@ std::optional<RoundSnapshot> RunInstance::round_snapshot(std::uint64_t round_id)
     snapshot.round_id = current_round_id_;
     snapshot.state = state_machine_.state();
     snapshot.selected_clients = current_cohort_;
-    snapshot.completed_client_ids = dispatcher_->completed_client_ids();
-    snapshot.failed_client_ids = dispatcher_->failed_client_ids();
+    for (const auto& [client_id, _] : round_results_) {
+        snapshot.completed_client_ids.push_back(client_id);
+    }
+    std::set<std::string> failed = failed_clients_;
+    if (dispatcher_) {
+        for (const auto& client_id : dispatcher_->failed_client_ids()) {
+            failed.insert(client_id);
+        }
+    }
+    snapshot.failed_client_ids.assign(failed.begin(), failed.end());
+    snapshot.timed_out_client_ids.assign(timed_out_clients_.begin(), timed_out_clients_.end());
     snapshot.minimum_valid_results = config_.minimum_valid_results;
+    snapshot.round_started_at_unix_s = round_started_at_unix_s_;
+    snapshot.round_deadline_at_unix_s = round_deadline_at_unix_s_;
     return snapshot;
 }
 
@@ -720,33 +738,82 @@ void RunInstance::advance(double now_unix_s) {
     }
 
     if (current == fl::core::RunState::kWaitingForClients) {
+        if (config_.round_timeout_seconds > 0 && round_deadline_at_unix_s_ <= 0.0) {
+            round_started_at_unix_s_ = now_unix_s;
+            round_deadline_at_unix_s_ =
+                now_unix_s + static_cast<double>(config_.round_timeout_seconds);
+            save_checkpoint(now_unix_s);
+        }
         if (!dispatcher_) {
-            // dispatcher_ is never checkpointed (see round_results_'s
-            // doc comment); after a restore into WAITING_FOR_CLIENTS,
-            // reconstruct it before doing anything else.
             rebuild_dispatcher_after_restore(now_unix_s);
         }
         for (const auto& client_id : dispatcher_->failed_client_ids()) {
             failed_clients_.insert(client_id);
             active_leases_.erase(client_id);
         }
+
         const auto completed = round_results_.size();
-        // A round is settled (no more results can possibly arrive) only
-        // when every cohort member is accounted for as completed or
-        // permanently failed — not when this process's freshly-rebuilt
-        // dispatcher_ happens to hold no outstanding tasks, since tasks
-        // still leased to a different (possibly still-running) process
-        // are deliberately excluded from that rebuild and must not be
-        // mistaken for "already resolved" (see
-        // rebuild_dispatcher_after_restore).
         const auto settled = (completed + failed_clients_.size()) >= current_cohort_.size();
-        if (completed >= config_.minimum_valid_results) {
+        if (completed >= current_cohort_.size()) {
             finalize_round(now_unix_s);
-        } else if (settled) {
-            transition(fl::core::RunState::kFailed,
-                       "insufficient valid results for round " + std::to_string(current_round_id_),
-                       now_unix_s);
-            emit(CoordinatorEventType::kRunFailed, "insufficient valid results", now_unix_s);
+            return;
+        }
+        if (settled) {
+            if (completed >= config_.minimum_valid_results) {
+                finalize_round(now_unix_s);
+            } else {
+                transition(fl::core::RunState::kFailed,
+                           "insufficient valid results after retry exhaustion for round " +
+                               std::to_string(current_round_id_),
+                           now_unix_s);
+                emit(CoordinatorEventType::kRunFailed,
+                     "insufficient valid results after retry exhaustion",
+                     now_unix_s,
+                     {{"completed_clients", std::to_string(completed)},
+                      {"minimum_valid_results", std::to_string(config_.minimum_valid_results)}});
+            }
+            return;
+        }
+
+        if (round_deadline_at_unix_s_ > 0.0 && now_unix_s >= round_deadline_at_unix_s_) {
+            for (const auto& client_id : current_cohort_) {
+                if (round_results_.contains(client_id) || failed_clients_.contains(client_id)) {
+                    continue;
+                }
+                std::string worker_id;
+                const auto lease = active_leases_.find(client_id);
+                if (lease != active_leases_.end()) {
+                    worker_id = lease->second.worker_id;
+                    if (!worker_id.empty()) {
+                        worker_registry_->clear_current_task(worker_id);
+                        worker_registry_->record_failure(worker_id);
+                    }
+                    active_leases_.erase(lease);
+                }
+                failed_clients_.insert(client_id);
+                timed_out_clients_.insert(client_id);
+                emit(CoordinatorEventType::kTaskFailed,
+                     "round deadline exceeded",
+                     now_unix_s,
+                     {{"client_id", client_id},
+                      {"worker_id", worker_id},
+                      {"failure_kind", "round_timeout"}});
+            }
+
+            if (completed >= config_.minimum_valid_results) {
+                finalize_round(now_unix_s);
+            } else {
+                transition(fl::core::RunState::kFailed,
+                           "round deadline exceeded with insufficient valid results for round " +
+                               std::to_string(current_round_id_),
+                           now_unix_s);
+                emit(CoordinatorEventType::kRunFailed,
+                     "round deadline exceeded with insufficient valid results",
+                     now_unix_s,
+                     {{"completed_clients", std::to_string(completed)},
+                      {"timed_out_clients", std::to_string(timed_out_clients_.size())},
+                      {"minimum_valid_results", std::to_string(config_.minimum_valid_results)}});
+            }
         }
     }
 }
@@ -787,6 +854,13 @@ void RunInstance::begin_round(double now_unix_s) {
     round_results_.clear();
     active_leases_.clear();
     failed_clients_.clear();
+    timed_out_clients_.clear();
+    client_retry_attempts_.clear();
+    round_started_at_unix_s_ = now_unix_s;
+    round_deadline_at_unix_s_ =
+        config_.round_timeout_seconds > 0
+            ? now_unix_s + static_cast<double>(config_.round_timeout_seconds)
+            : 0.0;
     dispatcher_ =
         std::make_unique<TaskDispatcher>(config_.task_lease_seconds, config_.max_task_retries);
 
@@ -810,8 +884,8 @@ void RunInstance::rebuild_dispatcher_after_restore(double now_unix_s) {
         std::make_unique<TaskDispatcher>(config_.task_lease_seconds, config_.max_task_retries);
     std::vector<ClientTaskDescriptor> descriptors;
     for (const auto& client_id : current_cohort_) {
-        if (round_results_.contains(client_id)) {
-            continue;  // already submitted; don't re-dispatch
+        if (round_results_.contains(client_id) || failed_clients_.contains(client_id)) {
+            continue;  // already resolved; never re-dispatch after restore
         }
         const auto lease_it = active_leases_.find(client_id);
         if (lease_it != active_leases_.end() &&
@@ -826,7 +900,7 @@ void RunInstance::rebuild_dispatcher_after_restore(double now_unix_s) {
         descriptors.push_back(
             make_descriptor(config_, current_round_id_, model_version_, client_id));
     }
-    dispatcher_->enqueue(descriptors);
+    dispatcher_->enqueue(descriptors, client_retry_attempts_);
 }
 
 void RunInstance::finalize_round(double now_unix_s) {
@@ -957,11 +1031,11 @@ void RunInstance::finalize_round(double now_unix_s) {
         // (clipped, weighted) result — never per-client. Sensitivity of
         // a weighted average whose weights sum to 1 is (max weight) *
         // clip_bound; this uses 1/target_clients_per_round as that
-        // bound, which is exact for uniform weighting and a documented
-        // approximation for capped_sample_count/normalized_bounded (see
-        // docs/user-level-dp.md's "central Gaussian noise" section).
+        // bound. A deadline/retry-driven partial cohort must use the
+        // accepted update count or the coordinator would under-noise by
+        // pretending missing clients contributed to the denominator.
         const double effective_cohort_size =
-            std::max<std::uint32_t>(config_.target_clients_per_round, 1);
+            static_cast<double>(std::max<std::size_t>(updates.size(), 1));
         const double noise_std = config_.user_level_privacy.noise_multiplier *
                                  clip_bound_this_round / effective_cohort_size;
         result.model_delta =
@@ -1321,6 +1395,7 @@ std::optional<DispatchedTask> RunInstance::acquire_task(const std::string& worke
     auto task = dispatcher_->acquire(worker_id, now_unix_s);
     if (task.has_value()) {
         worker_registry_->set_current_task(worker_id, task->task_id);
+        client_retry_attempts_[task->descriptor.client_id] = task->attempt;
         active_leases_[task->descriptor.client_id] =
             ActiveLease{worker_id, task->task_id, task->lease_id, task->lease_expires_at_unix_s};
         emit(CoordinatorEventType::kTaskAssigned,
@@ -1380,6 +1455,22 @@ bool RunInstance::submit_client_result(const std::string& worker_id,
         rebuild_dispatcher_after_restore(now_unix_s);
     }
     const auto client_id = result.update.client_id;
+
+    if (state_machine_.state() == fl::core::RunState::kWaitingForClients &&
+        round_deadline_at_unix_s_ > 0.0 && now_unix_s >= round_deadline_at_unix_s_) {
+        reason = "late result: round deadline already exceeded";
+        worker_registry_->clear_current_task(worker_id);
+        worker_registry_->record_failure(worker_id);
+        active_leases_.erase(client_id);
+        failed_clients_.insert(client_id);
+        timed_out_clients_.insert(client_id);
+        emit(CoordinatorEventType::kClientResultRejected,
+             reason,
+             now_unix_s,
+             {{"client_id", client_id}, {"task_id", task_id}, {"failure_kind", "round_timeout"}});
+        save_checkpoint(now_unix_s);
+        return false;
+    }
 
     // the Algorithm Expansion phase: reject a submission carrying any tensor name the
     // aggregation manifest marks personalized-only or frozen — those
@@ -1528,6 +1619,9 @@ void RunInstance::save_checkpoint(double now_unix_s) const {
     body << "run_id=" << config_.run_id << "\n";
     body << "run_state=" << fl::core::to_string(state_machine_.state()) << "\n";
     body << "current_round=" << current_round_id_ << "\n";
+    body << "round_started_at_unix_s=" << std::setprecision(17) << round_started_at_unix_s_ << "\n";
+    body << "round_deadline_at_unix_s=" << std::setprecision(17) << round_deadline_at_unix_s_
+         << "\n";
     body << "max_rounds=" << config_.max_rounds << "\n";
     body << "model_version=" << model_version_ << "\n";
     body << "algorithm=" << fl::core::to_string(config_.algorithm) << "\n";
@@ -1552,9 +1646,17 @@ void RunInstance::save_checkpoint(double now_unix_s) const {
              << "\t" << lease.lease_id << "\t" << std::setprecision(17)
              << lease.lease_expires_at_unix_s << "\n";
     }
+    body << "client_retry_attempt_count=" << client_retry_attempts_.size() << "\n";
+    for (const auto& [client_id, attempt] : client_retry_attempts_) {
+        body << "client_retry_attempt=" << client_id << "\t" << attempt << "\n";
+    }
     body << "failed_client_count=" << failed_clients_.size() << "\n";
     for (const auto& client_id : failed_clients_) {
         body << "failed_client=" << client_id << "\n";
+    }
+    body << "timed_out_client_count=" << timed_out_clients_.size() << "\n";
+    for (const auto& client_id : timed_out_clients_) {
+        body << "timed_out_client=" << client_id << "\n";
     }
     body << "personalization_metric_count=" << personalization_metrics_by_client_.size() << "\n";
     for (const auto& [client_id, record] : personalization_metrics_by_client_) {
@@ -1691,6 +1793,10 @@ void RunInstance::restore_from_checkpoint() {
             throw std::runtime_error("coordinator checkpoint run_id mismatch");
         } else if (key == "current_round") {
             current_round_id_ = std::stoull(value);
+        } else if (key == "round_started_at_unix_s") {
+            round_started_at_unix_s_ = std::stod(value);
+        } else if (key == "round_deadline_at_unix_s") {
+            round_deadline_at_unix_s_ = std::stod(value);
         } else if (key == "model_version") {
             model_version_ = value;
             // Keep in lockstep with finalize_round's invariant: the
@@ -1759,6 +1865,25 @@ void RunInstance::restore_from_checkpoint() {
         throw std::runtime_error("coordinator checkpoint truncated for active_lease");
     }
 
+    client_retry_attempts_.clear();
+    std::size_t expected_attempts = 0;
+    std::size_t found_attempts = 0;
+    for (const auto& [key, value] : fields) {
+        if (key == "client_retry_attempt_count") {
+            expected_attempts = std::stoull(value);
+        } else if (key == "client_retry_attempt") {
+            const auto parts = split(value, '\t');
+            if (parts.size() != 2) {
+                throw std::runtime_error("malformed client_retry_attempt checkpoint line");
+            }
+            client_retry_attempts_[parts[0]] = static_cast<std::uint32_t>(std::stoul(parts[1]));
+            ++found_attempts;
+        }
+    }
+    if (found_attempts != expected_attempts) {
+        throw std::runtime_error("coordinator checkpoint truncated for client_retry_attempt");
+    }
+
     failed_clients_.clear();
     std::size_t expected_failed = 0;
     std::size_t found_failed = 0;
@@ -1772,6 +1897,21 @@ void RunInstance::restore_from_checkpoint() {
     }
     if (found_failed != expected_failed) {
         throw std::runtime_error("coordinator checkpoint truncated for failed_client");
+    }
+
+    timed_out_clients_.clear();
+    std::size_t expected_timed_out = 0;
+    std::size_t found_timed_out = 0;
+    for (const auto& [key, value] : fields) {
+        if (key == "timed_out_client_count") {
+            expected_timed_out = std::stoull(value);
+        } else if (key == "timed_out_client") {
+            timed_out_clients_.insert(value);
+            ++found_timed_out;
+        }
+    }
+    if (found_timed_out != expected_timed_out) {
+        throw std::runtime_error("coordinator checkpoint truncated for timed_out_client");
     }
 
     personalization_metrics_by_client_.clear();

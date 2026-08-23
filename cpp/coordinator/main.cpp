@@ -16,11 +16,13 @@
 #include "fl_coordinator/transport_credentials.hpp"
 #include "fl_coordinator/trusted_key_bundle.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include <grpcpp/grpcpp.h>
 
@@ -41,6 +43,20 @@ int main(int argc, char** argv) {
 
     fl::coordinator::CoordinatorConfig config;
     fl::coordinator::RunManager manager(config, "checkpoints", "scaffold_state");
+
+    std::chrono::milliseconds round_watchdog_interval{1000};
+    if (const char* raw = std::getenv("FL_ROUND_WATCHDOG_INTERVAL_MS"); raw != nullptr) {
+        try {
+            const auto parsed = std::stoull(raw);
+            if (parsed == 0 || parsed > 60000) {
+                throw std::out_of_range("watchdog interval outside 1..60000 ms");
+            }
+            round_watchdog_interval = std::chrono::milliseconds(parsed);
+        } catch (const std::exception& error) {
+            std::cerr << "invalid FL_ROUND_WATCHDOG_INTERVAL_MS: " << error.what() << "\n";
+            return 1;
+        }
+    }
 
     // Coordinator Transport Verification and Message Authenticity
     // slice, Work Package E/F (docs/worker-identity-registry.md):
@@ -496,6 +512,25 @@ int main(int argc, char** argv) {
     std::cout << "fl coordinator gRPC server listening on " << bind_address
               << " (transport_mode=" << fl::coordinator::to_string(transport_mode) << ")"
               << std::endl;
+
+    std::atomic<bool> watchdog_stop{false};
+    std::thread round_watchdog([&]() {
+        while (!watchdog_stop.load(std::memory_order_relaxed)) {
+            const auto tick = now_unix_s();
+            for (const auto& run_id : manager.list_run_ids()) {
+                try {
+                    manager.get(run_id).advance(tick);
+                } catch (const std::exception& error) {
+                    std::cerr << "round watchdog run_id=" << run_id << " error=" << error.what()
+                              << std::endl;
+                }
+            }
+            std::this_thread::sleep_for(round_watchdog_interval);
+        }
+    });
+
     server->Wait();
+    watchdog_stop.store(true, std::memory_order_relaxed);
+    round_watchdog.join();
     return 0;
 }

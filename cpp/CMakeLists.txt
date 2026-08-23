@@ -161,6 +161,7 @@ add_executable(fl_coordinator_tests
     coordinator/tests/pairwise_mask_test.cpp
     coordinator/tests/cohort_state_machine_test.cpp
     coordinator/tests/secure_aggregation_session_store_test.cpp
+    coordinator/tests/round_fault_tolerance_test.cpp
     coordinator/tests/test_main.cpp
 )
 
