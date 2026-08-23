@@ -44,6 +44,13 @@ class Server:
             )
         if algorithm == "scaffold" and weighting != "uniform":
             raise ValueError("SCAFFOLD only supports uniform aggregation weighting.")
+        if algorithm == "scaffold" and bool(dp_enabled):
+            raise ValueError(
+                "DP-enabled SCAFFOLD is disabled in the active root runtime until "
+                "the privacy effect of released/stateful control-variate updates is "
+                "formally established. Use FedAvg/FedProx for client-level DP, or "
+                "run SCAFFOLD with DP disabled as an optimization baseline."
+            )
         self.algorithm = algorithm
         self.num_clients = int(num_clients)
         self.server_lr = float(server_lr)
