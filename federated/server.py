@@ -76,6 +76,10 @@ class Server:
                 for _ in range(self.num_clients)
             ]
 
+    @property
+    def round_count(self) -> int:
+        return int(self._round_count)
+
     def _float_param_template(self) -> StateDict:
         return {
             key: value.detach().cpu().clone()
@@ -93,6 +97,89 @@ class Server:
         if self.algorithm != "scaffold":
             return None, None
         return self.c_global, self.c_locals[client_id]
+
+    def export_runtime_state(self) -> dict:
+        """Return CPU-owned state required for an exact round-boundary resume."""
+        model_state = {
+            key: value.detach().cpu().clone()
+            for key, value in self.model.state_dict().items()
+        }
+        c_global = {
+            key: value.detach().cpu().clone() for key, value in self.c_global.items()
+        }
+        c_locals = [
+            {key: value.detach().cpu().clone() for key, value in state.items()}
+            for state in self.c_locals
+        ]
+        return {
+            "schema_version": 1,
+            "algorithm": self.algorithm,
+            "num_clients": self.num_clients,
+            "round_count": self._round_count,
+            "model_state": model_state,
+            "c_global": c_global,
+            "c_locals": c_locals,
+        }
+
+    def load_runtime_state(self, state: dict) -> None:
+        """Restore a state produced by :meth:`export_runtime_state` fail-closed."""
+        if not isinstance(state, dict):
+            raise ValueError("server runtime state must be an object")
+        if int(state.get("schema_version", 0)) != 1:
+            raise ValueError("server runtime state schema_version must be 1")
+        if str(state.get("algorithm", "")).lower() != self.algorithm:
+            raise ValueError("server runtime state algorithm mismatch")
+        if int(state.get("num_clients", -1)) != self.num_clients:
+            raise ValueError("server runtime state num_clients mismatch")
+        round_count = int(state.get("round_count", -1))
+        if round_count < 0:
+            raise ValueError("server runtime state round_count must be non-negative")
+
+        model_state = state.get("model_state")
+        if not isinstance(model_state, dict):
+            raise ValueError("server runtime state model_state is missing")
+        assert_finite_state(model_state, context="restored server model")
+        self.model.load_state_dict(model_state, strict=True)
+
+        if self.algorithm == "scaffold":
+            c_global = state.get("c_global")
+            c_locals = state.get("c_locals")
+            if not isinstance(c_global, dict) or not isinstance(c_locals, list):
+                raise ValueError("SCAFFOLD runtime checkpoint is missing control variates")
+            template_keys = set(self._float_param_template())
+            if set(c_global) != template_keys:
+                raise ValueError("SCAFFOLD global control-variate keys mismatch")
+            if len(c_locals) != self.num_clients:
+                raise ValueError("SCAFFOLD local control-variate count mismatch")
+            restored_locals: List[StateDict] = []
+            for client_id, local_state in enumerate(c_locals):
+                if not isinstance(local_state, dict) or set(local_state) != template_keys:
+                    raise ValueError(
+                        f"SCAFFOLD client {client_id} control-variate keys mismatch"
+                    )
+                assert_finite_state(
+                    local_state,
+                    context=f"restored SCAFFOLD client {client_id} control variate",
+                )
+                restored_locals.append(
+                    {key: value.detach().cpu().clone() for key, value in local_state.items()}
+                )
+            assert_finite_state(c_global, context="restored SCAFFOLD global control variate")
+            self.c_global = {
+                key: value.detach().cpu().clone() for key, value in c_global.items()
+            }
+            self.c_locals = restored_locals
+        else:
+            c_global = state.get("c_global", {})
+            c_locals = state.get("c_locals", [])
+            if c_global or c_locals:
+                raise ValueError(
+                    "non-SCAFFOLD runtime checkpoint unexpectedly contains control variates"
+                )
+            self.c_global = {}
+            self.c_locals = []
+
+        self._round_count = round_count
 
     def aggregate(self, client_results: List[dict]) -> dict:
         if self.algorithm in ("fedavg", "fedprox"):

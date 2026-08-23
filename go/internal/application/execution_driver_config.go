@@ -20,6 +20,9 @@ func (s *ExecutionService) RegisterDriver(backend executiondomain.Backend, drive
 	if driver == nil {
 		return executiondomain.ErrBackendNotConfigured
 	}
+	if backend == executiondomain.BackendLocal {
+		driver = executiondomain.EnableCheckpointLifecycle(driver)
+	}
 	if s.drivers == nil {
 		s.drivers = executiondomain.DriverRegistry{}
 	}

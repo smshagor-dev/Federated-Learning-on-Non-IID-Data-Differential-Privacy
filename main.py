@@ -19,6 +19,7 @@ from experiment_runtime import (
     validate_config,
 )
 from federated.privacy_budget import resolve_target_epsilon_config
+from federated.resumable_runtime import run_resumable_cli
 from utils.client_evaluation import evaluate_completed_run
 from utils.runtime_args import parse_args
 
@@ -75,6 +76,14 @@ def write_effective_runtime_config(config: dict) -> str:
     return target
 
 
+def _run_selected_cli(config: dict) -> None:
+    control = config.get("execution_control")
+    if isinstance(control, dict) and bool(control.get("enabled", False)):
+        run_resumable_cli(config)
+        return
+    run_cli(config)
+
+
 def _run_with_client_evaluation(config: dict) -> None:
     results_dir = os.path.abspath(str(config["system"]["results_dir"]))
     checkpoint_dir = os.path.join(results_dir, "checkpoints")
@@ -84,7 +93,7 @@ def _run_with_client_evaluation(config: dict) -> None:
     os.environ[_CHECKPOINT_DIR_ENV] = checkpoint_dir
     os.environ[_CHECKPOINT_ROUNDS_ENV] = str(config["federated"]["rounds"])
     try:
-        run_cli(config)
+        _run_selected_cli(config)
         evaluation = evaluate_completed_run(config)
         print(
             "Held-out client evaluation written -> "

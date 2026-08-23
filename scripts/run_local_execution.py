@@ -18,11 +18,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import main as root_main  # noqa: E402
+from federated.resumable_runtime import ExecutionPaused  # noqa: E402
 
 SUPPORTED_DATASETS = {"MNIST", "FASHIONMNIST", "CIFAR10", "CIFAR100"}
 SUPPORTED_ALGORITHMS = {"fedavg", "fedprox", "scaffold"}
 SUPPORTED_PARTITIONS = {"iid", "dirichlet", "pathological", "quantity_skew"}
 SUPPORTED_SAMPLING = {"poisson", "fixed_without_replacement"}
+PAUSED_EXIT_CODE = 75
 
 
 def parse_args() -> argparse.Namespace:
@@ -200,6 +202,8 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("artifacts.root is required")
     if not artifact_root.is_absolute():
         artifact_root = (ROOT / artifact_root).resolve()
+    control_dir = artifact_root / "execution-control"
+    resume_request = control_dir / "resume.request"
 
     config["system"]["seed"] = int(federation.get("client_selection_seed", 0))
     config["system"]["results_dir"] = str(artifact_root)
@@ -287,6 +291,15 @@ def build_root_config(spec: dict[str, Any]) -> dict[str, Any]:
         evaluation.get("evaluation_batch_size"),
         "evaluation.evaluation_batch_size",
     )
+    config["execution_control"] = {
+        "enabled": True,
+        "checkpoint_enabled": bool(artifacts.get("persist_checkpoints", False)),
+        "resume": resume_request.is_file(),
+        "control_dir": str(control_dir),
+        "checkpoint_path": str(control_dir / "runtime-checkpoint.pt"),
+        "pause_request_path": str(control_dir / "pause.request"),
+        "paused_marker_path": str(control_dir / "paused.json"),
+    }
     return config
 
 
@@ -299,7 +312,14 @@ def execute(spec_path: Path) -> int:
     generated_config.write_text(
         json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    return int(root_main.main(["--cli", "--config", str(generated_config)]))
+    try:
+        return int(root_main.main(["--cli", "--config", str(generated_config)]))
+    except ExecutionPaused as paused:
+        print(
+            f"Execution paused after round {paused.rounds_completed}; "
+            f"checkpoint={paused.checkpoint_path}"
+        )
+        return PAUSED_EXIT_CODE
 
 
 def main() -> int:

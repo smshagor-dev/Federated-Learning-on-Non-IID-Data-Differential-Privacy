@@ -17,6 +17,8 @@ import (
 	"github.com/smshagor-dev/federated-learning-super-system/go/internal/transport/httpapi"
 )
 
+const defaultExecutionReconcileInterval = 2 * time.Second
+
 func newCoordinatorClient() coordinator.Client {
 	address := os.Getenv("FL_COORDINATOR_ADDRESS")
 	if address == "" {
@@ -98,6 +100,89 @@ func newResearchCommandClient() research.CommandClient {
 	return research.NewHTTPCommandClient(url, secret, serviceIdentity, 10*time.Second)
 }
 
+func reconcileExecutionBackend(services *application.Services, backend execution.Backend, label string) {
+	engine, ok := application.ExecutionEngineFor(services)
+	if !ok {
+		log.Fatal("persistent execution engine was not configured")
+	}
+	summary, err := engine.ReconcileBackend(context.Background(), backend)
+	if err != nil {
+		log.Fatalf("reconcile %s executions during startup: %v", label, err)
+	}
+	for _, failure := range summary.Failures {
+		log.Printf("%s execution startup reconciliation failed: execution_id=%s error=%s", label, failure.ExecutionID, failure.Error)
+	}
+	log.Printf(
+		"%s execution startup reconciliation: checked=%d updated=%d skipped=%d failures=%d",
+		label,
+		summary.Checked,
+		summary.Updated,
+		summary.Skipped,
+		len(summary.Failures),
+	)
+}
+
+func executionReconcileIntervalFromEnv() (time.Duration, error) {
+	raw := os.Getenv("FL_EXECUTION_RECONCILE_INTERVAL")
+	if raw == "" {
+		return defaultExecutionReconcileInterval, nil
+	}
+	interval, err := time.ParseDuration(raw)
+	if err != nil || interval <= 0 {
+		return 0, fmt.Errorf(
+			"FL_EXECUTION_RECONCILE_INTERVAL must be a positive Go duration, got %q",
+			raw,
+		)
+	}
+	return interval, nil
+}
+
+func startExecutionRuntimeReconciler(services *application.Services) {
+	engine, ok := application.ExecutionEngineFor(services)
+	if !ok {
+		log.Fatal("persistent execution engine was not configured")
+	}
+	interval, err := executionReconcileIntervalFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		err := engine.RunRuntimeReconciler(
+			context.Background(),
+			interval,
+			func(results []application.RuntimeReconcileResult) {
+				for _, result := range results {
+					if result.Error != "" {
+						log.Printf("%s execution runtime reconciliation failed: %s", result.Backend, result.Error)
+						continue
+					}
+					for _, failure := range result.Summary.Failures {
+						log.Printf(
+							"%s execution runtime reconciliation failed: execution_id=%s error=%s",
+							result.Backend,
+							failure.ExecutionID,
+							failure.Error,
+						)
+					}
+					if result.Summary.Updated > 0 {
+						log.Printf(
+							"%s execution runtime reconciliation: checked=%d updated=%d failures=%d",
+							result.Backend,
+							result.Summary.Checked,
+							result.Summary.Updated,
+							len(result.Summary.Failures),
+						)
+					}
+				}
+			},
+		)
+		if err != nil {
+			log.Printf("execution runtime reconciler stopped: %v", err)
+		}
+	}()
+	log.Printf("execution runtime reconciler enabled: interval=%s", interval)
+}
+
 func configureLocalExecution(services *application.Services, dataDir string) {
 	if os.Getenv("FL_LOCAL_EXECUTION_ENABLED") != "true" {
 		return
@@ -123,22 +208,8 @@ func configureLocalExecution(services *application.Services, dataDir string) {
 	if err := engine.RegisterDriver(execution.BackendLocal, localDriver); err != nil {
 		log.Fatalf("register local execution backend: %v", err)
 	}
-	reconcileSummary, err := engine.ReconcileBackend(context.Background(), execution.BackendLocal)
-	if err != nil {
-		log.Fatalf("reconcile local executions during startup: %v", err)
-	}
-	for _, failure := range reconcileSummary.Failures {
-		log.Printf("local execution startup reconciliation failed: execution_id=%s error=%s", failure.ExecutionID, failure.Error)
-	}
-	log.Printf(
-		"local execution backend enabled: repository_root=%s state_root=%s python=%s reconciled_checked=%d reconciled_updated=%d reconciled_failures=%d",
-		repositoryRoot,
-		stateRoot,
-		pythonExecutable,
-		reconcileSummary.Checked,
-		reconcileSummary.Updated,
-		len(reconcileSummary.Failures),
-	)
+	reconcileExecutionBackend(services, execution.BackendLocal, "local")
+	log.Printf("local execution backend enabled: repository_root=%s state_root=%s python=%s", repositoryRoot, stateRoot, pythonExecutable)
 }
 
 func main() {
@@ -151,7 +222,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("bootstrap persistent services: %v", err)
 	}
+	if coordinatorClient != nil {
+		reconcileExecutionBackend(services, execution.BackendDistributed, "distributed")
+	}
 	configureLocalExecution(services, dataDir)
+	startExecutionRuntimeReconciler(services)
 	services.Research.SetWriter(newResearchCommandClient())
 	server := httpapi.NewServerWithSecurityJournalPaths(services,
 		securityJournalPathFromEnv("FL_GO_SECURITY_EVENT_JOURNAL_PATH", dataDir, "security-events.jsonl"),
