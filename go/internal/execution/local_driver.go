@@ -16,6 +16,7 @@ import (
 type LocalDriverConfig struct {
 	RepositoryRoot   string
 	PythonExecutable string
+	StateRoot        string
 	CommandFactory   func(repositoryRoot, pythonExecutable, specPath string) *exec.Cmd
 }
 
@@ -25,6 +26,7 @@ type localRun struct {
 	logPath         string
 	status          Status
 	modelVersion    string
+	pid             int
 	command         *exec.Cmd
 	logFile         *os.File
 	lastError       error
@@ -32,9 +34,10 @@ type localRun struct {
 }
 
 type LocalDriver struct {
-	mu     sync.RWMutex
-	config LocalDriverConfig
-	runs   map[string]*localRun
+	mu        sync.RWMutex
+	config    LocalDriverConfig
+	stateRoot string
+	runs      map[string]*localRun
 }
 
 func NewLocalDriver(config LocalDriverConfig) (*LocalDriver, error) {
@@ -63,9 +66,31 @@ func NewLocalDriver(config LocalDriverConfig) (*LocalDriver, error) {
 	if python == "" {
 		python = "python3"
 	}
+	stateRoot := strings.TrimSpace(config.StateRoot)
+	if stateRoot == "" {
+		stateRoot = filepath.Join(absoluteRoot, "var", "local-execution")
+	} else if !filepath.IsAbs(stateRoot) {
+		stateRoot = filepath.Join(absoluteRoot, stateRoot)
+	}
+	stateRoot, err = filepath.Abs(stateRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve local execution state root: %w", err)
+	}
+	if err := os.MkdirAll(stateRoot, 0o755); err != nil {
+		return nil, fmt.Errorf("create local execution state root: %w", err)
+	}
 	config.RepositoryRoot = absoluteRoot
 	config.PythonExecutable = python
-	return &LocalDriver{config: config, runs: map[string]*localRun{}}, nil
+	config.StateRoot = stateRoot
+	driver := &LocalDriver{
+		config:    config,
+		stateRoot: stateRoot,
+		runs:      map[string]*localRun{},
+	}
+	if err := driver.loadPersistedRuns(); err != nil {
+		return nil, err
+	}
+	return driver, nil
 }
 
 func (d *LocalDriver) Create(_ context.Context, executionID string, spec Spec, _ string) (Snapshot, error) {
@@ -78,6 +103,15 @@ func (d *LocalDriver) Create(_ context.Context, executionID string, spec Spec, _
 	if strings.TrimSpace(executionID) == "" {
 		return Snapshot{}, errors.New("execution id is required")
 	}
+
+	d.mu.Lock()
+	if existing, ok := d.runs[executionID]; ok {
+		snapshot := localSnapshot(executionID, existing)
+		d.mu.Unlock()
+		return snapshot, nil
+	}
+	d.mu.Unlock()
+
 	artifactRoot := filepath.Clean(spec.Artifacts.Root)
 	if !filepath.IsAbs(artifactRoot) {
 		artifactRoot = filepath.Join(d.config.RepositoryRoot, artifactRoot)
@@ -101,19 +135,24 @@ func (d *LocalDriver) Create(_ context.Context, executionID string, spec Spec, _
 		return Snapshot{}, fmt.Errorf("persist canonical execution spec: %w", err)
 	}
 
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if existing, ok := d.runs[executionID]; ok {
-		return localSnapshot(executionID, existing), nil
-	}
-	d.runs[executionID] = &localRun{
+	run := &localRun{
 		spec:         canonicalSpec,
 		specPath:     specPath,
 		logPath:      filepath.Join(controlDir, "local-execution.log"),
 		status:       StatusCreated,
 		modelVersion: canonicalSpec.Model.Version,
 	}
-	return localSnapshot(executionID, d.runs[executionID]), nil
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if existing, ok := d.runs[executionID]; ok {
+		return localSnapshot(executionID, existing), nil
+	}
+	d.runs[executionID] = run
+	if err := d.persistRunLocked(executionID, run); err != nil {
+		delete(d.runs, executionID)
+		return Snapshot{}, err
+	}
+	return localSnapshot(executionID, run), nil
 }
 
 func (d *LocalDriver) Start(_ context.Context, backendRunID, _ string) (Snapshot, error) {
@@ -153,9 +192,21 @@ func (d *LocalDriver) Start(_ context.Context, backendRunID, _ string) (Snapshot
 	}
 	run.command = command
 	run.logFile = logFile
+	run.pid = command.Process.Pid
 	run.status = StatusRunning
 	run.lastError = nil
 	run.cancelRequested = false
+	if err := d.persistRunLocked(backendRunID, run); err != nil {
+		_ = command.Process.Kill()
+		_ = command.Wait()
+		_ = logFile.Close()
+		run.command = nil
+		run.logFile = nil
+		run.pid = 0
+		run.status = StatusCreated
+		d.mu.Unlock()
+		return Snapshot{}, err
+	}
 	snapshot := localSnapshot(backendRunID, run)
 	d.mu.Unlock()
 
@@ -196,6 +247,11 @@ func (d *LocalDriver) Cancel(_ context.Context, backendRunID, _, _ string) (Snap
 	command := run.command
 	if command == nil || command.Process == nil {
 		run.status = StatusCanceled
+		run.pid = 0
+		if err := d.persistRunLocked(backendRunID, run); err != nil {
+			d.mu.Unlock()
+			return Snapshot{}, err
+		}
 		snapshot := localSnapshot(backendRunID, run)
 		d.mu.Unlock()
 		return snapshot, nil
@@ -210,6 +266,10 @@ func (d *LocalDriver) Cancel(_ context.Context, backendRunID, _, _ string) (Snap
 	defer d.mu.Unlock()
 	run = d.runs[backendRunID]
 	run.status = StatusCanceled
+	run.pid = 0
+	if err := d.persistRunLocked(backendRunID, run); err != nil {
+		return Snapshot{}, err
+	}
 	return localSnapshot(backendRunID, run), nil
 }
 
@@ -268,23 +328,27 @@ func (d *LocalDriver) waitForLocalRun(backendRunID string, command *exec.Cmd) {
 		run.logFile = nil
 	}
 	run.command = nil
+	run.pid = 0
 	if run.cancelRequested || run.status == StatusCanceled {
 		run.status = StatusCanceled
-		return
-	}
-	if err != nil {
+	} else if err != nil {
 		run.status = StatusFailed
 		run.lastError = err
-		return
+	} else {
+		summaryPath := filepath.Join(run.spec.Artifacts.Root, "summary.json")
+		if _, statErr := os.Stat(summaryPath); statErr != nil {
+			run.status = StatusFailed
+			run.lastError = fmt.Errorf("local execution exited successfully without summary.json: %w", statErr)
+		} else {
+			run.status = StatusCompleted
+			run.modelVersion = run.spec.Model.Version
+			run.lastError = nil
+		}
 	}
-	summaryPath := filepath.Join(run.spec.Artifacts.Root, "summary.json")
-	if _, statErr := os.Stat(summaryPath); statErr != nil {
+	if persistErr := d.persistRunLocked(backendRunID, run); persistErr != nil {
 		run.status = StatusFailed
-		run.lastError = fmt.Errorf("local execution exited successfully without summary.json: %w", statErr)
-		return
+		run.lastError = persistErr
 	}
-	run.status = StatusCompleted
-	run.modelVersion = run.spec.Model.Version
 }
 
 func validateLocalMapping(spec Spec) error {
@@ -327,6 +391,15 @@ func validateLocalMapping(spec Spec) error {
 		}
 		if spec.Federation.Weighting != "uniform" {
 			return fmt.Errorf("%w: local user-level DP requires uniform weighting", ErrUnsupportedMapping)
+		}
+		if !strings.EqualFold(strings.TrimSpace(spec.Privacy.UserLevel.Accountant), "rdp") {
+			return fmt.Errorf("%w: local root backend currently implements only the RDP accountant", ErrUnsupportedMapping)
+		}
+		if !strings.EqualFold(strings.TrimSpace(spec.Privacy.UserLevel.WeightingStrategy), "uniform") {
+			return fmt.Errorf("%w: local user-level DP requires weighting_strategy=uniform", ErrUnsupportedMapping)
+		}
+		if spec.Privacy.UserLevel.EpsilonBudget > 0 {
+			return fmt.Errorf("%w: local root backend does not yet implement epsilon_budget stop-policy enforcement", ErrUnsupportedMapping)
 		}
 		if spec.Privacy.UserLevel.SecureRandom {
 			return fmt.Errorf("%w: local root backend does not claim a cryptographically secure Gaussian RNG", ErrUnsupportedMapping)
