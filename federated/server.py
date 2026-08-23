@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import os
 from typing import Dict, List
 
 import torch
@@ -13,6 +14,8 @@ from federated.client import assert_finite_state, flat_l2_norm
 StateDict = Dict[str, torch.Tensor]
 SUPPORTED_ALGORITHMS = ("fedavg", "fedprox", "scaffold")
 SUPPORTED_AGGREGATION_WEIGHTING = ("uniform", "sample_count")
+_CHECKPOINT_DIR_ENV = "FL_ROOT_CHECKPOINT_DIR"
+_CHECKPOINT_ROUNDS_ENV = "FL_ROOT_CHECKPOINT_ROUNDS"
 
 
 class Server:
@@ -61,6 +64,7 @@ class Server:
         self.noise_multiplier = float(noise_multiplier)
         self.update_clip_norm = float(update_clip_norm)
         self.privacy_noise_generator = privacy_noise_generator
+        self._round_count = 0
 
         self.c_global: StateDict = {}
         self.c_locals: List[StateDict] = []
@@ -92,8 +96,12 @@ class Server:
 
     def aggregate(self, client_results: List[dict]) -> dict:
         if self.algorithm in ("fedavg", "fedprox"):
-            return self._aggregate_fedavg_family(client_results)
-        return self._aggregate_scaffold(client_results)
+            result = self._aggregate_fedavg_family(client_results)
+        else:
+            result = self._aggregate_scaffold(client_results)
+        self._round_count += 1
+        self._persist_root_checkpoint_if_final_round()
+        return result
 
     def _aggregate_fedavg_family(self, client_results: List[dict]) -> dict:
         if self.aggregation_weighting == "sample_count":
@@ -208,3 +216,38 @@ class Server:
             update = self.server_lr * delta.to(new_state[name].device)
             new_state[name] = new_state[name] + update.to(new_state[name].dtype)
         self.model.load_state_dict(new_state)
+
+    def _persist_root_checkpoint_if_final_round(self) -> None:
+        """Write one checkpoint after the configured final aggregation call."""
+        output_dir = os.environ.get(_CHECKPOINT_DIR_ENV)
+        target_rounds_text = os.environ.get(_CHECKPOINT_ROUNDS_ENV)
+        if not output_dir or not target_rounds_text:
+            return
+        try:
+            target_rounds = int(target_rounds_text)
+        except ValueError as exc:
+            raise ValueError(
+                f"{_CHECKPOINT_ROUNDS_ENV} must be an integer"
+            ) from exc
+        if target_rounds <= 0:
+            raise ValueError(f"{_CHECKPOINT_ROUNDS_ENV} must be > 0")
+        if self._round_count != target_rounds:
+            return
+
+        os.makedirs(output_dir, exist_ok=True)
+        target = os.path.join(output_dir, f"global_model_{self.algorithm}.pt")
+        temporary = target + ".tmp"
+        state = {
+            key: value.detach().cpu().clone()
+            for key, value in self.model.state_dict().items()
+        }
+        torch.save(
+            {
+                "schema_version": 1,
+                "algorithm": self.algorithm,
+                "rounds_completed": self._round_count,
+                "state_dict": state,
+            },
+            temporary,
+        )
+        os.replace(temporary, target)

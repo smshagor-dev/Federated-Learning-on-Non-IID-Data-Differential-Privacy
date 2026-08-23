@@ -14,12 +14,15 @@ import yaml
 from experiment_runtime import (
     apply_overrides,
     load_config,
-    parse_args,
     run_cli,
     should_launch_gui,
     validate_config,
 )
 from federated.privacy_budget import resolve_target_epsilon_config
+from utils.client_evaluation import evaluate_completed_run
+from utils.runtime_args import parse_args
+
+_CHECKPOINT_DIR_ENV = "FL_ROOT_CHECKPOINT_DIR"
 
 
 def _enforce_privacy_boundaries(config: dict) -> None:
@@ -71,6 +74,26 @@ def write_effective_runtime_config(config: dict) -> str:
     return target
 
 
+def _run_with_client_evaluation(config: dict) -> None:
+    results_dir = os.path.abspath(str(config["system"]["results_dir"]))
+    checkpoint_dir = os.path.join(results_dir, "checkpoints")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    previous_checkpoint_dir = os.environ.get(_CHECKPOINT_DIR_ENV)
+    os.environ[_CHECKPOINT_DIR_ENV] = checkpoint_dir
+    try:
+        run_cli(config)
+        evaluation = evaluate_completed_run(config)
+        print(
+            "Held-out client evaluation written -> "
+            f"{evaluation['evaluation_partition_manifest']}"
+        )
+    finally:
+        if previous_checkpoint_dir is None:
+            os.environ.pop(_CHECKPOINT_DIR_ENV, None)
+        else:
+            os.environ[_CHECKPOINT_DIR_ENV] = previous_checkpoint_dir
+
+
 def main(argv: list[str] | None = None) -> int:
     effective_argv = [] if argv is None else argv
     args = parse_args(effective_argv)
@@ -104,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     warnings.append(f"Effective runtime configuration archived at {effective_config_path}.")
     for warning in warnings:
         print(f"WARNING: {warning}")
-    run_cli(config)
+    _run_with_client_evaluation(config)
     return 0
 
 
