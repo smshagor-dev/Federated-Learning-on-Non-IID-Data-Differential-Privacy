@@ -79,6 +79,49 @@ class BenchmarkPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "DP-enabled SCAFFOLD"):
             plan.validate()
 
+    def test_expanded_root_datasets_are_supported(self) -> None:
+        plan = build_benchmark_plan(
+            benchmark_id="expanded-datasets",
+            datasets=("fashionmnist", "cifar100"),
+            algorithms=("fedavg",),
+            partitions=(BenchmarkPartition("iid", "iid", {}),),
+            target_epsilons=(None,),
+            seeds=(1, 2, 3, 4, 5),
+            rounds=10,
+        )
+        plan.validate()
+        self.assertEqual({cell.dataset_id for cell in plan.expand()}, {"fashionmnist", "cifar100"})
+
+    def test_unknown_root_dataset_is_rejected(self) -> None:
+        plan = BenchmarkPlan(
+            benchmark_id="bad-dataset",
+            datasets=("unknown",),
+            algorithms=("fedavg",),
+            partitions=(BenchmarkPartition("iid", "iid", {}),),
+            target_epsilons=(None,),
+            target_delta=1e-5,
+            seeds=(1, 2, 3, 4, 5),
+            rounds=10,
+            runtime_identity="root-simulator",
+        )
+        with self.assertRaisesRegex(ValueError, "dataset is unsupported"):
+            plan.validate()
+
+    def test_primary_metrics_include_client_tail_and_fairness(self) -> None:
+        plan = build_benchmark_plan(
+            benchmark_id="client-metrics",
+            datasets=("mnist",),
+            algorithms=("fedavg",),
+            partitions=(BenchmarkPartition("iid", "iid", {}),),
+            target_epsilons=(None,),
+            seeds=(1, 2, 3, 4, 5),
+            rounds=10,
+        )
+        self.assertIn("p10_client_accuracy", plan.primary_metrics)
+        self.assertIn("worst_client_accuracy", plan.primary_metrics)
+        self.assertIn("jain_accuracy_index", plan.primary_metrics)
+        self.assertIn("worst_client_loss", plan.primary_metrics)
+
 
 if __name__ == "__main__":
     unittest.main()
