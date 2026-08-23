@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import os
 from typing import Dict, List
 
 import torch
@@ -13,6 +14,7 @@ from federated.client import assert_finite_state, flat_l2_norm
 StateDict = Dict[str, torch.Tensor]
 SUPPORTED_ALGORITHMS = ("fedavg", "fedprox", "scaffold")
 SUPPORTED_AGGREGATION_WEIGHTING = ("uniform", "sample_count")
+_CHECKPOINT_DIR_ENV = "FL_ROOT_CHECKPOINT_DIR"
 
 
 class Server:
@@ -208,3 +210,26 @@ class Server:
             update = self.server_lr * delta.to(new_state[name].device)
             new_state[name] = new_state[name] + update.to(new_state[name].dtype)
         self.model.load_state_dict(new_state)
+        self._persist_root_checkpoint()
+
+    def _persist_root_checkpoint(self) -> None:
+        """Persist the latest root-runtime model when checkpointing is enabled."""
+        output_dir = os.environ.get(_CHECKPOINT_DIR_ENV)
+        if not output_dir:
+            return
+        os.makedirs(output_dir, exist_ok=True)
+        target = os.path.join(output_dir, f"global_model_{self.algorithm}.pt")
+        temporary = target + ".tmp"
+        state = {
+            key: value.detach().cpu().clone()
+            for key, value in self.model.state_dict().items()
+        }
+        torch.save(
+            {
+                "schema_version": 1,
+                "algorithm": self.algorithm,
+                "state_dict": state,
+            },
+            temporary,
+        )
+        os.replace(temporary, target)
