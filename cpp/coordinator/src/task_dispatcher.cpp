@@ -8,15 +8,29 @@ TaskDispatcher::TaskDispatcher(std::uint32_t lease_seconds, std::uint32_t max_re
     : lease_seconds_(lease_seconds), max_retries_(max_retries) {}
 
 void TaskDispatcher::enqueue(const std::vector<ClientTaskDescriptor>& descriptors) {
+    enqueue(descriptors, {});
+}
+
+void TaskDispatcher::enqueue(
+    const std::vector<ClientTaskDescriptor>& descriptors,
+    const std::map<std::string, std::uint32_t>& initial_attempts) {
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto& descriptor : descriptors) {
         const auto task_id = "task-" + std::to_string(++task_sequence_);
         DispatchedTask task;
         task.task_id = task_id;
         task.descriptor = descriptor;
-        task.state = TaskState::kPending;
+        if (const auto attempt = initial_attempts.find(descriptor.client_id);
+            attempt != initial_attempts.end()) {
+            task.attempt = attempt->second;
+        }
+        if (task.attempt > 0 && task.attempt >= max_retries_) {
+            task.state = TaskState::kFailed;
+        } else {
+            task.state = TaskState::kPending;
+            pending_queue_.push_back(task_id);
+        }
         tasks_[task_id] = std::move(task);
-        pending_queue_.push_back(task_id);
     }
 }
 
@@ -24,7 +38,7 @@ std::optional<DispatchedTask> TaskDispatcher::acquire(const std::string& worker_
                                                       double now_unix_s) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (worker_active_task_.contains(worker_id)) {
-        return std::nullopt;  // one active task per worker
+        return std::nullopt;
     }
     if (pending_queue_.empty()) {
         return std::nullopt;
@@ -124,10 +138,6 @@ std::optional<std::string> TaskDispatcher::cancel_lease_for_worker(const std::st
     }
     const auto task_id = active_it->second;
     auto& task = tasks_.at(task_id);
-    // Should always be kLeased (worker_active_task_ only ever holds
-    // entries for currently-leased tasks -- acquire() sets both
-    // together, submit_result()/this function both erase both
-    // together), but guard defensively rather than assume.
     if (task.state != TaskState::kLeased) {
         worker_active_task_.erase(active_it);
         return std::nullopt;
@@ -142,8 +152,13 @@ std::optional<std::string> TaskDispatcher::cancel_lease_for_worker(const std::st
         task.lease_id.clear();
         pending_queue_.push_back(task_id);
     }
-    (void)now_unix_s;  // reserved: not needed for a forced (not time-based) cancellation
+    (void)now_unix_s;
     return client_id;
+}
+
+bool TaskDispatcher::has_task(const std::string& task_id) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return tasks_.contains(task_id);
 }
 
 std::vector<ClientResultSubmission> TaskDispatcher::completed_results() const {
