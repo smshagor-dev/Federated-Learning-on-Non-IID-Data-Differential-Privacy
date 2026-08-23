@@ -98,6 +98,7 @@ func validExecutionSpec() executiondomain.Spec {
 			LocalEpochs:           1,
 			BatchSize:             8,
 			Weighting:             "uniform",
+			SamplingStrategy:      executiondomain.SamplingFixedWithoutReplacement,
 			ClientSelectionSeed:   7,
 			SchedulingMode:        executiondomain.SchedulingSynchronous,
 			RoundTimeoutSeconds:   30,
