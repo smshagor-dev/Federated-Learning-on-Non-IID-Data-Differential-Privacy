@@ -78,6 +78,21 @@ class MatchedEvaluationPartitionTests(unittest.TestCase):
         for client_id in first:
             np.testing.assert_array_equal(first[client_id], second[client_id])
 
+    def test_empty_clients_receive_unique_heldout_samples(self) -> None:
+        train = TargetDataset([0] * 100)
+        heldout = TargetDataset([0, 0, 0])
+        train_partition = {
+            0: np.arange(0, 98, dtype=np.int64),
+            1: np.asarray([98], dtype=np.int64),
+            2: np.asarray([99], dtype=np.int64),
+        }
+        result = partition_evaluation_by_train_distribution(
+            train, train_partition, heldout, seed=5
+        )
+        self.assertEqual([len(result[index]) for index in range(3)], [1, 1, 1])
+        assigned = np.concatenate([result[index] for index in range(3)])
+        self.assertEqual(set(assigned.tolist()), {0, 1, 2})
+
 
 class HeldoutClientMetricTests(unittest.TestCase):
     def test_client_metrics_report_tail_and_fairness(self) -> None:
