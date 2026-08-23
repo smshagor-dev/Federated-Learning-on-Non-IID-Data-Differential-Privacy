@@ -10,8 +10,8 @@ import (
 
 // IngestBackendEvents copies resumable backend events into the durable
 // execution journal and advances the execution's backend-event cursor. The
-// journal write deliberately happens before the cursor update. AppendUnique
-// makes replay safe if the process crashes between those two operations.
+// journal write deliberately happens before the cursor update. Unique batch
+// insertion makes replay safe if the process crashes between those operations.
 func (s *ExecutionService) IngestBackendEvents(ctx context.Context, id string) (executiondomain.Record, int, error) {
 	record, err := s.Get(ctx, id)
 	if err != nil {
@@ -38,11 +38,11 @@ func (s *ExecutionService) IngestBackendEvents(ctx context.Context, id string) (
 	}
 
 	cursor := record.BackendEventCursor
-	ingested := 0
+	journalEvents := make([]executiondomain.Event, 0, len(backendEvents))
 	for _, backendEvent := range backendEvents {
 		backendEventID := strings.TrimSpace(backendEvent.EventID)
 		if backendEventID == "" {
-			return record, ingested, fmt.Errorf("backend event for execution %s has empty event_id", record.ID)
+			return record, 0, fmt.Errorf("backend event for execution %s has empty event_id", record.ID)
 		}
 		metadata := make(map[string]string, len(backendEvent.Metadata)+3)
 		for key, value := range backendEvent.Metadata {
@@ -60,7 +60,7 @@ func (s *ExecutionService) IngestBackendEvents(ctx context.Context, id string) (
 		if eventType == "" {
 			eventType = "EVENT"
 		}
-		appended, appendErr := s.journal.AppendUnique(executiondomain.Event{
+		journalEvents = append(journalEvents, executiondomain.Event{
 			EventID:      fmt.Sprintf("%s-backend-%s", record.ID, backendEventID),
 			ExecutionID:  record.ID,
 			Type:         "COORDINATOR_" + eventType,
@@ -72,15 +72,13 @@ func (s *ExecutionService) IngestBackendEvents(ctx context.Context, id string) (
 			Metadata:     metadata,
 			Timestamp:    timestamp,
 		})
-		if appendErr != nil {
-			return record, ingested, appendErr
-		}
-		if appended {
-			ingested++
-		}
 		cursor = backendEventID
 	}
 
+	ingested, err := s.journal.AppendUniqueBatch(journalEvents)
+	if err != nil {
+		return record, 0, err
+	}
 	if cursor == record.BackendEventCursor {
 		return record, ingested, nil
 	}
