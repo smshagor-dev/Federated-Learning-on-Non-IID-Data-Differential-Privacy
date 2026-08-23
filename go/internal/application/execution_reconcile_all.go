@@ -22,7 +22,9 @@ type ReconcileSummary struct {
 // ReconcileBackend synchronizes every durable, non-terminal execution for one
 // configured backend with the backend's recovered runtime state. Startup uses
 // this stronger mode because a previous process may have stopped while a
-// lifecycle operation was in a transitional state.
+// lifecycle operation was in a transitional state. It also recovers the
+// backend event cursor so coordinator events emitted before the restart become
+// durable execution-journal entries.
 func (s *ExecutionService) ReconcileBackend(ctx context.Context, backend executiondomain.Backend) (ReconcileSummary, error) {
 	return s.reconcileBackend(ctx, backend, true)
 }
@@ -30,7 +32,9 @@ func (s *ExecutionService) ReconcileBackend(ctx context.Context, backend executi
 // ReconcileRuntimeBackend is safe for a periodic background loop. It skips
 // records whose control-plane lifecycle operation is currently transitional so
 // a poll cannot race an in-flight Start/Pause/Resume/Cancel request and write an
-// older backend snapshot over that request.
+// older backend snapshot over that request. Backend events are polled only when
+// the runtime snapshot changed, avoiding a long-lived event poll on every idle
+// reconciliation tick.
 func (s *ExecutionService) ReconcileRuntimeBackend(ctx context.Context, backend executiondomain.Backend) (ReconcileSummary, error) {
 	return s.reconcileBackend(ctx, backend, false)
 }
@@ -51,7 +55,32 @@ func (s *ExecutionService) reconcileBackend(ctx context.Context, backend executi
 		if record.Backend != backend {
 			continue
 		}
-		if record.BackendRunID == "" || record.Terminal() {
+		if record.BackendRunID == "" {
+			summary.Skipped++
+			continue
+		}
+		if record.Terminal() {
+			// A process can crash after the backend reached a terminal state
+			// but before its final coordinator events were copied into the
+			// execution journal. Startup performs one recovery poll when no
+			// cursor has ever been persisted for that execution.
+			if includeTransitional && record.BackendEventCursor == "" {
+				beforeRevision := record.Revision
+				updated, _, ingestErr := s.IngestBackendEvents(ctx, record.ID)
+				if ingestErr != nil {
+					summary.Failures = append(summary.Failures, ReconcileFailure{
+						ExecutionID: record.ID,
+						Error:       ingestErr.Error(),
+					})
+					continue
+				}
+				if updated.Revision > beforeRevision {
+					summary.Updated++
+				} else {
+					summary.Skipped++
+				}
+				continue
+			}
 			summary.Skipped++
 			continue
 		}
@@ -59,6 +88,7 @@ func (s *ExecutionService) reconcileBackend(ctx context.Context, backend executi
 			summary.Skipped++
 			continue
 		}
+
 		summary.Checked++
 		beforeRevision := record.Revision
 		updated, reconcileErr := s.Reconcile(ctx, record.ID)
@@ -69,7 +99,26 @@ func (s *ExecutionService) reconcileBackend(ctx context.Context, backend executi
 			})
 			continue
 		}
-		if updated.Revision > beforeRevision {
+		executionUpdated := updated.Revision > beforeRevision
+
+		// Startup always performs one event catch-up for active executions.
+		// The periodic loop only polls when the backend snapshot changed;
+		// deadline completion/failure changes status/model/round and therefore
+		// triggers this path while completely idle executions stay cheap.
+		if includeTransitional || executionUpdated {
+			withEvents, _, ingestErr := s.IngestBackendEvents(ctx, updated.ID)
+			if ingestErr != nil {
+				summary.Failures = append(summary.Failures, ReconcileFailure{
+					ExecutionID: updated.ID,
+					Error:       ingestErr.Error(),
+				})
+				continue
+			}
+			if withEvents.Revision > updated.Revision {
+				executionUpdated = true
+			}
+		}
+		if executionUpdated {
 			summary.Updated++
 		}
 	}
