@@ -12,7 +12,7 @@ const (
 	StatusPaused    Status = "PAUSED"
 	StatusResuming  Status = "RESUMING"
 	StatusCanceling Status = "CANCELING"
-	StatusCanceled Status = "CANCELED"
+	StatusCanceled  Status = "CANCELED"
 	StatusCompleted Status = "COMPLETED"
 	StatusFailed    Status = "FAILED"
 )
