@@ -44,12 +44,8 @@ class HeterogeneityVectorTests(unittest.TestCase):
         self.assertAlmostEqual(vector.quantity_coefficient_of_variation, 0.5)
 
     def test_fingerprint_ignores_mapping_insertion_order(self) -> None:
-        first = compute_heterogeneity_vector(
-            {"b": {1: 7, 0: 3}, "a": {0: 8, 1: 2}}
-        )
-        second = compute_heterogeneity_vector(
-            {"a": {1: 2, 0: 8}, "b": {0: 3, 1: 7}}
-        )
+        first = compute_heterogeneity_vector({"b": {1: 7, 0: 3}, "a": {0: 8, 1: 2}})
+        second = compute_heterogeneity_vector({"a": {1: 2, 0: 8}, "b": {0: 3, 1: 7}})
         self.assertEqual(first, second)
 
 

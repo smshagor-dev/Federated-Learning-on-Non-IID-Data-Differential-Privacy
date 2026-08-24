@@ -163,9 +163,7 @@ class CanonicalLocalExecutionTests(unittest.TestCase):
 
     def test_local_pause_style_scheduling_is_rejected(self) -> None:
         spec = copy.deepcopy(canonical_spec())
-        spec["federation"]["scheduling_mode"] = (
-            "deadline_based_semi_synchronous"
-        )
+        spec["federation"]["scheduling_mode"] = "deadline_based_semi_synchronous"
         with self.assertRaisesRegex(ValueError, "synchronous scheduling only"):
             adapter.build_root_config(spec)
 

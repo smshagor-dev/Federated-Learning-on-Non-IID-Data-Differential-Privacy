@@ -94,8 +94,7 @@ def _linear_quantile(sorted_values: Sequence[float], probability: float) -> floa
         return float(sorted_values[lower])
     fraction = position - lower
     return float(
-        sorted_values[lower]
-        + fraction * (sorted_values[upper] - sorted_values[lower])
+        sorted_values[lower] + fraction * (sorted_values[upper] - sorted_values[lower])
     )
 
 

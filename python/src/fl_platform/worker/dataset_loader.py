@@ -24,9 +24,7 @@ import torch
 from torch.utils.data import Dataset
 
 _CANONICAL_REFERENCE_PREFIX = "fl-partition-v1://"
-_SUPPORTED_STRATEGIES = frozenset(
-    {"iid", "dirichlet", "pathological", "quantity_skew"}
-)
+_SUPPORTED_STRATEGIES = frozenset({"iid", "dirichlet", "pathological", "quantity_skew"})
 _ALLOWED_QUERY_KEYS = frozenset(
     {
         "dataset",

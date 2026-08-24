@@ -67,8 +67,7 @@ def _kl_divergence(p: tuple[float, ...], q: tuple[float, ...]) -> float:
 
 def _js_divergence(p: tuple[float, ...], q: tuple[float, ...]) -> float:
     mixture = tuple(
-        0.5 * (p_value + q_value)
-        for p_value, q_value in zip(p, q, strict=True)
+        0.5 * (p_value + q_value) for p_value, q_value in zip(p, q, strict=True)
     )
     return 0.5 * _kl_divergence(p, mixture) + 0.5 * _kl_divergence(q, mixture)
 
@@ -105,8 +104,7 @@ def compute_heterogeneity_vector(
         raise ValueError("at least one label must be present in the partition")
 
     sample_counts = {
-        client_id: sum(histogram.values())
-        for client_id, histogram in canonical.items()
+        client_id: sum(histogram.values()) for client_id, histogram in canonical.items()
     }
     if any(count <= 0 for count in sample_counts.values()):
         raise ValueError("every client must have at least one sample")

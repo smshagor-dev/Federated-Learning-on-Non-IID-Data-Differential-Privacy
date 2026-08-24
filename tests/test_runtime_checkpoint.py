@@ -159,9 +159,7 @@ def test_checkpoint_rejects_configuration_mismatch(tmp_path: Path) -> None:
             checkpoint,
             config=changed,
             algorithm="fedavg",
-            server=new_fedavg_server(
-                torch.Generator(device="cpu").manual_seed(3)
-            ),
+            server=new_fedavg_server(torch.Generator(device="cpu").manual_seed(3)),
             sampler=random.Random(4),
             privacy_generator=torch.Generator(device="cpu").manual_seed(5),
             accountant=MomentsAccountant(1.2, 0.5, 1e-5),

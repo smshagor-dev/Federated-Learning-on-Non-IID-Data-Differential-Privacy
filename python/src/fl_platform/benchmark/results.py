@@ -167,9 +167,7 @@ def _comparison_context(observation: BenchmarkObservation) -> ComparisonContext:
 
 
 def _partition_digest(seed_to_hash: dict[int, str]) -> str:
-    payload = "\n".join(
-        f"{seed}:{seed_to_hash[seed]}" for seed in sorted(seed_to_hash)
-    )
+    payload = "\n".join(f"{seed}:{seed_to_hash[seed]}" for seed in sorted(seed_to_hash))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -300,17 +298,15 @@ def compare_algorithms(
         observations, minimum_replicates=minimum_replicates
     )
 
-    grouped: dict[
-        ComparisonContext, dict[str, dict[int, BenchmarkObservation]]
-    ] = defaultdict(lambda: defaultdict(dict))
+    grouped: dict[ComparisonContext, dict[str, dict[int, BenchmarkObservation]]] = (
+        defaultdict(lambda: defaultdict(dict))
+    )
     for observation in normalized:
         grouped[_comparison_context(observation)][observation.algorithm_id][
             observation.seed
         ] = observation
 
-    pending: list[
-        tuple[ComparisonContext, str, PairedComparison, dict[int, str]]
-    ] = []
+    pending: list[tuple[ComparisonContext, str, PairedComparison, dict[int, str]]] = []
     raw_p_values: dict[str, float] = {}
     for context in sorted(grouped, key=str):
         algorithms = grouped[context]
