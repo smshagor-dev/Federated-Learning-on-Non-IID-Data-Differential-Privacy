@@ -37,8 +37,18 @@ class PartitioningTests(unittest.TestCase):
         self.assertEqual(set(flattened.tolist()), set(range(len(self.dataset))))
 
     def test_iid_partition_is_deterministic_and_complete(self) -> None:
-        first = partition_iid(self.dataset, num_clients=10, seed=17, min_partition_size=10)
-        second = partition_iid(self.dataset, num_clients=10, seed=17, min_partition_size=10)
+        first = partition_iid(
+            self.dataset,
+            num_clients=10,
+            seed=17,
+            min_partition_size=10,
+        )
+        second = partition_iid(
+            self.dataset,
+            num_clients=10,
+            seed=17,
+            min_partition_size=10,
+        )
         self.assert_exact_cover(first)
         self.assertEqual(partition_hash(first), partition_hash(second))
         self.assertEqual({len(indices) for indices in first.values()}, {100})

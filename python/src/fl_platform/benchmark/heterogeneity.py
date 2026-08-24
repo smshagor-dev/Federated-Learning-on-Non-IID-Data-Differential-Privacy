@@ -12,8 +12,8 @@ import hashlib
 import json
 import math
 import statistics
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +58,9 @@ def _kl_divergence(p: tuple[float, ...], q: tuple[float, ...]) -> float:
         if p_value <= 0.0:
             continue
         if q_value <= 0.0:
-            raise ValueError("KL reference distribution has zero mass where p is positive")
+            raise ValueError(
+                "KL reference distribution has zero mass where p is positive"
+            )
         total += p_value * math.log2(p_value / q_value)
     return total
 
@@ -109,7 +111,7 @@ def compute_heterogeneity_vector(
     if any(count <= 0 for count in sample_counts.values()):
         raise ValueError("every client must have at least one sample")
 
-    global_histogram = {label: 0 for label in label_space}
+    global_histogram = dict.fromkeys(label_space, 0)
     for histogram in canonical.values():
         for label, count in histogram.items():
             global_histogram[label] += count

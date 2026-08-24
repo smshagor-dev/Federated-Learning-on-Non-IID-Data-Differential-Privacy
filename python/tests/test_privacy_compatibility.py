@@ -65,7 +65,9 @@ class UserLevelCompatibilityTests(unittest.TestCase):
             user_level_status("fedavg").status, CompatibilityStatus.SUPPORTED
         )
 
-    def test_scaffold_is_unsupported_until_control_variate_privacy_is_proven(self) -> None:
+    def test_scaffold_is_unsupported_until_control_variate_privacy_is_proven(
+        self,
+    ) -> None:
         entry = user_level_status("scaffold")
         self.assertEqual(entry.status, CompatibilityStatus.UNSUPPORTED)
         self.assertIn("control-variate", entry.reason)

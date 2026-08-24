@@ -34,16 +34,16 @@ class BenchmarkPlanTests(unittest.TestCase):
         self.assertEqual({cell.seed for cell in matching}, {11, 23, 37, 53, 71})
 
     def test_plan_hash_and_cell_ids_are_deterministic(self) -> None:
-        kwargs = dict(
-            benchmark_id="matrix-b",
-            datasets=("cifar10",),
-            algorithms=("fedavg", "fedprox"),
-            partitions=(BenchmarkPartition("iid", "iid", {}),),
-            target_epsilons=(4.0,),
-            seeds=(1, 2, 3, 4, 5),
-            rounds=100,
-            runtime_identity="root-simulator",
-        )
+        kwargs = {
+            "benchmark_id": "matrix-b",
+            "datasets": ("cifar10",),
+            "algorithms": ("fedavg", "fedprox"),
+            "partitions": (BenchmarkPartition("iid", "iid", {}),),
+            "target_epsilons": (4.0,),
+            "seeds": (1, 2, 3, 4, 5),
+            "rounds": 100,
+            "runtime_identity": "root-simulator",
+        }
         first = build_benchmark_plan(**kwargs)
         second = build_benchmark_plan(**kwargs)
         self.assertEqual(first.plan_hash(), second.plan_hash())

@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from .statistics import DEFAULT_MINIMUM_REPLICATES
 
@@ -97,7 +98,9 @@ class BenchmarkPlan:
             raise ValueError("algorithm ids must be unique")
         if not self.partitions:
             raise ValueError("at least one partition condition is required")
-        if len({partition.name for partition in self.partitions}) != len(self.partitions):
+        if len({partition.name for partition in self.partitions}) != len(
+            self.partitions
+        ):
             raise ValueError("partition condition names must be unique")
         for partition in self.partitions:
             if not partition.name.strip():
@@ -108,7 +111,9 @@ class BenchmarkPlan:
                     f"use one of {sorted(SUPPORTED_PARTITION_STRATEGIES)}"
                 )
         if not self.target_epsilons:
-            raise ValueError("target_epsilons must include at least one privacy condition")
+            raise ValueError(
+                "target_epsilons must include at least one privacy condition"
+            )
         for epsilon in self.target_epsilons:
             if epsilon is not None and epsilon <= 0.0:
                 raise ValueError("private target epsilons must be > 0")
@@ -124,9 +129,12 @@ class BenchmarkPlan:
             raise ValueError("rounds must be > 0")
         if self.runtime_identity not in SUPPORTED_RUNTIME_IDENTITIES:
             raise ValueError(
-                f"runtime_identity must be one of {sorted(SUPPORTED_RUNTIME_IDENTITIES)}"
+                "runtime_identity must be one of "
+                f"{sorted(SUPPORTED_RUNTIME_IDENTITIES)}"
             )
-        if not self.primary_metrics or any(not metric.strip() for metric in self.primary_metrics):
+        if not self.primary_metrics or any(
+            not metric.strip() for metric in self.primary_metrics
+        ):
             raise ValueError("primary_metrics must contain non-empty metric names")
         if self.runtime_identity == "root-simulator":
             normalized_datasets = {value.lower() for value in self.datasets}
@@ -157,7 +165,9 @@ class BenchmarkPlan:
             "benchmark_id": self.benchmark_id,
             "datasets": list(self.datasets),
             "algorithms": list(self.algorithms),
-            "partitions": [partition.canonical_payload() for partition in self.partitions],
+            "partitions": [
+                partition.canonical_payload() for partition in self.partitions
+            ],
             "target_epsilons": list(self.target_epsilons),
             "target_delta": self.target_delta,
             "seeds": list(self.seeds),

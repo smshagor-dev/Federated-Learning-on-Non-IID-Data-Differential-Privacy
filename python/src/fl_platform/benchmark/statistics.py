@@ -12,8 +12,8 @@ import hashlib
 import math
 import random
 import statistics
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
 
 DEFAULT_MINIMUM_REPLICATES = 5
 DEFAULT_BOOTSTRAP_SAMPLES = 10_000

@@ -38,7 +38,9 @@ class MetricSummaryTests(unittest.TestCase):
 
 
 class PairedComparisonTests(unittest.TestCase):
-    def test_matched_seed_comparison_reports_effect_and_exact_randomization(self) -> None:
+    def test_matched_seed_comparison_reports_effect_and_exact_randomization(
+        self,
+    ) -> None:
         baseline = {1: 0.70, 2: 0.71, 3: 0.69, 4: 0.72, 5: 0.70}
         candidate = {1: 0.71, 2: 0.73, 3: 0.72, 4: 0.76, 5: 0.75}
         result = compare_paired_metrics(

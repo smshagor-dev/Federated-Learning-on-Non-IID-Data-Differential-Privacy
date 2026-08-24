@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import math
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from typing import Iterable
 
 from .statistics import (
     DEFAULT_BOOTSTRAP_SAMPLES,
@@ -316,7 +316,8 @@ def compare_algorithms(
         algorithms = grouped[context]
         if baseline_algorithm not in algorithms:
             raise ValueError(
-                f"baseline algorithm {baseline_algorithm!r} is missing for context {context!r}"
+                f"baseline algorithm {baseline_algorithm!r} is missing "
+                f"for context {context!r}"
             )
         baseline_rows = algorithms[baseline_algorithm]
         for candidate in sorted(algorithms):
@@ -324,7 +325,9 @@ def compare_algorithms(
                 continue
             candidate_rows = algorithms[candidate]
             if set(baseline_rows) != set(candidate_rows):
-                raise ValueError("paired algorithm comparison requires identical seed sets")
+                raise ValueError(
+                    "paired algorithm comparison requires identical seed sets"
+                )
             seed_hashes: dict[int, str] = {}
             for seed in sorted(baseline_rows):
                 baseline_hash = baseline_rows[seed].partition_hash

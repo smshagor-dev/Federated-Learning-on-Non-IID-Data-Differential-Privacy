@@ -142,7 +142,9 @@ class BenchmarkRunnerTests(unittest.TestCase):
             commit_sha="commit-sha",
             specification_hash="spec-sha",
         )
-        by_metric = {observation.metric: observation.value for observation in observations}
+        by_metric = {
+            observation.metric: observation.value for observation in observations
+        }
         self.assertAlmostEqual(by_metric["global_accuracy"], 0.8)
         self.assertAlmostEqual(by_metric["p10_client_accuracy"], 0.6)
         self.assertAlmostEqual(by_metric["worst_client_accuracy"], 0.5)

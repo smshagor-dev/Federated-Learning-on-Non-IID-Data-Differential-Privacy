@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 import torch
-
 from fl_platform.worker.dataset_loader import (
     clear_verified_partition_references,
     load_partition,

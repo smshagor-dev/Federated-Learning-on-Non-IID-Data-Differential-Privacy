@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from fl_platform.worker.coordinator_client import (
     ClientTrainingTask,
     GrpcCoordinatorClient,
@@ -11,7 +10,9 @@ from fl_platform.worker.dataset_loader import (
     clear_verified_partition_references,
     manifest_for_client,
 )
-from fl_platform.worker.partition_aware_client import PartitionAwareGrpcCoordinatorClient
+from fl_platform.worker.partition_aware_client import (
+    PartitionAwareGrpcCoordinatorClient,
+)
 
 
 def test_verified_raw_reference_is_published_only_after_base_acquire_succeeds(
