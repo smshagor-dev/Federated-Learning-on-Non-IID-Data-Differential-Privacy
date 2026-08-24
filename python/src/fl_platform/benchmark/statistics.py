@@ -12,8 +12,8 @@ import hashlib
 import math
 import random
 import statistics
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
 
 DEFAULT_MINIMUM_REPLICATES = 5
 DEFAULT_BOOTSTRAP_SAMPLES = 10_000
@@ -94,8 +94,7 @@ def _linear_quantile(sorted_values: Sequence[float], probability: float) -> floa
         return float(sorted_values[lower])
     fraction = position - lower
     return float(
-        sorted_values[lower]
-        + fraction * (sorted_values[upper] - sorted_values[lower])
+        sorted_values[lower] + fraction * (sorted_values[upper] - sorted_values[lower])
     )
 
 

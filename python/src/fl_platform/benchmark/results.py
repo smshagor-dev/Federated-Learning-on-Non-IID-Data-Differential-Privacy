@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import math
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from typing import Iterable
 
 from .statistics import (
     DEFAULT_BOOTSTRAP_SAMPLES,
@@ -167,9 +167,7 @@ def _comparison_context(observation: BenchmarkObservation) -> ComparisonContext:
 
 
 def _partition_digest(seed_to_hash: dict[int, str]) -> str:
-    payload = "\n".join(
-        f"{seed}:{seed_to_hash[seed]}" for seed in sorted(seed_to_hash)
-    )
+    payload = "\n".join(f"{seed}:{seed_to_hash[seed]}" for seed in sorted(seed_to_hash))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -300,23 +298,22 @@ def compare_algorithms(
         observations, minimum_replicates=minimum_replicates
     )
 
-    grouped: dict[
-        ComparisonContext, dict[str, dict[int, BenchmarkObservation]]
-    ] = defaultdict(lambda: defaultdict(dict))
+    grouped: dict[ComparisonContext, dict[str, dict[int, BenchmarkObservation]]] = (
+        defaultdict(lambda: defaultdict(dict))
+    )
     for observation in normalized:
         grouped[_comparison_context(observation)][observation.algorithm_id][
             observation.seed
         ] = observation
 
-    pending: list[
-        tuple[ComparisonContext, str, PairedComparison, dict[int, str]]
-    ] = []
+    pending: list[tuple[ComparisonContext, str, PairedComparison, dict[int, str]]] = []
     raw_p_values: dict[str, float] = {}
     for context in sorted(grouped, key=str):
         algorithms = grouped[context]
         if baseline_algorithm not in algorithms:
             raise ValueError(
-                f"baseline algorithm {baseline_algorithm!r} is missing for context {context!r}"
+                f"baseline algorithm {baseline_algorithm!r} is missing "
+                f"for context {context!r}"
             )
         baseline_rows = algorithms[baseline_algorithm]
         for candidate in sorted(algorithms):
@@ -324,7 +321,9 @@ def compare_algorithms(
                 continue
             candidate_rows = algorithms[candidate]
             if set(baseline_rows) != set(candidate_rows):
-                raise ValueError("paired algorithm comparison requires identical seed sets")
+                raise ValueError(
+                    "paired algorithm comparison requires identical seed sets"
+                )
             seed_hashes: dict[int, str] = {}
             for seed in sorted(baseline_rows):
                 baseline_hash = baseline_rows[seed].partition_hash

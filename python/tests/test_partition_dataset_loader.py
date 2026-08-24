@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 import torch
-
 from fl_platform.worker.dataset_loader import (
     clear_verified_partition_references,
     load_partition,
@@ -39,12 +38,8 @@ def _reference(
 
 
 def test_legacy_reference_remains_iid_and_reproducible() -> None:
-    first = manifest_for_client(
-        "synthetic:client-a", "client-a", 9, sample_count=32
-    )
-    second = manifest_for_client(
-        "synthetic:client-a", "client-a", 9, sample_count=32
-    )
+    first = manifest_for_client("synthetic:client-a", "client-a", 9, sample_count=32)
+    second = manifest_for_client("synthetic:client-a", "client-a", 9, sample_count=32)
     assert first.partition_strategy == "iid"
     assert first.seed == second.seed
     dataset_a, _ = load_partition(first)
@@ -72,9 +67,7 @@ def test_verified_reference_overrides_legacy_task_runner_reference() -> None:
 def test_dirichlet_reference_is_deterministic_per_client() -> None:
     reference = _reference("dirichlet", alpha=0.1, seed=42)
     register_verified_partition_reference("client-a", reference)
-    first = manifest_for_client(
-        "synthetic:client-a", "client-a", 1, sample_count=128
-    )
+    first = manifest_for_client("synthetic:client-a", "client-a", 1, sample_count=128)
     first.num_classes = 8
     dataset_a, _ = load_partition(first)
 
@@ -105,9 +98,7 @@ def test_quantity_skew_changes_local_count_but_respects_minimum() -> None:
             min_client_size=19,
         ),
     )
-    manifest = manifest_for_client(
-        "synthetic:client-a", "client-a", 0, sample_count=32
-    )
+    manifest = manifest_for_client("synthetic:client-a", "client-a", 0, sample_count=32)
     assert manifest.partition_strategy == "quantity_skew"
     assert manifest.sample_count >= 19
     assert manifest.sample_count <= 32 * 32
