@@ -33,7 +33,7 @@ class PartitionAwareGrpcCoordinatorClient(GrpcCoordinatorClient):
             hasattr(response, "task_available")
             and bool(response.task_available)
             and hasattr(response, "task")
-            and getattr(response, "task_id", "")
+            and getattr(response, "task_id", False)
         ):
             task = response.task
             self._pending_partition_reference = (
