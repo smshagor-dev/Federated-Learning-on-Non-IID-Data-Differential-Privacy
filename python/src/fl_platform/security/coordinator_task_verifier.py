@@ -16,7 +16,7 @@ execution.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from fl_platform.security.coordinator_task_replay import (
     CoordinatorTaskReplayCandidate,
@@ -39,7 +39,7 @@ from fl_platform.security.coordinator_task_signing import (
 from fl_platform.security.coordinator_trust_bundle import TrustedCoordinatorKey
 
 
-class CoordinatorTaskRejectionReason(str, Enum):
+class CoordinatorTaskRejectionReason(StrEnum):
     """17 structured rejection reasons -- Work Package Q, plus
     SECURE_AGGREGATION_BINDING_MISMATCH (Secure Cohort Handshake and
     Signed Roster Runtime slice). Stable, machine-readable strings
