@@ -2,12 +2,25 @@ from __future__ import annotations
 
 import pytest
 
-from fl_platform.v3.async_runtime import AsyncModelState, AsyncUpdate, staleness_weight
+from fl_platform.v3.async_runtime import (
+    AsyncModelState,
+    AsyncUpdate,
+    staleness_weight,
+)
 from fl_platform.v3.capabilities import CapabilityRequest, validate_capability_request
-from fl_platform.v3.heterogeneity import EdgeRequirements, eligible_for_edge_training, generate_profiles
+from fl_platform.v3.heterogeneity import (
+    EdgeRequirements,
+    eligible_for_edge_training,
+    generate_profiles,
+)
 from fl_platform.v3.observability import RobustnessMetrics, RoundMetrics
 from fl_platform.v3.release_gates import REQUIRED_V3_GATES, ReleaseGateReport
-from fl_platform.v3.robust_aggregation import coordinate_median, krum, multi_krum, trimmed_mean
+from fl_platform.v3.robust_aggregation import (
+    coordinate_median,
+    krum,
+    multi_krum,
+    trimmed_mean,
+)
 from fl_platform.v3.server_optimizers import AdaptiveServerOptimizer, OptimizerConfig
 from fl_platform.v3.workloads import get_workload
 
@@ -28,13 +41,27 @@ def test_async_state_applies_and_rejects_overstale_update() -> None:
 
 
 def test_coordinate_median_and_trimmed_mean_ignore_extreme_outlier() -> None:
-    updates = [(1.0, 1.0), (1.1, 0.9), (0.9, 1.1), (100.0, -100.0), (1.0, 1.0)]
+    updates = [
+        (1.0, 1.0),
+        (1.1, 0.9),
+        (0.9, 1.1),
+        (100.0, -100.0),
+        (1.0, 1.0),
+    ]
     assert coordinate_median(updates) == pytest.approx((1.0, 1.0))
-    assert trimmed_mean(updates, trim_ratio=0.2) == pytest.approx((1.0333333333, 0.9666666667))
+    assert trimmed_mean(updates, trim_ratio=0.2) == pytest.approx(
+        (1.0333333333, 0.9666666667)
+    )
 
 
 def test_krum_prefers_honest_cluster() -> None:
-    updates = [(1.0, 1.0), (1.1, 1.0), (0.9, 1.0), (1.0, 0.9), (50.0, -50.0)]
+    updates = [
+        (1.0, 1.0),
+        (1.1, 1.0),
+        (0.9, 1.0),
+        (1.0, 0.9),
+        (50.0, -50.0),
+    ]
     selected = krum(updates, byzantine_clients=1)
     assert selected in updates[:4]
     aggregate = multi_krum(updates, byzantine_clients=1, select=2)
@@ -48,11 +75,19 @@ def test_capability_matrix_fails_closed() -> None:
         validate_capability_request(CapabilityRequest("fedavg", asynchronous=True))
     with pytest.raises(ValueError, match="cannot inspect individual updates"):
         validate_capability_request(
-            CapabilityRequest("fedavg", secure_aggregation=True, robust_aggregation=True)
+            CapabilityRequest(
+                "fedavg",
+                secure_aggregation=True,
+                robust_aggregation=True,
+            )
         )
     with pytest.raises(ValueError, match="threshold"):
         validate_capability_request(
-            CapabilityRequest("fedavg", secure_aggregation=True, threshold_recovery=True)
+            CapabilityRequest(
+                "fedavg",
+                secure_aggregation=True,
+                threshold_recovery=True,
+            )
         )
 
 
@@ -88,7 +123,7 @@ def test_observability_records_communication_and_robustness() -> None:
 
 
 def test_release_gate_requires_all_thirteen_workstreams() -> None:
-    report = ReleaseGateReport({gate: True for gate in REQUIRED_V3_GATES})
+    report = ReleaseGateReport(dict.fromkeys(REQUIRED_V3_GATES, True))
     assert len(REQUIRED_V3_GATES) == 13
     assert report.release_ready()
     blocked = ReleaseGateReport({"async-runtime": True})

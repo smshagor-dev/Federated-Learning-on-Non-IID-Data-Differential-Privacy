@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+ModelUpdate = tuple[float, ...]
+
 
 @dataclass(slots=True)
 class TrainingTask:
@@ -29,6 +31,8 @@ class TrainingResult:
     accepted: bool = True
     worker_id: str = ""
     trace_id: str = ""
+    base_model_version: int | None = None
+    model_update: ModelUpdate | None = None
 
 
 class LocalTrainer(Protocol):

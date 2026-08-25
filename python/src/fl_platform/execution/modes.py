@@ -20,6 +20,7 @@ class SchedulingConfig:
     buffer_size: int | None = None
     maximum_staleness: int | None = None
     carryover_late_results: bool = False
+    current_model_version: int | None = None
 
 
 @dataclass(slots=True)
@@ -44,6 +45,8 @@ def validate_scheduling_config(config: SchedulingConfig) -> SchedulingValidation
             warnings.append("synchronous mode ignores round_deadline_s")
         if config.buffer_size is not None:
             warnings.append("synchronous mode ignores buffer_size")
+        if config.current_model_version is not None:
+            warnings.append("synchronous mode ignores current_model_version")
         return SchedulingValidationResult(True, warnings)
 
     if config.mode == ExecutionMode.DEADLINE_BASED_SEMI_SYNCHRONOUS:
@@ -68,6 +71,16 @@ def validate_scheduling_config(config: SchedulingConfig) -> SchedulingValidation
         if config.buffer_size is None or config.buffer_size <= 0:
             warnings.append(
                 "staleness-aware mode usually pairs with a positive buffer_size"
+            )
+        if config.current_model_version is None:
+            warnings.append(
+                "staleness-aware mode uses legacy admission without "
+                "current_model_version"
+            )
+        elif config.current_model_version < 0:
+            return SchedulingValidationResult(
+                False,
+                ["current_model_version must be non-negative"],
             )
         return SchedulingValidationResult(True, warnings)
 

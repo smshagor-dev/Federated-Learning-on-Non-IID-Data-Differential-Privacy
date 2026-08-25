@@ -57,12 +57,15 @@ def validate_capability_request(request: CapabilityRequest) -> None:
         raise ValueError("asynchronous secure aggregation is not release-validated")
     if request.robust_aggregation and request.secure_aggregation:
         raise ValueError(
-            "robust aggregation cannot inspect individual updates behind the current secure aggregation path"
+            "robust aggregation cannot inspect individual updates behind the "
+            "current secure aggregation path"
         )
     if request.robust_aggregation and request.differential_privacy:
         raise ValueError("robust aggregation + DP composition is not release-validated")
     if request.adaptive_clipping and request.asynchronous:
-        raise ValueError("adaptive clipping accounting for asynchronous releases is not validated")
+        raise ValueError(
+            "adaptive clipping accounting for asynchronous releases is not validated"
+        )
     if request.threshold_recovery and not request.secure_aggregation:
         raise ValueError("threshold recovery requires secure aggregation")
     if request.threshold_recovery:

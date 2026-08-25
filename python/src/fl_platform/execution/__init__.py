@@ -9,12 +9,14 @@ from .modes import (
 from .multiprocessing_orchestrator import (
     MultiprocessingOrchestrator,
     OrchestratorResult,
+    ResultAggregator,
 )
 
 __all__ = [
     "ExecutionMode",
     "MultiprocessingOrchestrator",
     "OrchestratorResult",
+    "ResultAggregator",
     "SchedulingConfig",
     "SchedulingValidationResult",
     "validate_scheduling_config",

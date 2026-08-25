@@ -5,7 +5,12 @@ on:
     branches: [main]
     paths:
       - "python/src/fl_platform/v3/**"
+      - "python/src/fl_platform/execution/**"
+      - "python/src/fl_platform/workers/**"
       - "python/tests/test_v3_foundations.py"
+      - "python/tests/test_v3_runtime_integration.py"
+      - "python/tests/test_execution_foundations.py"
+      - "python/tests/test_worker_service.py"
       - "python/pyproject.toml"
       - "RELEASE_PLAN_v3.0.0.md"
       - ".github/workflows/v3-foundations.yml"
@@ -30,18 +35,50 @@ jobs:
         run: python -m pip install -e './python[dev]'
       - name: Dependency consistency
         run: python -m pip check
-      - name: Compile v3 package
-        run: python -m compileall -q python/src/fl_platform/v3
-      - name: Ruff v3 source and tests
-        run: ruff check python/src/fl_platform/v3 python/tests/test_v3_foundations.py
+      - name: Compile v3 and execution integration
+        run: |
+          python -m compileall -q \
+            python/src/fl_platform/v3 \
+            python/src/fl_platform/execution \
+            python/src/fl_platform/workers
+      - name: Ruff v3 runtime source and tests
+        run: |
+          ruff check \
+            python/src/fl_platform/v3 \
+            python/src/fl_platform/execution/modes.py \
+            python/src/fl_platform/execution/multiprocessing_orchestrator.py \
+            python/src/fl_platform/workers \
+            python/tests/test_v3_foundations.py \
+            python/tests/test_v3_runtime_integration.py \
+            python/tests/test_execution_foundations.py \
+            python/tests/test_worker_service.py
       - name: Ruff formatting gate
-        run: ruff format --check python/src/fl_platform/v3 python/tests/test_v3_foundations.py
+        run: |
+          ruff format --check \
+            python/src/fl_platform/v3 \
+            python/src/fl_platform/execution/modes.py \
+            python/src/fl_platform/execution/multiprocessing_orchestrator.py \
+            python/src/fl_platform/workers \
+            python/tests/test_v3_foundations.py \
+            python/tests/test_v3_runtime_integration.py \
+            python/tests/test_execution_foundations.py \
+            python/tests/test_worker_service.py
       - name: Strict type check
         working-directory: python
-        run: mypy src/fl_platform/v3
-      - name: v3 foundation tests
+        run: |
+          mypy \
+            src/fl_platform/v3 \
+            src/fl_platform/execution/modes.py \
+            src/fl_platform/execution/multiprocessing_orchestrator.py \
+            src/fl_platform/workers/service.py
+      - name: v3 runtime integration tests
         working-directory: python
-        run: pytest -q tests/test_v3_foundations.py
+        run: |
+          pytest -q \
+            tests/test_v3_foundations.py \
+            tests/test_v3_runtime_integration.py \
+            tests/test_execution_foundations.py \
+            tests/test_worker_service.py
       - name: Development version must not masquerade as release
         run: |
           python - <<'PY'

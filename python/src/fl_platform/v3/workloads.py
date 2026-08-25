@@ -15,20 +15,54 @@ class Workload:
 
 
 WORKLOADS: dict[str, Workload] = {
-    "mnist": Workload("mnist", "image", False, "validated-v2", "torchvision dataset terms apply"),
-    "fashion_mnist": Workload(
-        "fashion_mnist", "image", False, "validated-v2", "torchvision dataset terms apply"
+    "mnist": Workload(
+        "mnist",
+        "image",
+        False,
+        "validated-v2",
+        "torchvision dataset terms apply",
     ),
-    "cifar10": Workload("cifar10", "image", False, "validated-v2", "CIFAR terms apply"),
-    "cifar100": Workload("cifar100", "image", False, "validated-v2", "CIFAR terms apply"),
+    "fashion_mnist": Workload(
+        "fashion_mnist",
+        "image",
+        False,
+        "validated-v2",
+        "torchvision dataset terms apply",
+    ),
+    "cifar10": Workload(
+        "cifar10",
+        "image",
+        False,
+        "validated-v2",
+        "CIFAR terms apply",
+    ),
+    "cifar100": Workload(
+        "cifar100",
+        "image",
+        False,
+        "validated-v2",
+        "CIFAR terms apply",
+    ),
     "femnist": Workload(
-        "femnist", "image", True, "experimental-manifest", "LEAF/FEMNIST source terms must be verified"
+        "femnist",
+        "image",
+        True,
+        "experimental-manifest",
+        "LEAF/FEMNIST source terms must be verified",
     ),
     "shakespeare": Workload(
-        "shakespeare", "text", True, "experimental-manifest", "LEAF corpus provenance must be archived"
+        "shakespeare",
+        "text",
+        True,
+        "experimental-manifest",
+        "LEAF corpus provenance must be archived",
     ),
     "sent140": Workload(
-        "sent140", "text", True, "experimental-manifest", "dataset terms and redistribution constraints must be verified"
+        "sent140",
+        "text",
+        True,
+        "experimental-manifest",
+        "dataset terms and redistribution constraints must be verified",
     ),
 }
 
