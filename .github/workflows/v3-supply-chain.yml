@@ -5,18 +5,22 @@ on:
     branches: [main]
     paths:
       - "python/**"
+      - "infra/kubernetes/**"
       - "scripts/generate_v3_sbom.py"
+      - "scripts/generate_v3_release_manifest.py"
+      - "scripts/render_v3_release_kubernetes.py"
       - ".github/workflows/v3-supply-chain.yml"
+      - ".github/workflows/v3-release-artifacts.yml"
   push:
-    branches: [federated-platform-expansion]
+    branches: [federated-platform-expansion, release-hardening]
 
 permissions:
   contents: read
 
 jobs:
-  dependency-inventory:
+  dependency-and-release-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,26 +28,85 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: python/pyproject.toml
-      - name: Install declared package dependencies
-        run: python -m pip install -e './python[dev,security]'
+      - name: Install declared package dependencies and build frontend
+        run: |
+          python -m pip install -e './python[dev,security]'
+          python -m pip install 'build>=1.2,<2'
       - name: Verify dependency consistency
         run: python -m pip check
+      - name: Release-security lint
+        run: |
+          ruff check \
+            python/src/fl_platform/v3/release_security.py \
+            python/tests/test_v3_release_security.py \
+            scripts/generate_v3_sbom.py \
+            scripts/generate_v3_release_manifest.py \
+            scripts/render_v3_release_kubernetes.py
+      - name: Release-security formatting
+        run: |
+          ruff format --check \
+            python/src/fl_platform/v3/release_security.py \
+            python/tests/test_v3_release_security.py \
+            scripts/generate_v3_sbom.py \
+            scripts/generate_v3_release_manifest.py \
+            scripts/render_v3_release_kubernetes.py
+      - name: Release-security strict types
+        working-directory: python
+        run: mypy src/fl_platform/v3/release_security.py
+      - name: Release-security tests
+        working-directory: python
+        run: pytest -q tests/test_v3_release_security.py
+      - name: Build Python wheel and source distribution
+        run: python -m build ./python --outdir artifacts/dist
+      - name: Archive exact source commit
+        run: git archive --format=tar.gz --output artifacts/fl-platform-source.tar.gz HEAD
       - name: Generate deterministic dependency inventory
         run: python scripts/generate_v3_sbom.py --output artifacts/v3-python-sbom.cdx.json
-      - name: Validate SBOM structure
+      - name: Generate release artifact hash manifest
+        run: |
+          python scripts/generate_v3_release_manifest.py \
+            --root . \
+            --commit-sha "${GITHUB_SHA}" \
+            --output artifacts/v3-release-manifest.json \
+            artifacts/v3-python-sbom.cdx.json \
+            artifacts/fl-platform-source.tar.gz \
+            artifacts/dist/*
+      - name: Validate SBOM and development release boundary
         run: |
           python - <<'PY'
           import json
+          import tomllib
           from pathlib import Path
 
-          payload = json.loads(Path('artifacts/v3-python-sbom.cdx.json').read_text())
-          if payload.get('bomFormat') != 'CycloneDX' or payload.get('specVersion') != '1.5':
+          version = tomllib.loads(
+              Path('python/pyproject.toml').read_text(encoding='utf-8')
+          )['project']['version']
+          sbom = json.loads(
+              Path('artifacts/v3-python-sbom.cdx.json').read_text(encoding='utf-8')
+          )
+          manifest = json.loads(
+              Path('artifacts/v3-release-manifest.json').read_text(encoding='utf-8')
+          )
+          if sbom.get('bomFormat') != 'CycloneDX' or sbom.get('specVersion') != '1.5':
               raise SystemExit('invalid SBOM metadata')
-          if not payload.get('components'):
+          if sbom['metadata']['component']['version'] != version:
+              raise SystemExit('SBOM package version does not match pyproject')
+          if not sbom.get('components'):
               raise SystemExit('SBOM contains no dependency components')
+          if manifest['version'] != version:
+              raise SystemExit('release artifact manifest version mismatch')
+          if version == '3.0.0.dev0' and manifest['release_ready_version'] is not False:
+              raise SystemExit('development package masquerades as release-ready')
+          if not manifest['artifacts']:
+              raise SystemExit('release manifest contains no artifacts')
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: v3-python-sbom
-          path: artifacts/v3-python-sbom.cdx.json
+          name: v3-supply-chain-evidence
+          path: |
+            artifacts/v3-python-sbom.cdx.json
+            artifacts/v3-release-manifest.json
+            artifacts/fl-platform-source.tar.gz
+            artifacts/dist/*
           if-no-files-found: error
+          retention-days: 14
