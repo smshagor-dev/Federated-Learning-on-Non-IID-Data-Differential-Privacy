@@ -29,8 +29,12 @@ class DatasetShardSpec:
         if not self.relative_path or path.is_absolute() or ".." in path.parts:
             raise FederatedDatasetError("dataset shard path must be safe and relative")
         digest = self.sha256.lower()
-        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
-            raise FederatedDatasetError("dataset shard sha256 must be 64 lowercase hex characters")
+        if len(digest) != 64 or any(
+            character not in "0123456789abcdef" for character in digest
+        ):
+            raise FederatedDatasetError(
+                "dataset shard sha256 must be 64 lowercase hex characters"
+            )
 
 
 @dataclass(frozen=True)
@@ -126,7 +130,9 @@ def _load_leaf_shard(path: Path) -> tuple[FederatedUserPartition, ...]:
     try:
         raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise FederatedDatasetError(f"failed to parse dataset shard {path.name}") from exc
+        raise FederatedDatasetError(
+            f"failed to parse dataset shard {path.name}"
+        ) from exc
 
     root = _as_mapping(raw, field="root")
     users_raw = _as_list(root.get("users"), field="users")
@@ -142,7 +148,11 @@ def _load_leaf_shard(path: Path) -> tuple[FederatedUserPartition, ...]:
     ):
         if not isinstance(user_value, str) or not user_value:
             raise FederatedDatasetError(f"users[{position}] must be a non-empty string")
-        if isinstance(count_value, bool) or not isinstance(count_value, int) or count_value < 0:
+        if (
+            isinstance(count_value, bool)
+            or not isinstance(count_value, int)
+            or count_value < 0
+        ):
             raise FederatedDatasetError(
                 f"num_samples[{position}] must be a non-negative integer"
             )
@@ -186,7 +196,9 @@ def load_federated_leaf_dataset(
     manifest.validate(require_verified_license=require_verified_license)
     root_path = Path(root)
     if not root_path.is_dir():
-        raise FederatedDatasetError("federated dataset root must be an existing directory")
+        raise FederatedDatasetError(
+            "federated dataset root must be an existing directory"
+        )
 
     users: list[FederatedUserPartition] = []
     seen_users: set[str] = set()
