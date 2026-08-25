@@ -47,22 +47,22 @@ WORKLOADS: dict[str, Workload] = {
         "femnist",
         "image",
         True,
-        "experimental-manifest",
-        "LEAF/FEMNIST source terms must be verified",
+        "loader-implemented-experimental",
+        "LEAF/FEMNIST provenance and source terms require release evidence",
     ),
     "shakespeare": Workload(
         "shakespeare",
         "text",
         True,
-        "experimental-manifest",
-        "LEAF corpus provenance must be archived",
+        "loader-implemented-experimental",
+        "LEAF preprocessing provenance must be archived for release",
     ),
     "sent140": Workload(
         "sent140",
         "text",
         True,
-        "experimental-manifest",
-        "dataset terms and redistribution constraints must be verified",
+        "loader-implemented-experimental",
+        "source terms and redistribution constraints require release evidence",
     ),
 }
 

@@ -7,6 +7,7 @@ on:
       - "python/src/fl_platform/v3/**"
       - "python/src/fl_platform/privacy/**"
       - "python/src/fl_platform/secure_aggregation/**"
+      - "python/src/fl_platform/datasets/**"
       - "python/src/fl_platform/execution/**"
       - "python/src/fl_platform/workers/**"
       - "python/tests/test_v3_foundations.py"
@@ -49,6 +50,7 @@ jobs:
         run: |
           python -m compileall -q \
             python/src/fl_platform/v3 \
+            python/src/fl_platform/datasets/federated_loaders.py \
             python/src/fl_platform/secure_aggregation/threshold_recovery.py \
             python/src/fl_platform/execution \
             python/src/fl_platform/workers
@@ -56,6 +58,7 @@ jobs:
         run: |
           ruff check \
             python/src/fl_platform/v3 \
+            python/src/fl_platform/datasets/federated_loaders.py \
             python/src/fl_platform/secure_aggregation/threshold_recovery.py \
             python/src/fl_platform/execution/modes.py \
             python/src/fl_platform/execution/multiprocessing_orchestrator.py \
@@ -72,6 +75,7 @@ jobs:
         run: |
           ruff format --check \
             python/src/fl_platform/v3 \
+            python/src/fl_platform/datasets/federated_loaders.py \
             python/src/fl_platform/secure_aggregation/threshold_recovery.py \
             python/src/fl_platform/execution/modes.py \
             python/src/fl_platform/execution/multiprocessing_orchestrator.py \
@@ -89,6 +93,7 @@ jobs:
         run: |
           mypy \
             src/fl_platform/v3 \
+            src/fl_platform/datasets/federated_loaders.py \
             src/fl_platform/secure_aggregation/threshold_recovery.py \
             src/fl_platform/execution/modes.py \
             src/fl_platform/execution/multiprocessing_orchestrator.py \
