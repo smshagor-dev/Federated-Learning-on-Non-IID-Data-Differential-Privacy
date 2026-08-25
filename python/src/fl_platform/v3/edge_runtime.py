@@ -126,12 +126,13 @@ class EdgeWorkerRuntime:
         service: WorkerService,
         *,
         codec: Int8UpdateCodec | None = None,
-        budget: EdgeRuntimeBudget = EdgeRuntimeBudget(),
+        budget: EdgeRuntimeBudget | None = None,
     ) -> None:
-        budget.validate()
+        resolved_budget = budget or EdgeRuntimeBudget()
+        resolved_budget.validate()
         self._service = service
         self._codec = codec or Int8UpdateCodec()
-        self._budget = budget
+        self._budget = resolved_budget
 
     def handle_task(self, task: TrainingTask) -> EdgeTrainingResult:
         result = self._service.handle_task(task)
@@ -143,7 +144,9 @@ class EdgeWorkerRuntime:
 
         encoded = self._codec.encode(update)
         if encoded.compressed_bytes > self._budget.max_payload_bytes:
-            raise EdgeRuntimeError("compressed model update exceeds edge payload budget")
+            raise EdgeRuntimeError(
+                "compressed model update exceeds edge payload budget"
+            )
         return EdgeTrainingResult(
             metadata=replace(result, model_update=None),
             update=encoded,
