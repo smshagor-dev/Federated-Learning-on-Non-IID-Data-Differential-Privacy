@@ -77,6 +77,8 @@ std::string to_string(MessageStream stream) {
             return "secure_aggregation";
         case MessageStream::kSecureAggregationMaskedUpdate:
             return "secure_aggregation_masked_update";
+        case MessageStream::kSecureAggregationRecovery:
+            return "secure_aggregation_recovery";
     }
     return "unknown";
 }
@@ -102,6 +104,8 @@ MessageStream message_stream_from_string(const std::string& value) {
         return MessageStream::kSecureAggregation;
     if (value == "secure_aggregation_masked_update")
         return MessageStream::kSecureAggregationMaskedUpdate;
+    if (value == "secure_aggregation_recovery")
+        return MessageStream::kSecureAggregationRecovery;
     throw ReplayProtectionStoreError("unknown message stream: " + value);
 }
 
