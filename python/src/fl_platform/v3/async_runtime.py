@@ -66,11 +66,29 @@ class AsyncModelState:
             return AsyncApplyResult(False, self._version, 0, 0.0, "future version")
         staleness = self._version - update.base_version
         if self._max_staleness is not None and staleness > self._max_staleness:
-            return AsyncApplyResult(False, self._version, staleness, 0.0, "too stale")
+            return AsyncApplyResult(
+                False,
+                self._version,
+                staleness,
+                0.0,
+                "too stale",
+            )
         if len(update.delta) != len(self._model):
-            return AsyncApplyResult(False, self._version, staleness, 0.0, "dimension mismatch")
+            return AsyncApplyResult(
+                False,
+                self._version,
+                staleness,
+                0.0,
+                "dimension mismatch",
+            )
         if not all(math.isfinite(value) for value in update.delta):
-            return AsyncApplyResult(False, self._version, staleness, 0.0, "non-finite update")
+            return AsyncApplyResult(
+                False,
+                self._version,
+                staleness,
+                0.0,
+                "non-finite update",
+            )
 
         weight = self._mixing_alpha * staleness_weight(staleness)
         self._model = tuple(
