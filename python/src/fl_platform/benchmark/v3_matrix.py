@@ -1,9 +1,8 @@
 """Scientific benchmark-v3 planning and evidence completeness.
 
-This additive layer keeps the long-lived benchmark-v2 schema stable while
-adding the v3 dimensions required for release evidence: algorithm, workload,
-partition, privacy target, adversarial attack, robust aggregation strategy,
-system heterogeneity, and repeated seeds.
+This additive layer keeps the benchmark-v2 schema stable while adding the v3
+release dimensions: algorithm, workload, partition, privacy target, attack,
+robust aggregation, system heterogeneity, and repeated seeds.
 """
 
 from __future__ import annotations
@@ -14,9 +13,13 @@ import json
 import math
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 
-from fl_platform.benchmark.matrix import BenchmarkPartition, standard_partition_conditions
+from fl_platform.benchmark.matrix import (
+    SUPPORTED_PARTITION_STRATEGIES,
+    BenchmarkPartition,
+    standard_partition_conditions,
+)
 from fl_platform.benchmark.statistics import (
     DEFAULT_BOOTSTRAP_SAMPLES,
     DEFAULT_MINIMUM_REPLICATES,
@@ -125,7 +128,9 @@ class V3BenchmarkPlan:
             raise ValueError("at least one aggregation strategy is required")
         if not self.heterogeneity_conditions:
             raise ValueError("at least one heterogeneity condition is required")
-        if len(self.seeds) < minimum_replicates or len(set(self.seeds)) != len(self.seeds):
+        if len(self.seeds) < minimum_replicates or len(set(self.seeds)) != len(
+            self.seeds
+        ):
             raise ValueError(
                 f"at least {minimum_replicates} unique benchmark seeds are required"
             )
@@ -133,13 +138,20 @@ class V3BenchmarkPlan:
             raise ValueError("rounds must be positive")
         if self.runtime_identity not in {"root-simulator", "distributed-platform"}:
             raise ValueError("unknown benchmark runtime identity")
-        if not self.primary_metrics or any(not metric.strip() for metric in self.primary_metrics):
+        if not self.primary_metrics or any(
+            not metric.strip() for metric in self.primary_metrics
+        ):
             raise ValueError("primary_metrics must contain non-empty metric names")
         if len(set(self.primary_metrics)) != len(self.primary_metrics):
             raise ValueError("primary_metrics must be unique")
 
         for dataset in self.datasets:
             get_workload(dataset, require_validated=self.require_validated_workloads)
+        for partition in self.partitions:
+            if not partition.name.strip():
+                raise ValueError("partition name must not be empty")
+            if partition.strategy not in SUPPORTED_PARTITION_STRATEGIES:
+                raise ValueError(f"unsupported partition strategy: {partition.strategy}")
         for privacy in self.privacy_conditions:
             privacy.validate()
         for heterogeneity in self.heterogeneity_conditions:
@@ -155,8 +167,12 @@ class V3BenchmarkPlan:
                 "benchmark_id": self.benchmark_id,
                 "datasets": self.datasets,
                 "algorithms": self.algorithms,
-                "partitions": [partition.canonical_payload() for partition in self.partitions],
-                "privacy_conditions": [asdict(item) for item in self.privacy_conditions],
+                "partitions": [
+                    partition.canonical_payload() for partition in self.partitions
+                ],
+                "privacy_conditions": [
+                    asdict(item) for item in self.privacy_conditions
+                ],
                 "attacks": [attack.value for attack in self.attacks],
                 "aggregation_strategies": self.aggregation_strategies,
                 "heterogeneity_conditions": [
@@ -175,6 +191,16 @@ class V3BenchmarkPlan:
     ) -> tuple[V3BenchmarkCell, ...]:
         self.validate(minimum_replicates=minimum_replicates)
         cells: list[V3BenchmarkCell] = []
+        axes = itertools.product(
+            self.datasets,
+            self.algorithms,
+            self.partitions,
+            self.privacy_conditions,
+            self.attacks,
+            self.aggregation_strategies,
+            self.heterogeneity_conditions,
+            self.seeds,
+        )
         for (
             dataset_id,
             algorithm_id,
@@ -184,16 +210,7 @@ class V3BenchmarkPlan:
             strategy,
             heterogeneity,
             seed,
-        ) in itertools.product(
-            self.datasets,
-            self.algorithms,
-            self.partitions,
-            self.privacy_conditions,
-            self.attacks,
-            self.aggregation_strategies,
-            self.heterogeneity_conditions,
-            self.seeds,
-        ):
+        ) in axes:
             runnable, reason = _capability_status(
                 algorithm_id=algorithm_id,
                 privacy=privacy,
@@ -348,7 +365,9 @@ def summarize_v3_evidence(
 
     values: dict[tuple[str, str], list[float]] = defaultdict(list)
     for observation in normalized:
-        values[(observation.condition_id, observation.metric)].append(observation.value)
+        values[(observation.condition_id, observation.metric)].append(
+            observation.value
+        )
 
     summaries: list[V3MetricSummary] = []
     for (condition_id, metric), metric_values in sorted(values.items()):
@@ -383,7 +402,10 @@ def standard_heterogeneity_conditions() -> tuple[HeterogeneityCondition, ...]:
         HeterogeneityCondition("compute-skew", "heterogeneous local compute speed"),
         HeterogeneityCondition("network-skew", "bandwidth and latency heterogeneity"),
         HeterogeneityCondition("availability-dropout", "client availability and dropout"),
-        HeterogeneityCondition("edge-constrained", "resource and payload constrained edge clients"),
+        HeterogeneityCondition(
+            "edge-constrained",
+            "resource and payload constrained edge clients",
+        ),
     )
 
 
@@ -430,6 +452,10 @@ def _capability_status(
     aggregation_strategy: str,
     runtime_identity: str,
 ) -> tuple[bool, str]:
+    from fl_platform.algorithms.registry import registered_algorithm_names
+
+    if algorithm_id not in registered_algorithm_names():
+        return False, "algorithm is not registered in canonical worker runtime"
     if runtime_identity == "root-simulator" and algorithm_id not in {
         "fedavg",
         "fedprox",
