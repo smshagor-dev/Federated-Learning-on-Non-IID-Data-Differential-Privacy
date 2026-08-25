@@ -5,13 +5,15 @@
 // Owners encrypt each Shamir share end-to-end to one frozen-cohort holder using
 // the owner/holder ephemeral X25519 pair. This coordinator service verifies the
 // owner's mTLS identity, Ed25519 envelope, frozen-roster bindings, replay state,
-// and ciphertext integrity metadata, then retains only the encrypted package in
-// bounded volatile memory. It has no decryption key and no raw-share field.
+// and ciphertext integrity metadata, then stores only the encrypted package in
+// the restart-safe bounded relay store. It has no decryption key and no raw-share
+// field.
 
 #include "fl_coordinator/peer_identity.hpp"
 #include "fl_coordinator/replay_protection_store.hpp"
 #include "fl_coordinator/secure_aggregation_crypto.hpp"
 #include "fl_coordinator/secure_aggregation_session_manager.hpp"
+#include "fl_coordinator/secure_aggregation_share_relay_store.hpp"
 #include "fl_coordinator/signed_envelope_verifier.hpp"
 #include "fl_coordinator/signing_key_registry.hpp"
 #include "fl_coordinator/worker_identity_registry.hpp"
@@ -22,32 +24,37 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <iomanip>
-#include <map>
-#include <mutex>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
-#include <tuple>
-#include <vector>
+#include <utility>
 
 namespace fl::coordinator {
 
 class SecureAggregationShareRelayServiceImpl final
     : public fl::recovery::v1::SecureAggregationShareRelayService::Service {
   public:
-    static constexpr std::size_t kMaxQueuedRelays = 10000;
-    static constexpr std::size_t kMaxRelaysPerHolderSession = 256;
+    static constexpr std::size_t kMaxQueuedRelays =
+        SecureAggregationShareRelayStore::kMaxQueuedRelays;
+    static constexpr std::size_t kMaxRelaysPerHolderSession =
+        SecureAggregationShareRelayStore::kMaxRelaysPerHolderSession;
     static constexpr std::uint32_t kDefaultFetchLimit = 64;
 
     SecureAggregationShareRelayServiceImpl(WorkerIdentityRegistry& identity_registry,
                                            SigningKeyRegistry& signing_key_registry,
                                            ReplayProtectionStore& replay_store,
-                                           SecureAggregationSessionManager& session_manager)
+                                           SecureAggregationSessionManager& session_manager,
+                                           std::string persistence_path = "")
         : identity_registry_(&identity_registry),
           signing_key_registry_(&signing_key_registry),
           replay_store_(&replay_store),
-          session_manager_(&session_manager) {}
+          session_manager_(&session_manager),
+          relay_store_(std::make_unique<SecureAggregationShareRelayStore>(
+              persistence_path.empty() ? relay_store_path_from_environment()
+                                       : std::move(persistence_path))) {}
 
     grpc::Status PublishRecoveryShareRelay(
         grpc::ServerContext* context,
@@ -172,58 +179,40 @@ class SecureAggregationShareRelayServiceImpl final
                           "relay threshold/total_shares does not match the frozen cohort");
         }
 
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            purge_expired_locked(now);
-            const RelayKey key{relay.session_id(),
-                               relay.owner_worker_id(),
-                               relay.holder_worker_id(),
-                               relay.generation()};
-            const auto existing = relays_.find(key);
-            if (existing != relays_.end()) {
-                if (existing->second.SerializeAsString() != relay.SerializeAsString()) {
-                    return reject(response,
-                                  "relay_conflict",
-                                  "owner published conflicting ciphertext for the same holder/generation");
-                }
-                // Idempotent domain publication under a fresh valid envelope.
-                replay_store_->commit(replay);
-                response->set_accepted(true);
-                response->set_reason("relay already present");
-                return grpc::Status::OK;
-            }
-            for (const auto& [other_key, other] : relays_) {
-                if (other_key.session_id == relay.session_id() &&
-                    other_key.owner_worker_id == relay.owner_worker_id() &&
-                    other_key.generation == relay.generation() &&
-                    other.share_index() == relay.share_index()) {
-                    return reject(response,
-                                  "relay_duplicate_share_index",
-                                  "owner reused one recovery share index for multiple holders");
-                }
-            }
-            if (relays_.size() >= kMaxQueuedRelays) {
+        RelayStorePutResult put_result;
+        try {
+            put_result = relay_store_->put(relay, now);
+        } catch (const SecureAggregationShareRelayStoreError& storage_error) {
+            return reject(response, "relay_storage_failure", storage_error.what());
+        }
+        switch (put_result) {
+            case RelayStorePutResult::kConflict:
+                return reject(response,
+                              "relay_conflict",
+                              "owner published conflicting ciphertext for the same holder/generation");
+            case RelayStorePutResult::kDuplicateShareIndex:
+                return reject(response,
+                              "relay_duplicate_share_index",
+                              "owner reused one recovery share index for multiple holders");
+            case RelayStorePutResult::kGlobalLimitExceeded:
                 return reject(response, "relay_queue_full", "global relay mailbox is full");
-            }
-            std::size_t holder_session_count = 0;
-            for (const auto& [other_key, other] : relays_) {
-                (void)other;
-                if (other_key.session_id == relay.session_id() &&
-                    other_key.holder_worker_id == relay.holder_worker_id()) {
-                    ++holder_session_count;
-                }
-            }
-            if (holder_session_count >= kMaxRelaysPerHolderSession) {
+            case RelayStorePutResult::kHolderSessionLimitExceeded:
                 return reject(response,
                               "relay_holder_queue_full",
                               "holder/session relay mailbox is full");
-            }
-            relays_.emplace(key, relay);
+            case RelayStorePutResult::kInserted:
+            case RelayStorePutResult::kIdempotent:
+                break;
         }
 
+        // Durable domain admission succeeded. Advance replay state only now;
+        // storage failures and rejected/conflicting publications never consume
+        // a sequence number or nonce.
         replay_store_->commit(replay);
         response->set_accepted(true);
-        response->set_reason("encrypted recovery share queued for holder");
+        response->set_reason(put_result == RelayStorePutResult::kIdempotent
+                                 ? "relay already present"
+                                 : "encrypted recovery share durably queued for holder");
         return grpc::Status::OK;
     }
 
@@ -270,36 +259,27 @@ class SecureAggregationShareRelayServiceImpl final
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                                 "max_items exceeds the relay mailbox bound");
         }
-        std::lock_guard<std::mutex> lock(mutex_);
-        purge_expired_locked(now);
-        std::uint32_t emitted = 0;
-        for (const auto& [key, relay] : relays_) {
-            if (key.session_id == request->session_id() &&
-                key.holder_worker_id == request->holder_worker_id()) {
+        try {
+            for (const auto& relay : relay_store_->fetch(request->session_id(),
+                                                         request->holder_worker_id(),
+                                                         limit,
+                                                         now)) {
                 *response->add_encrypted_shares() = relay;
-                if (++emitted >= limit) {
-                    break;
-                }
             }
+        } catch (const SecureAggregationShareRelayStoreError& storage_error) {
+            return grpc::Status(grpc::StatusCode::INTERNAL, storage_error.what());
         }
         return grpc::Status::OK;
     }
 
   private:
-    struct RelayKey {
-        std::string session_id;
-        std::string owner_worker_id;
-        std::string holder_worker_id;
-        std::uint32_t generation = 0;
-
-        bool operator<(const RelayKey& other) const {
-            return std::tie(session_id, owner_worker_id, holder_worker_id, generation) <
-                   std::tie(other.session_id,
-                            other.owner_worker_id,
-                            other.holder_worker_id,
-                            other.generation);
+    static std::string relay_store_path_from_environment() {
+        const char* configured = std::getenv("FL_SECURE_AGGREGATION_RELAY_STORE_PATH");
+        if (configured != nullptr && *configured != '\0') {
+            return configured;
         }
-    };
+        return "secure_aggregation_share_relays.dat";
+    }
 
     static double now_unix_s() {
         using namespace std::chrono;
@@ -419,22 +399,11 @@ class SecureAggregationShareRelayServiceImpl final
         return out.str();
     }
 
-    void purge_expired_locked(double now) {
-        for (auto it = relays_.begin(); it != relays_.end();) {
-            if (now >= it->second.expires_at()) {
-                it = relays_.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-
     WorkerIdentityRegistry* identity_registry_;
     SigningKeyRegistry* signing_key_registry_;
     ReplayProtectionStore* replay_store_;
     SecureAggregationSessionManager* session_manager_;
-    std::mutex mutex_;
-    std::map<RelayKey, fl::recovery::v1::EncryptedRecoveryShareRelay> relays_;
+    std::unique_ptr<SecureAggregationShareRelayStore> relay_store_;
 };
 
 }  // namespace fl::coordinator
