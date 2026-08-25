@@ -69,7 +69,7 @@ def test_availability_decision_is_deterministic_for_seed_round_and_client() -> N
     assert first == second
 
 
-def test_orchestrator_skips_unavailable_resource_and_deadline_clients_before_training() -> None:
+def test_orchestrator_skips_clients_before_training() -> None:
     profiles = (
         _profile("healthy"),
         _profile("offline", availability=0.0),
