@@ -8,16 +8,21 @@ on:
 
 permissions:
   contents: read
+  packages: write
   id-token: write
   attestations: write
   artifact-metadata: write
 
+env:
+  REGISTRY: ghcr.io
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/fl-platform-api
+  WORKER_IMAGE: ghcr.io/${{ github.repository_owner }}/fl-platform-python-worker
+  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/fl-platform-web
+
 jobs:
   release-artifacts:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      V3_RELEASE_IMAGE_LOCK_JSON: ${{ vars.V3_RELEASE_IMAGE_LOCK_JSON }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,14 +57,99 @@ jobs:
                   f'tag/package version mismatch: tag={ref_name}, package={version}'
               )
           PY
-      - name: Require complete immutable release image lock
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push API image
+        id: api-image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/go-api.Dockerfile
+          push: true
+          tags: ${{ env.API_IMAGE }}:3.0.0
+          provenance: true
+          sbom: true
+      - name: Build and push Python worker image
+        id: worker-image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/python-worker.Dockerfile
+          push: true
+          tags: ${{ env.WORKER_IMAGE }}:3.0.0
+          provenance: true
+          sbom: true
+      - name: Build and push web image
+        id: web-image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/web.Dockerfile
+          push: true
+          tags: ${{ env.WEB_IMAGE }}:3.0.0
+          provenance: true
+          sbom: true
+      - name: Resolve immutable third-party image digests
         run: |
-          if [ -z "${V3_RELEASE_IMAGE_LOCK_JSON}" ]; then
-            echo "Repository variable V3_RELEASE_IMAGE_LOCK_JSON is required for v3.0.0."
-            exit 1
-          fi
+          docker pull postgres:16
+          docker pull redis:7
+          postgres_ref="$(docker image inspect postgres:16 --format='{{index .RepoDigests 0}}')"
+          redis_ref="$(docker image inspect redis:7 --format='{{index .RepoDigests 0}}')"
+          test -n "${postgres_ref}"
+          test -n "${redis_ref}"
+          printf 'POSTGRES_RELEASE_IMAGE=%s\n' "${postgres_ref}" >> "${GITHUB_ENV}"
+          printf 'REDIS_RELEASE_IMAGE=%s\n' "${redis_ref}" >> "${GITHUB_ENV}"
+      - name: Generate complete immutable release image lock
+        env:
+          API_DIGEST: ${{ steps.api-image.outputs.digest }}
+          WORKER_DIGEST: ${{ steps.worker-image.outputs.digest }}
+          WEB_DIGEST: ${{ steps.web-image.outputs.digest }}
+        run: |
           mkdir -p artifacts
-          printf '%s' "${V3_RELEASE_IMAGE_LOCK_JSON}" > artifacts/v3-release-image-lock.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          required = {
+              'API_DIGEST': os.environ.get('API_DIGEST', ''),
+              'WORKER_DIGEST': os.environ.get('WORKER_DIGEST', ''),
+              'WEB_DIGEST': os.environ.get('WEB_DIGEST', ''),
+              'POSTGRES_RELEASE_IMAGE': os.environ.get('POSTGRES_RELEASE_IMAGE', ''),
+              'REDIS_RELEASE_IMAGE': os.environ.get('REDIS_RELEASE_IMAGE', ''),
+          }
+          missing = sorted(key for key, value in required.items() if not value)
+          if missing:
+              raise SystemExit(f'missing release image digest values: {missing}')
+
+          for key in ('API_DIGEST', 'WORKER_DIGEST', 'WEB_DIGEST'):
+              value = required[key]
+              if not value.startswith('sha256:') or len(value) != 71:
+                  raise SystemExit(f'{key} is not a sha256 OCI digest: {value!r}')
+
+          lock = {
+              'fl-platform/api:latest': (
+                  f"{os.environ['API_IMAGE']}@{required['API_DIGEST']}"
+              ),
+              'fl-platform/python-worker:latest': (
+                  f"{os.environ['WORKER_IMAGE']}@{required['WORKER_DIGEST']}"
+              ),
+              'fl-platform/web:latest': (
+                  f"{os.environ['WEB_IMAGE']}@{required['WEB_DIGEST']}"
+              ),
+              'postgres:16': required['POSTGRES_RELEASE_IMAGE'],
+              'redis:7': required['REDIS_RELEASE_IMAGE'],
+          }
+          Path('artifacts/v3-release-image-lock.json').write_text(
+              json.dumps(lock, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          PY
           python scripts/render_v3_release_kubernetes.py \
             --lock artifacts/v3-release-image-lock.json \
             --output-dir artifacts/kubernetes-release
@@ -73,6 +163,8 @@ jobs:
           )
 
           images = discover_kubernetes_images(Path('artifacts/kubernetes-release'))
+          if not images:
+              raise SystemExit('rendered Kubernetes release contains no images')
           for image in images:
               validate_immutable_image_reference(image)
           print(f'validated {len(images)} immutable Kubernetes image references')
