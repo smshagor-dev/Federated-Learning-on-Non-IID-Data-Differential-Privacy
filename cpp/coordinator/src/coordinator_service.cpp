@@ -5,7 +5,9 @@
 // partition metadata. Recovery is injected additively through the constructor's
 // existing secure-aggregation dependency tail; no recovery service is created
 // for legacy/unit-test instances that did not provide all security/session
-// authorities.
+// authorities. Recovery is also never exposed on insecure-development or
+// server-TLS-only listeners: raw Shamir shares are secret protocol material, so
+// this RPC surface requires the coordinator's mTLS-required transport mode.
 
 #include "fl_coordinator/coordinator_service.hpp"
 
@@ -19,7 +21,8 @@
 #define secure_aggregation_masked_update_window_seconds_(...)                       \
     secure_aggregation_masked_update_window_seconds_(__VA_ARGS__),                  \
         recovery_service_(                                                          \
-            identity_registry != nullptr && signing_key_registry != nullptr &&      \
+            transport_mode == TransportMode::kMtlsRequired &&                       \
+                    identity_registry != nullptr && signing_key_registry != nullptr && \
                     replay_store != nullptr && secure_aggregation_manager != nullptr \
                 ? std::make_unique<SecureAggregationRecoveryServiceImpl>(           \
                       manager,                                                       \
