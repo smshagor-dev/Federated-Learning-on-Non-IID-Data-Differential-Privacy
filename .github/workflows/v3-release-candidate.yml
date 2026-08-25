@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - "RELEASE_PLAN_v3.0.0.md"
+      - "RELEASE_NOTES_v3.0.0.md"
+      - "release/**"
+      - "python/pyproject.toml"
+      - "python/src/fl_platform/__init__.py"
       - "python/src/fl_platform/v3/**"
       - "python/src/fl_platform/benchmark/**"
       - "python/src/fl_platform/secure_aggregation/**"
@@ -16,6 +20,28 @@ on:
       - "infra/docker/**"
       - "infra/kubernetes/**"
       - ".github/workflows/v3-release-candidate.yml"
+      - ".github/workflows/v3-final-qualification.yml"
+      - ".github/workflows/v3-release-artifacts.yml"
+  push:
+    branches: [main]
+    paths:
+      - "RELEASE_PLAN_v3.0.0.md"
+      - "RELEASE_NOTES_v3.0.0.md"
+      - "release/**"
+      - "python/pyproject.toml"
+      - "python/src/fl_platform/__init__.py"
+      - "python/src/fl_platform/v3/**"
+      - "python/src/fl_platform/benchmark/**"
+      - "python/src/fl_platform/secure_aggregation/**"
+      - "python/tests/test_v3_*.py"
+      - "python/tests/test_secure_aggregation_*.py"
+      - "scripts/generate_v3_benchmark_manifest.py"
+      - "scripts/run_v3_chaos_soak.py"
+      - "scripts/validate_v3_infrastructure.py"
+      - "infra/docker/**"
+      - "infra/kubernetes/**"
+      - ".github/workflows/v3-release-candidate.yml"
+      - ".github/workflows/v3-final-qualification.yml"
       - ".github/workflows/v3-release-artifacts.yml"
   workflow_dispatch:
 

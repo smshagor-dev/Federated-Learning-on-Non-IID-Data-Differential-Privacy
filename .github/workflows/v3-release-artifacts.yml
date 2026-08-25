@@ -7,7 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
   packages: write
   id-token: write
   attestations: write
@@ -26,6 +27,87 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Require tagged commit to belong to main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+      - name: Require successful same-SHA release qualification workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          required_workflows=(
+            ci.yml
+            v3-release-candidate.yml
+            v3-distributed-runtime.yml
+            v3-final-qualification.yml
+          )
+          for workflow in "${required_workflows[@]}"; do
+            run_id="$(
+              gh api --paginate \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?branch=main&status=success&per_page=100" \
+                --jq ".workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\") | .id" \
+                | head -n 1
+            )"
+            if [ -z "${run_id}" ]; then
+              echo "Missing successful ${workflow} run for ${GITHUB_SHA}" >&2
+              exit 1
+            fi
+            echo "qualified ${workflow} with run ${run_id}"
+            if [ "${workflow}" = "v3-final-qualification.yml" ]; then
+              printf 'FINAL_QUALIFICATION_RUN_ID=%s\n' "${run_id}" >> "${GITHUB_ENV}"
+            fi
+          done
+      - name: Download exact final-qualification evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -n "${FINAL_QUALIFICATION_RUN_ID}"
+          mkdir -p artifacts/qualification
+          gh run download "${FINAL_QUALIFICATION_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name v3-final-qualification-evidence \
+            --dir artifacts/qualification
+          gate_evidence="$(find artifacts/qualification -type f \
+            -name 'v3-release-gate-evidence.json' -print -quit)"
+          benchmark_evidence="$(find artifacts/qualification -type f \
+            -name 'v3-release-benchmark-evidence.json' -print -quit)"
+          test -n "${gate_evidence}"
+          test -n "${benchmark_evidence}"
+          cp "${gate_evidence}" artifacts/v3-release-gate-evidence.json
+          cp "${benchmark_evidence}" artifacts/v3-release-benchmark-evidence.json
+      - name: Verify qualification evidence binding
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          sha = os.environ['GITHUB_SHA'].lower()
+          gate = json.loads(
+              Path('artifacts/v3-release-gate-evidence.json').read_text(
+                  encoding='utf-8'
+              )
+          )
+          benchmark = json.loads(
+              Path('artifacts/v3-release-benchmark-evidence.json').read_text(
+                  encoding='utf-8'
+              )
+          )
+          if gate.get('release') != '3.0.0':
+              raise SystemExit('gate evidence release mismatch')
+          if gate.get('qualification_complete') is not True:
+              raise SystemExit('gate evidence is incomplete')
+          if gate.get('commit_sha') != sha:
+              raise SystemExit('gate evidence commit mismatch')
+          if gate.get('gate_count') != 13:
+              raise SystemExit('gate evidence does not cover all 13 gates')
+          if benchmark.get('release') != '3.0.0':
+              raise SystemExit('benchmark evidence release mismatch')
+          if benchmark.get('evidence_complete') is not True:
+              raise SystemExit('benchmark evidence is incomplete')
+          if benchmark.get('commit_sha') != sha:
+              raise SystemExit('benchmark evidence commit mismatch')
+          PY
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -49,6 +131,13 @@ jobs:
               raise SystemExit(
                   f'final release workflow requires package version 3.0.0; got {version}'
               )
+          namespace = {}
+          exec(
+              Path('python/src/fl_platform/__init__.py').read_text(encoding='utf-8'),
+              namespace,
+          )
+          if namespace['__version__'] != version:
+              raise SystemExit('package/module version mismatch')
           ref_type = os.environ.get('GITHUB_REF_TYPE', '')
           ref_name = os.environ.get('GITHUB_REF_NAME', '')
           if ref_type == 'tag' and ref_name != f'v{version}':
@@ -170,6 +259,8 @@ jobs:
             --output artifacts/v3-release-manifest.json \
             artifacts/v3-python-sbom.cdx.json \
             artifacts/v3-release-image-lock.json \
+            artifacts/v3-release-gate-evidence.json \
+            artifacts/v3-release-benchmark-evidence.json \
             artifacts/v3-kubernetes-release.tar.gz \
             artifacts/fl-platform-source.tar.gz \
             artifacts/dist/*
@@ -196,6 +287,8 @@ jobs:
             dist \
             v3-python-sbom.cdx.json \
             v3-release-image-lock.json \
+            v3-release-gate-evidence.json \
+            v3-release-benchmark-evidence.json \
             v3-kubernetes-release.tar.gz \
             fl-platform-source.tar.gz \
             v3-release-manifest.json
@@ -216,7 +309,36 @@ jobs:
             artifacts/v3-release-manifest.json
             artifacts/v3-python-sbom.cdx.json
             artifacts/v3-release-image-lock.json
+            artifacts/v3-release-gate-evidence.json
+            artifacts/v3-release-benchmark-evidence.json
             artifacts/v3-kubernetes-release.tar.gz
             artifacts/dist/*
           if-no-files-found: error
           retention-days: 90
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=(
+            artifacts/fl-platform-v3.0.0-release-bundle.tar.gz
+            artifacts/v3-release-manifest.json
+            artifacts/v3-python-sbom.cdx.json
+            artifacts/v3-release-image-lock.json
+            artifacts/v3-release-gate-evidence.json
+            artifacts/v3-release-benchmark-evidence.json
+            artifacts/v3-kubernetes-release.tar.gz
+            artifacts/dist/*
+          )
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+            gh release edit "${GITHUB_REF_NAME}" \
+              --title "v3.0.0" \
+              --notes-file RELEASE_NOTES_v3.0.0.md
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --verify-tag \
+              --title "v3.0.0" \
+              --notes-file RELEASE_NOTES_v3.0.0.md \
+              "${assets[@]}"
+          fi
