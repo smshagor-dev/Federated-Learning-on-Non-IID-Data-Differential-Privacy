@@ -11,7 +11,9 @@ from pathlib import Path
 
 _DIGEST_REF = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 _COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
-_IMAGE_LINE = re.compile(r"^(?P<prefix>\s*image:\s*)(?P<image>\S+)(?P<suffix>\s*)$")
+_IMAGE_LINE = re.compile(
+    r"^(?P<prefix>\s*(?:-\s*)?image:\s*)(?P<image>\S+)(?P<suffix>\s*)$"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +101,8 @@ def build_release_artifact_manifest(
 def validate_immutable_image_reference(image: str) -> None:
     if _DIGEST_REF.fullmatch(image) is None:
         raise ValueError(
-            "release image reference must be immutable and use @sha256:<64 lowercase hex>"
+            "release image reference must be immutable and use "
+            "@sha256:<64 lowercase hex>"
         )
 
 

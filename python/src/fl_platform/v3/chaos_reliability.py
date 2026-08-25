@@ -97,10 +97,11 @@ class ChaosRoundResult:
 class DeterministicChaosPlan:
     """Map seed/run/round/client identity to a stable fault decision."""
 
-    def __init__(self, *, seed: int, profile: ChaosProfile = ChaosProfile()) -> None:
-        profile.validate()
+    def __init__(self, *, seed: int, profile: ChaosProfile | None = None) -> None:
+        resolved_profile = profile or ChaosProfile()
+        resolved_profile.validate()
         self._seed = seed
-        self._profile = profile
+        self._profile = resolved_profile
 
     def decide(self, task: TrainingTask) -> ChaosDecision:
         digest = hashlib.sha256()
@@ -194,7 +195,7 @@ class ChaosRoundExecutor:
 
         result = ChaosRoundResult(
             selected_clients=len(tasks),
-            results=tuple((*on_time, *delayed)),
+            results=(*on_time, *delayed),
             decisions=tuple(decisions),
             dropped_clients=tuple(dropped),
             failed_clients=tuple(failed),

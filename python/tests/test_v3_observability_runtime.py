@@ -59,7 +59,7 @@ def _registry() -> V3MetricRegistry:
     return registry
 
 
-def test_prometheus_text_contains_aggregate_round_privacy_and_robustness_metrics() -> None:
+def test_prometheus_text_contains_aggregate_metrics() -> None:
     text = _registry().prometheus_text()
     assert "fl_round_accepted_updates 8" in text
     assert "fl_round_communication_bytes 3000" in text
@@ -74,6 +74,7 @@ def test_registry_has_no_client_identity_or_raw_update_fields() -> None:
     names = {event.name for event in events}
     forbidden_fragments = (
         "client_id",
+        "worker_id",
         "gradient",
         "model_update",
         "sample_value",
@@ -111,7 +112,18 @@ def test_jsonl_sink_writes_machine_readable_aggregate_records(
     assert all(
         set(record) == {"attributes", "name", "value"} for record in records
     )
-    assert not any("client" in json.dumps(record).lower() for record in records)
+    forbidden_fragments = (
+        "client_id",
+        "worker_id",
+        "gradient",
+        "model_update",
+        "sample_value",
+    )
+    assert all(
+        fragment not in json.dumps(record, sort_keys=True).lower()
+        for record in records
+        for fragment in forbidden_fragments
+    )
 
 
 def test_recording_new_round_replaces_gauges_and_removes_stale_epsilon() -> None:
