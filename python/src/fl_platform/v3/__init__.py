@@ -30,6 +30,15 @@ from fl_platform.v3.attacks import (
     apply_update_attack,
 )
 from fl_platform.v3.capabilities import CapabilityRequest, validate_capability_request
+from fl_platform.v3.edge_runtime import (
+    EDGE_CODEC,
+    EdgeRuntimeBudget,
+    EdgeRuntimeError,
+    EdgeTrainingResult,
+    EdgeUpdatePayload,
+    EdgeWorkerRuntime,
+    Int8UpdateCodec,
+)
 from fl_platform.v3.heterogeneity import ClientSystemProfile, EdgeRequirements
 from fl_platform.v3.heterogeneous_execution import (
     HeterogeneityAdmissionPolicy,
@@ -70,6 +79,7 @@ from fl_platform.v3.server_optimizers import AdaptiveServerOptimizer, OptimizerC
 from fl_platform.v3.workloads import WORKLOADS, get_workload
 
 __all__ = [
+    "EDGE_CODEC",
     "AdaptiveServerOptimizer",
     "AggregationConfig",
     "AggregationOutcome",
@@ -79,10 +89,16 @@ __all__ = [
     "CapabilityRequest",
     "ClientSystemProfile",
     "EdgeRequirements",
+    "EdgeRuntimeBudget",
+    "EdgeRuntimeError",
+    "EdgeTrainingResult",
+    "EdgeUpdatePayload",
+    "EdgeWorkerRuntime",
     "GradientLeakageResult",
     "HeterogeneityAdmissionPolicy",
     "HeterogeneityEvaluation",
     "HeterogeneityRoundMetrics",
+    "Int8UpdateCodec",
     "JsonlMetricSink",
     "LedgerResumeValidation",
     "MembershipInferenceResult",
