@@ -11,7 +11,9 @@ from pathlib import Path
 
 _DIGEST_REF = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 _COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
-_IMAGE_LINE = re.compile(r"^(?P<prefix>\s*image:\s*)(?P<image>\S+)(?P<suffix>\s*)$")
+_IMAGE_LINE = re.compile(
+    r"^(?P<prefix>\s*(?:-\s*)?image:\s*)(?P<image>\S+)(?P<suffix>\s*)$"
+)
 
 
 @dataclass(frozen=True, slots=True)
