@@ -20,9 +20,7 @@ def main() -> int:
     args = parser.parse_args()
 
     pyproject = args.root / "python" / "pyproject.toml"
-    version = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"][
-        "version"
-    ]
+    version = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
     manifest = build_release_artifact_manifest(
         args.root,
         tuple(args.artifacts),
