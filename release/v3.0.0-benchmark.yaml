@@ -1,0 +1,50 @@
+system:
+  seed: 42
+  device: "cpu"
+  results_dir: "results"
+
+data:
+  dataset: "MNIST"
+  data_root: "./data_raw"
+  partition: "iid"
+  alpha: 0.5
+  classes_per_client: 2
+  quantity_skew_sigma: 1.0
+  min_partition_size: 10
+
+federated:
+  num_clients: 10
+  sample_rate: 0.2
+  sampling_strategy: "fixed_without_replacement"
+  aggregation_weighting: "uniform"
+  rounds: 1
+  local_epochs: 1
+  batch_size: 512
+  server_lr: 1.0
+
+optimizer:
+  lr: 0.01
+  momentum: 0.0
+  weight_decay: 0.0
+  grad_clip_norm: null
+
+algorithm:
+  name: "fedavg"
+  mu: 0.0
+
+dp:
+  enabled: false
+  update_clip_norm: 1.0
+  target_epsilon: null
+  epsilon_tolerance: 1.0e-4
+  noise_multiplier: 0.0
+  target_delta: 1.0e-5
+  deterministic_noise_for_testing: false
+  test_noise_seed: null
+
+model:
+  name: "cnn"
+  group_norm_groups: 2
+
+evaluation:
+  eval_batch_size: 512
