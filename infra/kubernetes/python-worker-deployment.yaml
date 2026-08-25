@@ -4,7 +4,12 @@ metadata:
   name: python-worker
   namespace: fl-platform
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   selector:
     matchLabels:
       app: python-worker
@@ -13,6 +18,14 @@ spec:
       labels:
         app: python-worker
     spec:
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: python-worker
       containers:
         - name: python-worker
           image: fl-platform/python-worker:latest
