@@ -9,6 +9,7 @@ on:
       - "python/src/fl_platform/workers/**"
       - "python/tests/test_v3_foundations.py"
       - "python/tests/test_v3_runtime_integration.py"
+      - "python/tests/test_v3_adversarial_robustness.py"
       - "python/tests/test_execution_foundations.py"
       - "python/tests/test_worker_service.py"
       - "python/pyproject.toml"
@@ -16,6 +17,10 @@ on:
       - ".github/workflows/v3-foundations.yml"
   push:
     branches: [federated-platform-expansion]
+
+concurrency:
+  group: v3-foundations-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -50,6 +55,7 @@ jobs:
             python/src/fl_platform/workers \
             python/tests/test_v3_foundations.py \
             python/tests/test_v3_runtime_integration.py \
+            python/tests/test_v3_adversarial_robustness.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
       - name: Ruff formatting gate
@@ -61,6 +67,7 @@ jobs:
             python/src/fl_platform/workers \
             python/tests/test_v3_foundations.py \
             python/tests/test_v3_runtime_integration.py \
+            python/tests/test_v3_adversarial_robustness.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
       - name: Strict type check
@@ -77,6 +84,7 @@ jobs:
           pytest -q \
             tests/test_v3_foundations.py \
             tests/test_v3_runtime_integration.py \
+            tests/test_v3_adversarial_robustness.py \
             tests/test_execution_foundations.py \
             tests/test_worker_service.py
       - name: Development version must not masquerade as release

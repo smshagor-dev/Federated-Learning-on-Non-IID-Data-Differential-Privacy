@@ -4,10 +4,22 @@ All modules remain subject to the explicit v3 release gates; presence in this
 package is not a claim of production validation.
 """
 
+from fl_platform.v3.adversarial_benchmark import (
+    RobustnessBenchmarkSummary,
+    RobustnessTrialConfig,
+    RobustnessTrialResult,
+    run_robustness_benchmark,
+    run_robustness_trial,
+)
 from fl_platform.v3.async_runtime import (
     AsyncModelState,
     AsyncUpdate,
     staleness_weight,
+)
+from fl_platform.v3.attacks import (
+    AttackKind,
+    apply_training_data_attack,
+    apply_update_attack,
 )
 from fl_platform.v3.capabilities import CapabilityRequest, validate_capability_request
 from fl_platform.v3.heterogeneity import ClientSystemProfile, EdgeRequirements
@@ -33,20 +45,28 @@ __all__ = [
     "AggregationOutcome",
     "AsyncModelState",
     "AsyncUpdate",
+    "AttackKind",
     "CapabilityRequest",
     "ClientSystemProfile",
     "EdgeRequirements",
     "OptimizerConfig",
     "REQUIRED_V3_GATES",
     "ReleaseGateReport",
+    "RobustnessBenchmarkSummary",
     "RobustnessMetrics",
+    "RobustnessTrialConfig",
+    "RobustnessTrialResult",
     "RoundMetrics",
     "V3AggregationEngine",
     "WORKLOADS",
+    "apply_training_data_attack",
+    "apply_update_attack",
     "coordinate_median",
     "get_workload",
     "krum",
     "multi_krum",
+    "run_robustness_benchmark",
+    "run_robustness_trial",
     "staleness_weight",
     "trimmed_mean",
     "validate_capability_request",
