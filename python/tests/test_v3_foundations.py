@@ -109,7 +109,7 @@ def test_heterogeneity_generation_is_reproducible_and_edge_gated() -> None:
 
 
 def test_workload_catalog_does_not_overclaim_federated_native_loaders() -> None:
-    assert get_workload("femnist").status == "experimental-manifest"
+    assert get_workload("femnist").status == "loader-implemented-experimental"
     with pytest.raises(ValueError, match="not release-validated"):
         get_workload("femnist", require_validated=True)
 
