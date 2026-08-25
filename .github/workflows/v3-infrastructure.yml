@@ -1,0 +1,39 @@
+name: v3 infrastructure
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/kubernetes/**"
+      - "scripts/validate_v3_infrastructure.py"
+      - ".github/workflows/v3-infrastructure.yml"
+  push:
+    branches: [distributed-infrastructure]
+
+concurrency:
+  group: v3-infrastructure-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  kubernetes-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile validator
+        run: python -m py_compile scripts/validate_v3_infrastructure.py
+      - name: Validate v3 Kubernetes release contract
+        run: python scripts/validate_v3_infrastructure.py
+      - name: Reject tracked inline Postgres password
+        run: |
+          if grep -A1 -E 'name:[[:space:]]*POSTGRES_PASSWORD' infra/kubernetes/stateful-services.yaml \
+            | grep -E 'value:[[:space:]]*[^F]' >/dev/null; then
+            echo "inline POSTGRES_PASSWORD detected"
+            exit 1
+          fi
