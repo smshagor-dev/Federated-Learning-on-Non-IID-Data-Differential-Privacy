@@ -19,8 +19,21 @@ from fl_platform.v3.algorithm_suite import (
     moon_contrastive_loss,
     pfedme_personalized_step,
 )
+from fl_platform.v3.async_checkpoint import AsyncStateStore, AsyncStateStoreError
+from fl_platform.v3.async_execution import (
+    AsyncExecutionError,
+    AsyncResultOutcome,
+    DurableAsyncResultProcessor,
+)
+from fl_platform.v3.async_membership import (
+    ClientLease,
+    ElasticClientRegistry,
+    ElasticMembershipSnapshot,
+)
 from fl_platform.v3.async_runtime import (
+    AsyncApplyResult,
     AsyncModelState,
+    AsyncStateSnapshot,
     AsyncUpdate,
     staleness_weight,
 )
@@ -83,17 +96,27 @@ __all__ = [
     "AdaptiveServerOptimizer",
     "AggregationConfig",
     "AggregationOutcome",
+    "AsyncApplyResult",
+    "AsyncExecutionError",
     "AsyncModelState",
+    "AsyncResultOutcome",
+    "AsyncStateSnapshot",
+    "AsyncStateStore",
+    "AsyncStateStoreError",
     "AsyncUpdate",
     "AttackKind",
     "CapabilityRequest",
+    "ClientLease",
     "ClientSystemProfile",
+    "DurableAsyncResultProcessor",
     "EdgeRequirements",
     "EdgeRuntimeBudget",
     "EdgeRuntimeError",
     "EdgeTrainingResult",
     "EdgeUpdatePayload",
     "EdgeWorkerRuntime",
+    "ElasticClientRegistry",
+    "ElasticMembershipSnapshot",
     "GradientLeakageResult",
     "HeterogeneityAdmissionPolicy",
     "HeterogeneityEvaluation",
