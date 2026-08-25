@@ -19,11 +19,18 @@ from fl_platform.v3.robust_aggregation import (
     multi_krum,
     trimmed_mean,
 )
+from fl_platform.v3.runtime_integration import (
+    AggregationConfig,
+    AggregationOutcome,
+    V3AggregationEngine,
+)
 from fl_platform.v3.server_optimizers import AdaptiveServerOptimizer, OptimizerConfig
 from fl_platform.v3.workloads import WORKLOADS, get_workload
 
 __all__ = [
     "AdaptiveServerOptimizer",
+    "AggregationConfig",
+    "AggregationOutcome",
     "AsyncModelState",
     "AsyncUpdate",
     "CapabilityRequest",
@@ -34,6 +41,7 @@ __all__ = [
     "ReleaseGateReport",
     "RobustnessMetrics",
     "RoundMetrics",
+    "V3AggregationEngine",
     "WORKLOADS",
     "coordinate_median",
     "get_workload",
