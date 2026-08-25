@@ -7,9 +7,12 @@ from pathlib import Path
 import pytest
 
 from fl_platform.v3.async_checkpoint import AsyncStateStore, AsyncStateStoreError
-from fl_platform.v3.async_execution import AsyncExecutionError, DurableAsyncResultProcessor
+from fl_platform.v3.async_execution import (
+    AsyncExecutionError,
+    DurableAsyncResultProcessor,
+)
 from fl_platform.v3.async_membership import ElasticClientRegistry
-from fl_platform.v3.async_runtime import AsyncModelState, AsyncUpdate
+from fl_platform.v3.async_runtime import AsyncModelState, AsyncStateSnapshot, AsyncUpdate
 from fl_platform.workers import TrainingResult
 
 
@@ -83,9 +86,7 @@ def test_async_checkpoint_round_trip_and_tamper_detection(tmp_path: Path) -> Non
         store.load()
 
 
-def test_durable_processor_rejects_duplicate_and_conflict_after_restart(
-    tmp_path: Path,
-) -> None:
+def test_durable_processor_rejects_replay_after_restart(tmp_path: Path) -> None:
     store = AsyncStateStore(tmp_path / "async-state.json")
     processor = DurableAsyncResultProcessor.load_or_create(
         store,
@@ -118,9 +119,7 @@ def test_durable_processor_rejects_duplicate_and_conflict_after_restart(
     assert restarted.state.version == 1
 
 
-def test_durable_processor_applies_staleness_per_result_without_round_barrier(
-    tmp_path: Path,
-) -> None:
+def test_durable_processor_applies_staleness_per_result(tmp_path: Path) -> None:
     processor = DurableAsyncResultProcessor.load_or_create(
         AsyncStateStore(tmp_path / "async-state.json"),
         (0.0,),
@@ -142,9 +141,7 @@ def test_durable_processor_applies_staleness_per_result_without_round_barrier(
     assert processor.state.version == 2
 
 
-def test_durable_processor_fails_closed_without_explicit_base_version(
-    tmp_path: Path,
-) -> None:
+def test_durable_processor_requires_explicit_base_version(tmp_path: Path) -> None:
     processor = DurableAsyncResultProcessor.load_or_create(
         AsyncStateStore(tmp_path / "async-state.json"),
         (0.0,),
@@ -161,7 +158,8 @@ def test_durable_processor_rolls_back_if_checkpoint_commit_fails(
     tmp_path: Path,
 ) -> None:
     class FailingStore(AsyncStateStore):
-        def save(self, snapshot: object) -> None:
+        def save(self, snapshot: AsyncStateSnapshot) -> None:
+            del snapshot
             raise AsyncStateStoreError("forced failure")
 
     store = FailingStore(tmp_path / "async-state.json")
