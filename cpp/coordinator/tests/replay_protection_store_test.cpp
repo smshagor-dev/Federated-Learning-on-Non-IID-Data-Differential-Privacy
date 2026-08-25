@@ -175,40 +175,56 @@ void run_replay_protection_store_tests(const std::string& scratch_dir) {
     }
 
     {
-        // Masked Update Runtime and No-Dropout Secure FedAvg
-        // Finalization slice: a real bug found live via this slice's
-        // own 3-worker Docker validation. kSecureAggregation (key
-        // advertisement) and kSecureAggregationMaskedUpdate (masked
-        // update submission) must be independent tracks for the same
-        // worker/key, exactly like the generic "different message
-        // stream" case above -- otherwise a worker's very first
-        // masked-update submission (sequence 1 on its own local
-        // counter) collides with its already-committed key
-        // advertisement (also sequence 1 on a shared counter) and is
-        // rejected as a replay, even though it is a genuinely new
-        // message.
+        // Secure aggregation has three independent sender-side counters:
+        // key advertisement, masked update, and threshold recovery share.
+        // Sequence 1 must be valid once on each track for the same
+        // worker/signing key without false replay collisions.
         const std::string secagg_scratch = scratch_dir + "/secure_aggregation_streams";
         std::filesystem::remove_all(secagg_scratch);
         std::filesystem::create_directories(secagg_scratch);
-        ReplayProtectionStore store(secagg_scratch + "/store.dat");
+        const std::string secagg_store_path = secagg_scratch + "/store.dat";
+        {
+            ReplayProtectionStore store(secagg_store_path);
 
-        const auto key_advertisement = make_candidate(
-            "worker-1", "key-1", MessageStream::kSecureAggregation, 1, "adv-nonce", 0.0);
-        check(store.validate(key_advertisement).accepted,
-              "kSecureAggregation: sequence 1 is accepted for a fresh key-advertisement track");
-        store.commit(key_advertisement);
+            const auto key_advertisement = make_candidate(
+                "worker-1", "key-1", MessageStream::kSecureAggregation, 1, "adv-nonce", 0.0);
+            check(store.validate(key_advertisement).accepted,
+                  "key-advertisement sequence 1 is accepted on its own track");
+            store.commit(key_advertisement);
 
-        const auto masked_update = make_candidate("worker-1",
-                                                  "key-1",
-                                                  MessageStream::kSecureAggregationMaskedUpdate,
-                                                  1,
-                                                  "masked-nonce",
-                                                  0.0);
-        check(
-            store.validate(masked_update).accepted,
-            "kSecureAggregationMaskedUpdate: sequence 1 on this independent track is accepted even "
-            "though kSecureAggregation already committed sequence 1 for the same worker/key -- the "
-            "real collision this slice's live validation found and this test now guards against");
+            const auto masked_update = make_candidate("worker-1",
+                                                      "key-1",
+                                                      MessageStream::kSecureAggregationMaskedUpdate,
+                                                      1,
+                                                      "masked-nonce",
+                                                      0.0);
+            check(store.validate(masked_update).accepted,
+                  "masked-update sequence 1 is independent from key advertisement");
+            store.commit(masked_update);
+
+            const auto recovery_share = make_candidate("worker-1",
+                                                       "key-1",
+                                                       MessageStream::kSecureAggregationRecovery,
+                                                       1,
+                                                       "recovery-nonce",
+                                                       0.0);
+            check(store.validate(recovery_share).accepted,
+                  "recovery-share sequence 1 is independent from both prior secure tracks");
+            store.commit(recovery_share);
+        }
+
+        ReplayProtectionStore reloaded(secagg_store_path);
+        const auto duplicate_recovery = make_candidate("worker-1",
+                                                       "key-1",
+                                                       MessageStream::kSecureAggregationRecovery,
+                                                       1,
+                                                       "new-recovery-nonce",
+                                                       1.0);
+        check(!reloaded.validate(duplicate_recovery).accepted,
+              "recovery replay sequence survives coordinator restart");
+        check(to_string(MessageStream::kSecureAggregationRecovery) ==
+                  "secure_aggregation_recovery",
+              "recovery replay track has a stable persisted wire name");
     }
 }
 

@@ -23,10 +23,10 @@
 
 namespace fl::coordinator {
 
-// Mirrors fl.worker.v1.SignedWorkerEnvelope.MessageStream one-for-one
-// -- kept as a plain C++ enum here (not the protobuf enum) to keep this
-// header protobuf-free; the gRPC-gated verification code is
-// responsible for the two-way mapping.
+// Mirrors fl.worker.v1.SignedWorkerEnvelope.MessageStream conceptually,
+// while allowing the coordinator to split one wire-category stream into
+// independent replay tracks when different secure-aggregation message
+// types have independent sender-side counters.
 enum class MessageStream {
     kControl,
     kHeartbeat,
@@ -42,28 +42,19 @@ enum class MessageStream {
     // stream's counter.
     kSecurityEvents,
     // Secure Aggregation Protocol Foundation and No-Dropout Masked-Sum
-    // Core slice: key advertisements and masked-update submissions get
-    // their own independent sequence track for the same reason
-    // kSecurityEvents does -- a worker's secure-aggregation messages
-    // must never be sequence-gap-rejected against its unrelated
-    // heartbeat/client-result counters. Schema-only this pass: no RPC
-    // handler constructs a ReplayCandidate on this stream yet (see
-    // docs/secure-aggregation-protocol-foundation.md's Tier 2 scope) --
-    // added now so the enum value and its wire-format string are fixed
-    // ahead of that follow-on integration work, matching this
-    // project's "no implicit/undocumented enum growth" convention.
+    // Core slice: key advertisements have their own independent sequence
+    // track.
     kSecureAggregation,
     // Masked Update Runtime and No-Dropout Secure FedAvg Finalization
-    // slice: the independent track kSecureAggregation's own doc comment
-    // above already called for -- a worker's key-advertisement sequence
-    // counter and its masked-update sequence counter must never collide
-    // on one shared track (a real bug found live: reusing kSecureAggregation
-    // for SubmitMaskedClientUpdate made the worker's second-ever secure-
-    // aggregation message on that track collide with its first, since
-    // the worker's own local SequenceStateStore already tracks these as
-    // two separate named tracks -- "secure_aggregation_key_advertisement"
-    // vs "secure_aggregation_masked_update", see coordinator_client.py).
+    // slice: a separate track from key advertisements. A real collision
+    // was found when these two sender-side counters shared one replay
+    // track, so they remain deliberately isolated.
     kSecureAggregationMaskedUpdate,
+    // v3 threshold dropout recovery: recovery-share submissions also
+    // have an independent sender-side sequence counter. Raw recovery
+    // shares are security-sensitive session material; replaying one must
+    // neither collide with nor advance advertisement/update counters.
+    kSecureAggregationRecovery,
 };
 
 std::string to_string(MessageStream stream);
