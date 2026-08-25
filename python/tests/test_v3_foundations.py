@@ -137,7 +137,7 @@ def test_release_gate_requires_all_thirteen_workstreams() -> None:
         blocked.require_release_ready()
 
 
-def test_lightweight_v3_modules_do_not_require_repo_root_compatibility_packages() -> None:
+def test_lightweight_v3_modules_do_not_require_repo_root_packages() -> None:
     package_src = Path(__file__).resolve().parents[1] / "src"
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(package_src)
