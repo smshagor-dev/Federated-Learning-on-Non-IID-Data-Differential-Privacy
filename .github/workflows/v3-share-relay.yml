@@ -1,0 +1,102 @@
+name: v3 share relay
+
+on:
+  push:
+    branches:
+      - secure-aggregation-share-relay
+    paths:
+      - "proto/recovery/**"
+      - "proto/worker/worker.proto"
+      - "scripts/generate_protos.sh"
+      - "python/src/fl_platform/secure_aggregation/share_relay.py"
+      - "python/tests/test_secure_aggregation_share_relay.py"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_share_relay_service.hpp"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_share_relay_store.hpp"
+      - "cpp/coordinator/include/fl_coordinator/coordinator_service.hpp"
+      - "cpp/coordinator/include/fl_coordinator/replay_protection_store.hpp"
+      - "cpp/coordinator/src/replay_protection_store.cpp"
+      - "cpp/coordinator/tests/secure_aggregation_share_relay_store_test.cpp"
+      - ".github/workflows/v3-share-relay.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "proto/recovery/**"
+      - "proto/worker/worker.proto"
+      - "scripts/generate_protos.sh"
+      - "python/src/fl_platform/secure_aggregation/share_relay.py"
+      - "python/tests/test_secure_aggregation_share_relay.py"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_share_relay_service.hpp"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_share_relay_store.hpp"
+      - "cpp/coordinator/include/fl_coordinator/coordinator_service.hpp"
+      - "cpp/coordinator/include/fl_coordinator/replay_protection_store.hpp"
+      - "cpp/coordinator/src/replay_protection_store.cpp"
+      - "cpp/coordinator/tests/secure_aggregation_share_relay_store_test.cpp"
+      - ".github/workflows/v3-share-relay.yml"
+
+jobs:
+  python-share-relay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package and security dependencies
+        run: python -m pip install -e "python[dev,security]"
+      - name: Encrypted share relay tests
+        run: python -m pytest python/tests/test_secure_aggregation_share_relay.py
+      - name: Relay lint
+        run: |
+          python -m ruff check \
+            python/src/fl_platform/secure_aggregation/share_relay.py \
+            python/tests/test_secure_aggregation_share_relay.py
+      - name: Relay format
+        run: |
+          python -m ruff format --check \
+            python/src/fl_platform/secure_aggregation/share_relay.py \
+            python/tests/test_secure_aggregation_share_relay.py
+      - name: Relay mypy
+        run: |
+          python -m mypy --config-file=python/pyproject.toml \
+            python/src/fl_platform/secure_aggregation/share_relay.py
+
+  cpp-share-relay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install protoc + gRPC/OpenSSL C++ dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            protobuf-compiler protobuf-compiler-grpc libprotobuf-dev \
+            libgrpc++-dev libssl-dev pkg-config
+      - name: Generate protobuf and gRPC bindings
+        run: bash scripts/generate_protos.sh generated
+      - name: Configure coordinator gRPC build
+        run: cmake -S cpp -B build/cpp-share-relay -DCMAKE_BUILD_TYPE=Release
+      - name: Build coordinator and recovery-adjacent tests
+        run: |
+          cmake --build build/cpp-share-relay --target \
+            fl_coordinator_grpc_server \
+            fl_coordinator_grpc_tests \
+            fl_secure_aggregation_session_manager_tests \
+            -j"$(nproc)"
+      - name: Build encrypted relay persistence regression test
+        run: |
+          c++ -std=c++20 -O2 \
+            -Icpp/coordinator/include \
+            -Icpp/generated \
+            cpp/coordinator/tests/secure_aggregation_share_relay_store_test.cpp \
+            cpp/coordinator/src/secure_aggregation_crypto.cpp \
+            cpp/generated/recovery/recovery.pb.cc \
+            cpp/generated/worker/worker.pb.cc \
+            cpp/generated/privacy/privacy.pb.cc \
+            -lprotobuf -lssl -lcrypto -pthread \
+            -o build/cpp-share-relay/fl_share_relay_store_test
+      - name: Run encrypted relay persistence regression test
+        run: build/cpp-share-relay/fl_share_relay_store_test build/cpp-share-relay/relay-store-scratch
+      - name: Run recovery-adjacent coordinator tests
+        run: |
+          ctest --test-dir build/cpp-share-relay --output-on-failure -R \
+            '^(fl_coordinator_grpc_tests|fl_secure_aggregation_session_manager_tests)$'

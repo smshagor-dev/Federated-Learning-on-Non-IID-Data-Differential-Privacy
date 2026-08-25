@@ -55,7 +55,67 @@ message GetRecoveryStatusResponse {
   string state = 11;
 }
 
+// End-to-end encrypted owner->holder recovery-share package. The coordinator
+// validates the owner's SignedWorkerEnvelope and frozen-cohort bindings but has
+// no field containing the raw Shamir value. nonce_hex is a 12-byte
+// ChaCha20-Poly1305 nonce, ciphertext_hex is the fixed 66-byte field element
+// plus the 16-byte Poly1305 tag, and ciphertext_hash is SHA-256 over those
+// ciphertext bytes.
+message EncryptedRecoveryShareRelay {
+  uint32 schema_version = 1;
+  string session_id = 2;
+  string run_id = 3;
+  uint64 round_id = 4;
+  string model_version = 5;
+  string cohort_commitment = 6;
+  string owner_worker_id = 7;
+  string holder_worker_id = 8;
+  uint32 generation = 9;
+  uint32 threshold = 10;
+  uint32 total_shares = 11;
+  uint32 share_index = 12;
+  string secret_digest = 13;
+  uint32 secret_length = 14;
+  string field_id = 15;
+  string nonce_hex = 16;
+  string ciphertext_hex = 17;
+  string ciphertext_hash = 18;
+  double issued_at = 19;
+  double expires_at = 20;
+}
+
+message PublishRecoveryShareRelayRequest {
+  // Must use MESSAGE_TYPE_SECURE_AGGREGATION_RECOVERY_RELAY and be signed by
+  // encrypted_share.owner_worker_id's ACTIVE/GRACE_PERIOD Ed25519 key.
+  fl.worker.v1.SignedWorkerEnvelope envelope = 1;
+  EncryptedRecoveryShareRelay encrypted_share = 2;
+}
+
+message PublishRecoveryShareRelayResponse {
+  bool accepted = 1;
+  string rejection_code = 2;
+  string reason = 3;
+}
+
+// Holder-authenticated mailbox read. The live C++ service exposes this RPC only
+// on an mTLS-required listener and checks the certificate URI SAN against
+// holder_worker_id before returning ciphertext addressed to that holder.
+message FetchRecoveryShareRelaysRequest {
+  string holder_worker_id = 1;
+  string session_id = 2;
+  uint32 max_items = 3;
+}
+
+message FetchRecoveryShareRelaysResponse {
+  repeated EncryptedRecoveryShareRelay encrypted_shares = 1;
+}
+
 service SecureAggregationRecoveryService {
   rpc SubmitRecoveryShare(SubmitRecoveryShareRequest) returns (SubmitRecoveryShareResponse);
   rpc GetRecoveryStatus(GetRecoveryStatusRequest) returns (GetRecoveryStatusResponse);
+}
+
+service SecureAggregationShareRelayService {
+  rpc PublishRecoveryShareRelay(PublishRecoveryShareRelayRequest) returns (PublishRecoveryShareRelayResponse);
+  rpc FetchRecoveryShareRelays(FetchRecoveryShareRelaysRequest) returns (FetchRecoveryShareRelaysResponse);
 }

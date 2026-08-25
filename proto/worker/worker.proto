@@ -139,6 +139,10 @@ message SignedWorkerEnvelope {
     // model update and therefore gets a distinct message type even though
     // both belong to the secure-aggregation category stream.
     MESSAGE_TYPE_SECURE_AGGREGATION_RECOVERY_SHARE = 15;
+    // End-to-end encrypted owner->holder recovery share publication. The
+    // coordinator validates and relays ciphertext metadata only; it never
+    // receives the Shamir field element in cleartext on this path.
+    MESSAGE_TYPE_SECURE_AGGREGATION_RECOVERY_RELAY = 16;
   }
 
   enum MessageStream {
@@ -152,9 +156,9 @@ message SignedWorkerEnvelope {
     MESSAGE_STREAM_KEY_MANAGEMENT = 7;
     MESSAGE_STREAM_SECURITY_EVENTS = 8;
     // Wire category for secure aggregation. Coordinator replay protection
-    // intentionally splits key advertisement, masked update, and recovery
-    // share into independent internal sequence tracks because workers keep
-    // independent counters for those message types.
+    // intentionally splits key advertisement, masked update, recovery share,
+    // and encrypted share relay into independent internal sequence tracks
+    // because workers keep independent counters for those message types.
     MESSAGE_STREAM_SECURE_AGGREGATION = 9;
   }
 
@@ -257,6 +261,7 @@ enum SecureAggregationMessageType {
   SECURE_AGGREGATION_MESSAGE_TYPE_KEY_ADVERTISEMENT = 1;
   SECURE_AGGREGATION_MESSAGE_TYPE_MASKED_UPDATE = 2;
   SECURE_AGGREGATION_MESSAGE_TYPE_RECOVERY_SHARE = 3;
+  SECURE_AGGREGATION_MESSAGE_TYPE_RECOVERY_RELAY = 4;
 }
 
 message SecureAggregationKeyAdvertisement {

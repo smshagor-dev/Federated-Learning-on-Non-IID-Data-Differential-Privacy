@@ -55,6 +55,11 @@ enum class MessageStream {
     // shares are security-sensitive session material; replaying one must
     // neither collide with nor advance advertisement/update counters.
     kSecureAggregationRecovery,
+    // v3 encrypted pre-dropout share relay: owner publications are a fourth
+    // independent secure-aggregation sender stream. Relay publication must
+    // not consume the counter later used by a holder to submit a plaintext
+    // recovery share after a real dropout.
+    kSecureAggregationRecoveryRelay,
 };
 
 std::string to_string(MessageStream stream);
