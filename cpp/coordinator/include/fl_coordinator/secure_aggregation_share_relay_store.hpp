@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace fl::coordinator {
@@ -179,6 +180,11 @@ class SecureAggregationShareRelayStore {
             throw SecureAggregationShareRelayStoreError(
                 "persisted encrypted relay has invalid timestamps");
         }
+        if (relay.threshold() < 2 || relay.threshold() > relay.total_shares() ||
+            relay.share_index() < 1 || relay.share_index() > relay.total_shares()) {
+            throw SecureAggregationShareRelayStoreError(
+                "persisted encrypted relay has invalid threshold/share metadata");
+        }
     }
 
     bool purge_expired_locked(double now_unix_s) {
@@ -192,6 +198,28 @@ class SecureAggregationShareRelayStore {
             }
         }
         return changed;
+    }
+
+    void validate_loaded_cross_record_constraints(
+        const fl::recovery::v1::EncryptedRecoveryShareRelay& relay) const {
+        std::size_t holder_session_count = 0;
+        for (const auto& [other_key, other] : relays_) {
+            if (other_key.session_id == relay.session_id() &&
+                other_key.owner_worker_id == relay.owner_worker_id() &&
+                other_key.generation == relay.generation() &&
+                other.share_index() == relay.share_index()) {
+                throw SecureAggregationShareRelayStoreError(
+                    "encrypted relay store contains a duplicate share index");
+            }
+            if (other_key.session_id == relay.session_id() &&
+                other_key.holder_worker_id == relay.holder_worker_id()) {
+                ++holder_session_count;
+            }
+        }
+        if (holder_session_count >= kMaxRelaysPerHolderSession) {
+            throw SecureAggregationShareRelayStoreError(
+                "encrypted relay store exceeds the holder/session record bound");
+        }
     }
 
     void load() {
@@ -226,42 +254,62 @@ class SecureAggregationShareRelayStore {
         std::size_t declared_count = 0;
         bool saw_schema = false;
         bool saw_count = false;
-        while (std::getline(stream, line)) {
-            if (line == "schema_version=1") {
-                saw_schema = true;
-                continue;
-            }
-            if (line.rfind("record_count=", 0) == 0) {
-                declared_count = std::stoull(line.substr(std::string("record_count=").size()));
-                saw_count = true;
-                if (declared_count > kMaxQueuedRelays) {
-                    throw SecureAggregationShareRelayStoreError(
-                        "encrypted relay store exceeds global record bound");
+        try {
+            while (std::getline(stream, line)) {
+                if (line == "schema_version=1") {
+                    if (saw_schema) {
+                        throw SecureAggregationShareRelayStoreError(
+                            "encrypted relay store repeats schema header");
+                    }
+                    saw_schema = true;
+                    continue;
                 }
-                continue;
-            }
-            if (line.rfind("record=", 0) != 0) {
-                if (!line.empty()) {
-                    throw SecureAggregationShareRelayStoreError(
-                        "encrypted relay store contains an unknown record type");
+                if (line.rfind("record_count=", 0) == 0) {
+                    if (saw_count) {
+                        throw SecureAggregationShareRelayStoreError(
+                            "encrypted relay store repeats record_count header");
+                    }
+                    declared_count = std::stoull(line.substr(std::string("record_count=").size()));
+                    saw_count = true;
+                    if (declared_count > kMaxQueuedRelays) {
+                        throw SecureAggregationShareRelayStoreError(
+                            "encrypted relay store exceeds global record bound");
+                    }
+                    continue;
                 }
-                continue;
+                if (line.rfind("record=", 0) != 0) {
+                    if (!line.empty()) {
+                        throw SecureAggregationShareRelayStoreError(
+                            "encrypted relay store contains an unknown record type");
+                    }
+                    continue;
+                }
+                if (!saw_schema || !saw_count) {
+                    throw SecureAggregationShareRelayStoreError(
+                        "encrypted relay records appeared before required headers");
+                }
+                fl::recovery::v1::EncryptedRecoveryShareRelay relay;
+                const auto raw = hex_decode(line.substr(std::string("record=").size()));
+                if (!relay.ParseFromString(raw)) {
+                    throw SecureAggregationShareRelayStoreError(
+                        "failed to parse persisted encrypted relay protobuf");
+                }
+                validate_persisted_relay(relay);
+                validate_loaded_cross_record_constraints(relay);
+                const RelayKey key{relay.session_id(),
+                                   relay.owner_worker_id(),
+                                   relay.holder_worker_id(),
+                                   relay.generation()};
+                if (!relays_.emplace(key, relay).second) {
+                    throw SecureAggregationShareRelayStoreError(
+                        "encrypted relay store contains duplicate relay identity");
+                }
             }
-            fl::recovery::v1::EncryptedRecoveryShareRelay relay;
-            const auto raw = hex_decode(line.substr(std::string("record=").size()));
-            if (!relay.ParseFromString(raw)) {
-                throw SecureAggregationShareRelayStoreError(
-                    "failed to parse persisted encrypted relay protobuf");
-            }
-            validate_persisted_relay(relay);
-            const RelayKey key{relay.session_id(),
-                               relay.owner_worker_id(),
-                               relay.holder_worker_id(),
-                               relay.generation()};
-            if (!relays_.emplace(key, relay).second) {
-                throw SecureAggregationShareRelayStoreError(
-                    "encrypted relay store contains duplicate relay identity");
-            }
+        } catch (const SecureAggregationShareRelayStoreError&) {
+            throw;
+        } catch (const std::exception& error) {
+            throw SecureAggregationShareRelayStoreError(
+                std::string("encrypted relay store parse failure: ") + error.what());
         }
         if (!saw_schema || !saw_count || relays_.size() != declared_count) {
             throw SecureAggregationShareRelayStoreError(
