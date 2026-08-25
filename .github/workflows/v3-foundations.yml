@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - "python/src/fl_platform/v3/**"
+      - "python/src/fl_platform/privacy/**"
       - "python/src/fl_platform/execution/**"
       - "python/src/fl_platform/workers/**"
       - "python/tests/test_v3_foundations.py"
       - "python/tests/test_v3_runtime_integration.py"
       - "python/tests/test_v3_adversarial_robustness.py"
+      - "python/tests/test_v3_privacy_validation.py"
       - "python/tests/test_execution_foundations.py"
       - "python/tests/test_worker_service.py"
       - "python/pyproject.toml"
@@ -56,6 +58,7 @@ jobs:
             python/tests/test_v3_foundations.py \
             python/tests/test_v3_runtime_integration.py \
             python/tests/test_v3_adversarial_robustness.py \
+            python/tests/test_v3_privacy_validation.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
       - name: Ruff formatting gate
@@ -68,6 +71,7 @@ jobs:
             python/tests/test_v3_foundations.py \
             python/tests/test_v3_runtime_integration.py \
             python/tests/test_v3_adversarial_robustness.py \
+            python/tests/test_v3_privacy_validation.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
       - name: Strict type check
@@ -85,6 +89,7 @@ jobs:
             tests/test_v3_foundations.py \
             tests/test_v3_runtime_integration.py \
             tests/test_v3_adversarial_robustness.py \
+            tests/test_v3_privacy_validation.py \
             tests/test_execution_foundations.py \
             tests/test_worker_service.py
       - name: Development version must not masquerade as release
