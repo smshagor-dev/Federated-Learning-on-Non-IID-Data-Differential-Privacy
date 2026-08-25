@@ -10,18 +10,26 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from fl_platform.v3.capabilities import CapabilityRequest, validate_capability_request
+from fl_platform.v3.capabilities import (
+    CapabilityRequest,
+    validate_capability_request,
+)
 from fl_platform.v3.robust_aggregation import (
     coordinate_median,
     krum,
     multi_krum,
     trimmed_mean,
 )
-from fl_platform.v3.server_optimizers import AdaptiveServerOptimizer, OptimizerConfig
+from fl_platform.v3.server_optimizers import (
+    AdaptiveServerOptimizer,
+    OptimizerConfig,
+)
 from fl_platform.workers import TrainingResult
 
 Vector = tuple[float, ...]
-ROBUST_STRATEGIES = frozenset({"median", "trimmed_mean", "krum", "multi_krum"})
+ROBUST_STRATEGIES = frozenset(
+    {"median", "trimmed_mean", "krum", "multi_krum"}
+)
 
 
 @dataclass(frozen=True)
@@ -91,7 +99,8 @@ class V3AggregationEngine:
         optimizer_name: str | None = None
         if self._optimizer is not None:
             aggregate = self._optimizer.step(aggregate)
-            optimizer_name = self._config.optimizer.name.lower() if self._config.optimizer else None
+            optimizer = self._config.optimizer
+            optimizer_name = optimizer.name.lower() if optimizer is not None else None
 
         return AggregationOutcome(
             update=aggregate,
@@ -104,7 +113,9 @@ class V3AggregationEngine:
     def _result_update(self, result: TrainingResult) -> Vector:
         update = result.model_update
         if update is None:
-            raise ValueError(f"client {result.client_id} did not provide a model update")
+            raise ValueError(
+                f"client {result.client_id} did not provide a model update"
+            )
         if len(update) != self._dimension:
             raise ValueError(
                 f"client {result.client_id} update dimension {len(update)}; "
@@ -112,9 +123,13 @@ class V3AggregationEngine:
             )
         vector = tuple(float(value) for value in update)
         if not all(math.isfinite(value) for value in vector):
-            raise ValueError(f"client {result.client_id} update contains non-finite values")
+            raise ValueError(
+                f"client {result.client_id} update contains non-finite values"
+            )
         if result.sample_count <= 0:
-            raise ValueError(f"client {result.client_id} sample_count must be positive")
+            raise ValueError(
+                f"client {result.client_id} sample_count must be positive"
+            )
         return vector
 
     def _aggregate_vectors(
@@ -148,9 +163,14 @@ class V3AggregationEngine:
             weights = [1.0 / len(vectors)] * len(vectors)
         else:
             total_samples = sum(result.sample_count for result in results)
-            weights = [result.sample_count / total_samples for result in results]
+            weights = [
+                result.sample_count / total_samples for result in results
+            ]
         return tuple(
-            sum(weight * vector[index] for weight, vector in zip(weights, vectors, strict=True))
+            sum(
+                weight * vector[index]
+                for weight, vector in zip(weights, vectors, strict=True)
+            )
             for index in range(self._dimension)
         )
 
