@@ -35,11 +35,21 @@ def test_unqualified_high_risk_surfaces_remain_experimental() -> None:
 
     assert async_gate.mode is QualificationMode.FAIL_CLOSED_EXPERIMENTAL
     assert secure_gate.mode is QualificationMode.FAIL_CLOSED_EXPERIMENTAL
-    assert any("distributed asynchronous" in item for item in async_gate.experimental_exclusions)
-    assert any("threshold dropout" in item for item in secure_gate.experimental_exclusions)
+    assert any(
+        "distributed asynchronous" in item
+        for item in async_gate.experimental_exclusions
+    )
+    assert any(
+        "threshold dropout" in item for item in secure_gate.experimental_exclusions
+    )
     assert any("FEMNIST" in item for item in workloads_gate.experimental_exclusions)
-    assert any("full attack/privacy" in item for item in benchmark_gate.experimental_exclusions)
-    assert any("physical edge-device" in item for item in edge_gate.experimental_exclusions)
+    assert any(
+        "full attack/privacy" in item
+        for item in benchmark_gate.experimental_exclusions
+    )
+    assert any(
+        "physical edge-device" in item for item in edge_gate.experimental_exclusions
+    )
 
 
 @pytest.mark.parametrize(
@@ -69,7 +79,7 @@ def test_experimental_combinations_fail_closed(request: CapabilityRequest) -> No
 
 
 def test_release_gate_report_requires_every_gate() -> None:
-    all_green = {gate: True for gate in REQUIRED_V3_GATES}
+    all_green = dict.fromkeys(REQUIRED_V3_GATES, True)
     assert ReleaseGateReport(all_green).release_ready()
 
     all_green["benchmark-matrix"] = False
