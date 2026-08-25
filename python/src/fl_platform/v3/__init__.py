@@ -37,6 +37,12 @@ from fl_platform.v3.heterogeneous_execution import (
     HeterogeneityRoundMetrics,
 )
 from fl_platform.v3.observability import RobustnessMetrics, RoundMetrics
+from fl_platform.v3.observability_runtime import (
+    JsonlMetricSink,
+    MetricEvent,
+    MetricEventSink,
+    V3MetricRegistry,
+)
 from fl_platform.v3.privacy_validation import (
     GradientLeakageResult,
     LedgerResumeValidation,
@@ -77,8 +83,11 @@ __all__ = [
     "HeterogeneityAdmissionPolicy",
     "HeterogeneityEvaluation",
     "HeterogeneityRoundMetrics",
+    "JsonlMetricSink",
     "LedgerResumeValidation",
     "MembershipInferenceResult",
+    "MetricEvent",
+    "MetricEventSink",
     "OptimizerConfig",
     "ParameterPartition",
     "PrivacyUtilityPoint",
@@ -91,6 +100,7 @@ __all__ = [
     "RobustnessTrialResult",
     "RoundMetrics",
     "V3AggregationEngine",
+    "V3MetricRegistry",
     "WORKLOADS",
     "apply_training_data_attack",
     "apply_update_attack",
