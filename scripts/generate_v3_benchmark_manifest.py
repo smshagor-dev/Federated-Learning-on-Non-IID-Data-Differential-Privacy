@@ -25,7 +25,6 @@ from fl_platform.benchmark.v3_matrix import (
 )
 from fl_platform.v3.attacks import AttackKind
 
-
 ALL_ALGORITHMS = (
     "fedavg",
     "fedprox",
@@ -92,9 +91,7 @@ def main() -> None:
 
     plan = _ci_plan() if args.profile == "ci" else _release_plan()
     cells = plan.expand()
-    exclusions = Counter(
-        cell.exclusion_reason for cell in cells if not cell.runnable
-    )
+    exclusions = Counter(cell.exclusion_reason for cell in cells if not cell.runnable)
     runnable = sum(cell.runnable for cell in cells)
     payload = {
         "schema_version": 1,
@@ -105,8 +102,7 @@ def main() -> None:
         "total_cells": len(cells),
         "runnable_cells": runnable,
         "excluded_cells": len(cells) - runnable,
-        "expected_primary_metric_observations": runnable
-        * len(plan.primary_metrics),
+        "expected_primary_metric_observations": runnable * len(plan.primary_metrics),
         "exclusion_reasons": dict(sorted(exclusions.items())),
         "seeds": list(plan.seeds),
         "primary_metrics": list(plan.primary_metrics),

@@ -17,7 +17,6 @@ env:
   REGISTRY: ghcr.io
   API_IMAGE: ghcr.io/${{ github.repository_owner }}/fl-platform-api
   WORKER_IMAGE: ghcr.io/${{ github.repository_owner }}/fl-platform-python-worker
-  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/fl-platform-web
 
 jobs:
   release-artifacts:
@@ -84,16 +83,6 @@ jobs:
           tags: ${{ env.WORKER_IMAGE }}:3.0.0
           provenance: true
           sbom: true
-      - name: Build and push web image
-        id: web-image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: infra/docker/web.Dockerfile
-          push: true
-          tags: ${{ env.WEB_IMAGE }}:3.0.0
-          provenance: true
-          sbom: true
       - name: Resolve immutable third-party image digests
         run: |
           docker pull postgres:16
@@ -108,7 +97,6 @@ jobs:
         env:
           API_DIGEST: ${{ steps.api-image.outputs.digest }}
           WORKER_DIGEST: ${{ steps.worker-image.outputs.digest }}
-          WEB_DIGEST: ${{ steps.web-image.outputs.digest }}
         run: |
           mkdir -p artifacts
           python - <<'PY'
@@ -119,7 +107,6 @@ jobs:
           required = {
               'API_DIGEST': os.environ.get('API_DIGEST', ''),
               'WORKER_DIGEST': os.environ.get('WORKER_DIGEST', ''),
-              'WEB_DIGEST': os.environ.get('WEB_DIGEST', ''),
               'POSTGRES_RELEASE_IMAGE': os.environ.get('POSTGRES_RELEASE_IMAGE', ''),
               'REDIS_RELEASE_IMAGE': os.environ.get('REDIS_RELEASE_IMAGE', ''),
           }
@@ -127,7 +114,7 @@ jobs:
           if missing:
               raise SystemExit(f'missing release image digest values: {missing}')
 
-          for key in ('API_DIGEST', 'WORKER_DIGEST', 'WEB_DIGEST'):
+          for key in ('API_DIGEST', 'WORKER_DIGEST'):
               value = required[key]
               if not value.startswith('sha256:') or len(value) != 71:
                   raise SystemExit(f'{key} is not a sha256 OCI digest: {value!r}')
@@ -138,9 +125,6 @@ jobs:
               ),
               'fl-platform/python-worker:latest': (
                   f"{os.environ['WORKER_IMAGE']}@{required['WORKER_DIGEST']}"
-              ),
-              'fl-platform/web:latest': (
-                  f"{os.environ['WEB_IMAGE']}@{required['WEB_DIGEST']}"
               ),
               'postgres:16': required['POSTGRES_RELEASE_IMAGE'],
               'redis:7': required['REDIS_RELEASE_IMAGE'],

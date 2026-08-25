@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from fl_platform.v3.async_runtime import (
@@ -130,3 +135,31 @@ def test_release_gate_requires_all_thirteen_workstreams() -> None:
     assert not blocked.release_ready()
     with pytest.raises(RuntimeError, match="release blocked"):
         blocked.require_release_ready()
+
+
+def test_lightweight_v3_modules_do_not_require_repo_root_compatibility_packages() -> None:
+    package_src = Path(__file__).resolve().parents[1] / "src"
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(package_src)
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
+            "from fl_platform.v3.edge_runtime import Int8UpdateCodec; "
+            "from fl_platform.v3.release_security import sha256_file; "
+            "assert 'federated' not in sys.modules; "
+            "assert 'federated.dp_accountant' not in sys.modules; "
+            "assert Int8UpdateCodec is not None; "
+            "assert sha256_file is not None"
+        ),
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=package_src,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr

@@ -91,7 +91,8 @@ def validate() -> tuple[str, ...]:
     ):
         if re.search(r"image:\s*[^\s]+:latest\b", text):
             warnings.append(
-                f"{name}: image tag is not release-pinned; supply-chain gate remains open"
+                f"{name}: image tag is not release-pinned; "
+                "supply-chain gate remains open"
             )
     return tuple(warnings)
 
