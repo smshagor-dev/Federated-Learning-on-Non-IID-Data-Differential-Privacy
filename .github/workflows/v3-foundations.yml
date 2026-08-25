@@ -18,6 +18,7 @@ on:
       - "python/tests/test_v3_system_heterogeneity.py"
       - "python/tests/test_v3_federated_workloads.py"
       - "python/tests/test_v3_observability_runtime.py"
+      - "python/tests/test_v3_edge_runtime.py"
       - "python/tests/test_secure_aggregation_threshold_recovery.py"
       - "python/tests/test_execution_foundations.py"
       - "python/tests/test_worker_service.py"
@@ -74,6 +75,7 @@ jobs:
             python/tests/test_v3_system_heterogeneity.py \
             python/tests/test_v3_federated_workloads.py \
             python/tests/test_v3_observability_runtime.py \
+            python/tests/test_v3_edge_runtime.py \
             python/tests/test_secure_aggregation_threshold_recovery.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
@@ -94,6 +96,7 @@ jobs:
             python/tests/test_v3_system_heterogeneity.py \
             python/tests/test_v3_federated_workloads.py \
             python/tests/test_v3_observability_runtime.py \
+            python/tests/test_v3_edge_runtime.py \
             python/tests/test_secure_aggregation_threshold_recovery.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
@@ -119,6 +122,7 @@ jobs:
             tests/test_v3_system_heterogeneity.py \
             tests/test_v3_federated_workloads.py \
             tests/test_v3_observability_runtime.py \
+            tests/test_v3_edge_runtime.py \
             tests/test_secure_aggregation_threshold_recovery.py \
             tests/test_execution_foundations.py \
             tests/test_worker_service.py
