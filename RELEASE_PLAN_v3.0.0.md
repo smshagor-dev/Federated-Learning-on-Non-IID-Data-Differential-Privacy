@@ -9,7 +9,7 @@ v3.0.0 is a major architecture, security, and validation release. Source-code pr
 
 | # | Workstream | Current v3 status | Remaining release requirement |
 |---|---|---|---|
-| 1 | Async & elastic FL | **In progress** — staleness-aware model state and execution modes exist | Distributed async scheduling, durable state, dynamic membership, restart/fault evidence |
+| 1 | Async & elastic FL | **In progress** — staleness-aware per-result updates, crash-safe model/version/replay checkpoints, duplicate/conflicting-replay fencing, and lease-based elastic membership exist | Real distributed/remote async scheduling, coordinator integration, multi-process failover and dynamic-membership evidence |
 | 2 | Byzantine / malicious-client defense | **In progress** — coordinate median, trimmed mean, Krum/Multi-Krum, poisoning transforms and robustness harness exist | Full runtime attack matrix and robust-vs-clean evidence across supported workloads |
 | 3 | Advanced privacy validation | **In progress** — privacy compatibility, leakage/membership checks and ledger-resume validation exist | Validate any newly supported async/robust/adaptive-clipping composition before enabling it |
 | 4 | Secure Aggregation v3 | **In progress** — threshold recovery, authenticated live recovery-share submission, X25519 key reconstruction, and end-to-end encrypted pre-dropout share relay exist; relay ciphertext can be persisted without exposing raw Shamir shares | Real worker-side relay orchestration, distributed dropout execution evidence, crash-safe secure-session reconstruction, masked-contribution restart policy, and validated interaction with supported privacy modes |
@@ -45,7 +45,7 @@ Missing or incomplete gates block release rather than being treated as optional.
 
 ## Current fail-closed boundaries
 
-- Async source primitives are not a claim of validated distributed async execution.
+- The durable async result processor applies real per-result staleness weighting, atomically checkpoints model/version/replay state, and supports process-local lease membership. It is **not** a claim of validated distributed async execution: remote delivery, coordinator failover, multi-process restart, and distributed dynamic-membership evidence remain required.
 - Secure aggregation is not advertised as compatible with asynchronous or Byzantine-robust aggregation.
 - Threshold recovery is live only on the explicitly supported secure FedAvg/non-private path today. Recovery-share submission is authenticated and replay-protected, and pre-dropout shares can be relayed end-to-end encrypted so the coordinator does not learn raw Shamir values.
 - Encrypted recovery-relay persistence is ciphertext-mailbox durability only. It is **not** a claim that an in-flight secure round can resume after coordinator restart: the existing secure-session restart policy aborts non-terminal sessions, the in-memory session manager is not reconstructed into a live round, and masked contributions are intentionally not persisted. End-to-end crash-safe recovery requires a separately validated secure-session reconstruction/checkpoint protocol.
