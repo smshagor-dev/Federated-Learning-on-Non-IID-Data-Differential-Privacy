@@ -29,13 +29,11 @@ class AsyncResultOutcome:
     apply_result: AsyncApplyResult
 
 
-def _logical_update_id(result: TrainingResult) -> str:
-    if result.base_model_version is None or result.base_model_version < 0:
-        raise ValueError("async result requires a non-negative base_model_version")
+def _logical_update_id(result: TrainingResult, base_version: int) -> str:
     if not result.run_id or not result.client_id:
         raise ValueError("async result requires run_id and client_id")
     payload = {
-        "base_model_version": result.base_model_version,
+        "base_model_version": base_version,
         "client_id": result.client_id,
         "round_id": result.round_id,
         "run_id": result.run_id,
@@ -125,8 +123,21 @@ class DurableAsyncResultProcessor:
                     "missing model update",
                 ),
             )
+        base_version = result.base_model_version
+        if base_version is None or base_version < 0:
+            return AsyncResultOutcome(
+                None,
+                None,
+                AsyncApplyResult(
+                    False,
+                    self._state.version,
+                    0,
+                    0.0,
+                    "async result requires a non-negative base_model_version",
+                ),
+            )
         try:
-            update_id = _logical_update_id(result)
+            update_id = _logical_update_id(result, base_version)
         except ValueError as exc:
             return AsyncResultOutcome(
                 None,
@@ -143,7 +154,7 @@ class DurableAsyncResultProcessor:
         payload_digest = _model_update_digest(delta)
         update = AsyncUpdate(
             client_id=result.client_id,
-            base_version=int(result.base_model_version),
+            base_version=base_version,
             delta=delta,
             update_id=update_id,
             payload_digest=payload_digest,
