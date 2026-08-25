@@ -47,7 +47,10 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
         gate="robust-aggregation",
         mode=QualificationMode.STABLE,
         stable_capabilities=(
-            "median and trimmed-mean robust aggregation for supported non-private synchronous runs",
+            (
+                "median and trimmed-mean robust aggregation for supported non-private "
+                "synchronous runs"
+            ),
             "deterministic poisoning transformations and adversarial validation",
         ),
         experimental_exclusions=(
@@ -80,12 +83,21 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
         gate="secure-aggregation",
         mode=QualificationMode.FAIL_CLOSED_EXPERIMENTAL,
         stable_capabilities=(
-            "authenticated secure-aggregation protocol primitives and wire compatibility",
+            (
+                "authenticated secure-aggregation protocol primitives and wire "
+                "compatibility"
+            ),
             "encrypted recovery-share relay with integrity and replay protection",
         ),
         experimental_exclusions=(
-            "threshold dropout recovery remains experimental in the public capability matrix",
-            "in-flight secure rounds are not guaranteed resumable after coordinator restart",
+            (
+                "threshold dropout recovery remains experimental in the public "
+                "capability matrix"
+            ),
+            (
+                "in-flight secure rounds are not guaranteed resumable after "
+                "coordinator restart"
+            ),
             "asynchronous secure aggregation is rejected",
         ),
         checks=(
@@ -98,11 +110,17 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
         gate="algorithm-suite",
         mode=QualificationMode.STABLE,
         stable_capabilities=(
-            "FedAvg, FedProx, SCAFFOLD, FedSAM, Ditto, and Per-FedAvg worker implementations",
+            (
+                "FedAvg, FedProx, SCAFFOLD, FedSAM, Ditto, and Per-FedAvg worker "
+                "implementations"
+            ),
             "canonical algorithm registry and fail-closed capability discovery",
         ),
         experimental_exclusions=(
-            "newer v3 algorithms without release benchmark qualification are not promoted to stable claims",
+            (
+                "newer v3 algorithms without release benchmark qualification are "
+                "not promoted to stable claims"
+            ),
         ),
         checks=(
             "test_v3_algorithm_suite.py",
@@ -113,7 +131,10 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
         gate="system-heterogeneity",
         mode=QualificationMode.STABLE,
         stable_capabilities=(
-            "deterministic compute, network, availability, and payload heterogeneity simulation",
+            (
+                "deterministic compute, network, availability, and payload "
+                "heterogeneity simulation"
+            ),
             "heterogeneity-aware execution policies",
         ),
         experimental_exclusions=(
@@ -129,7 +150,10 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
         mode=QualificationMode.STABLE,
         stable_capabilities=(
             "MNIST, FashionMNIST, CIFAR10, and CIFAR100 workload catalog entries",
-            "validated partition and dataset-loading contracts for the stable image workloads",
+            (
+                "validated partition and dataset-loading contracts for the stable "
+                "image workloads"
+            ),
         ),
         experimental_exclusions=(
             "FEMNIST loader remains experimental",
@@ -146,10 +170,16 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
         mode=QualificationMode.STABLE,
         stable_capabilities=(
             "containerized coordinator, API, and Python worker deployment contract",
-            "mTLS identity, signed-message, replay, audit, and restart validation in real containers",
+            (
+                "mTLS identity, signed-message, replay, audit, and restart validation "
+                "in real containers"
+            ),
         ),
         experimental_exclusions=(
-            "geographically distributed multi-host performance is not claimed by v3.0.0",
+            (
+                "geographically distributed multi-host performance is not claimed "
+                "by v3.0.0"
+            ),
         ),
         checks=(
             "v3 distributed runtime evidence workflow",
@@ -160,11 +190,20 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
         gate="observability",
         mode=QualificationMode.STABLE,
         stable_capabilities=(
-            "privacy-safe aggregate runtime metrics and observability export primitives",
-            "security and audit event centralization in the distributed validation stack",
+            (
+                "privacy-safe aggregate runtime metrics and observability export "
+                "primitives"
+            ),
+            (
+                "security and audit event centralization in the distributed "
+                "validation stack"
+            ),
         ),
         experimental_exclusions=(
-            "a hosted production OpenTelemetry collector/dashboard is not bundled as a service guarantee",
+            (
+                "a hosted production OpenTelemetry collector/dashboard is not "
+                "bundled as a service guarantee"
+            ),
         ),
         checks=(
             "test_v3_observability_runtime.py",
@@ -179,7 +218,10 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
             "fail-closed v3 benchmark matrix planning and provenance validation",
         ),
         experimental_exclusions=(
-            "the full attack/privacy/heterogeneity research cross-product is not claimed complete for v3.0.0",
+            (
+                "the full attack/privacy/heterogeneity research cross-product is "
+                "not claimed complete for v3.0.0"
+            ),
         ),
         checks=(
             "v3 final qualification real runtime benchmark",
@@ -194,7 +236,10 @@ GATE_QUALIFICATIONS: dict[str, GateQualification] = {
             "edge payload/resource policy validation",
         ),
         experimental_exclusions=(
-            "physical edge-device throughput, energy, and thermal performance are not claimed",
+            (
+                "physical edge-device throughput, energy, and thermal performance "
+                "are not claimed"
+            ),
         ),
         checks=(
             "release-candidate ARM64 edge OCI job",
@@ -248,10 +293,15 @@ def validate_release_support_contract() -> None:
         qualification = GATE_QUALIFICATIONS[gate]
         if qualification.gate != gate:
             raise ValueError(f"release support gate key mismatch: {gate}")
-        if not qualification.stable_capabilities and not qualification.experimental_exclusions:
+        if (
+            not qualification.stable_capabilities
+            and not qualification.experimental_exclusions
+        ):
             raise ValueError(f"release support gate has no scoped capability: {gate}")
         if not qualification.checks:
-            raise ValueError(f"release support gate has no qualification checks: {gate}")
+            raise ValueError(
+                f"release support gate has no qualification checks: {gate}"
+            )
         overlap = set(qualification.stable_capabilities).intersection(
             qualification.experimental_exclusions
         )
