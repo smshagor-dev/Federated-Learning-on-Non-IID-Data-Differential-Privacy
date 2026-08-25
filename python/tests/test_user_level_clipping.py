@@ -9,6 +9,7 @@ import math
 import unittest
 
 import torch
+
 from fl_platform.secure_aggregation.fixed_point_encoding import (
     FixedPointEncodingProfile,
 )

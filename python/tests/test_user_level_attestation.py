@@ -9,6 +9,7 @@ import unittest
 
 import nacl.exceptions
 import nacl.signing
+
 from fl_platform.secure_aggregation.user_level_attestation import (
     UserLevelPrivacyAttestationFields,
     build_signed_user_level_privacy_attestation,

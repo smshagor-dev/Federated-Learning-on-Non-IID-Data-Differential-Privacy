@@ -13,6 +13,10 @@ from __future__ import annotations
 import unittest
 
 import numpy as np
+from opacus.accountants import create_accountant
+from opacus.accountants.analysis.rdp import compute_rdp
+
+from federated.dp_accountant import MomentsAccountant
 from fl_platform.privacy.accounting import (
     AdaptiveClippingAccountant,
     SampleLevelAccountant,
@@ -20,10 +24,6 @@ from fl_platform.privacy.accounting import (
     UserLevelAccountantState,
     opacus_capabilities,
 )
-from opacus.accountants import create_accountant
-from opacus.accountants.analysis.rdp import compute_rdp
-
-from federated.dp_accountant import MomentsAccountant
 
 
 class UserLevelAccountantGoldenParityTests(unittest.TestCase):

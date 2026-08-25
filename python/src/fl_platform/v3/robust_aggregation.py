@@ -42,9 +42,7 @@ def coordinate_median(updates: Sequence[Sequence[float]]) -> Vector:
     )
 
 
-def trimmed_mean(
-    updates: Sequence[Sequence[float]], *, trim_ratio: float
-) -> Vector:
+def trimmed_mean(updates: Sequence[Sequence[float]], *, trim_ratio: float) -> Vector:
     """Return a coordinate-wise symmetric trimmed mean.
 
     ``trim_ratio`` is the fraction removed from each tail.  The function fails

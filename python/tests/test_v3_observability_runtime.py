@@ -80,9 +80,7 @@ def test_registry_has_no_client_identity_or_raw_update_fields() -> None:
         "sample_value",
     )
     assert all(
-        fragment not in name
-        for name in names
-        for fragment in forbidden_fragments
+        fragment not in name for name in names for fragment in forbidden_fragments
     )
     assert all(set(event.attributes) <= {"attack"} for event in events)
 
@@ -104,14 +102,11 @@ def test_jsonl_sink_writes_machine_readable_aggregate_records(
     path = tmp_path / "metrics.jsonl"
     registry.export_to(JsonlMetricSink(path))
     records = [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
     ]
 
     assert len(records) == len(registry.events())
-    assert all(
-        set(record) == {"attributes", "name", "value"} for record in records
-    )
+    assert all(set(record) == {"attributes", "name", "value"} for record in records)
     forbidden_fragments = (
         "client_id",
         "worker_id",
@@ -141,9 +136,7 @@ def test_recording_new_round_replaces_gauges_and_removes_stale_epsilon() -> None
         )
     )
     values = {
-        event.name: event.value
-        for event in registry.events()
-        if not event.attributes
+        event.name: event.value for event in registry.events() if not event.attributes
     }
     assert values["fl_round_id"] == 8
     assert values["fl_round_cohort_size"] == 6

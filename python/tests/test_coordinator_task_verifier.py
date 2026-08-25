@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 import nacl.signing
+
 from fl_platform.security.coordinator_task_replay import CoordinatorTaskReplayStore
 from fl_platform.security.coordinator_task_signing import (
     AggregationManifestFields,

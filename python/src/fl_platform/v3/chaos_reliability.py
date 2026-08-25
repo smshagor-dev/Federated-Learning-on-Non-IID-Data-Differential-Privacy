@@ -82,9 +82,7 @@ class ChaosRoundResult:
         if set(result_clients) & set(self.failed_clients):
             raise RuntimeError("failed client produced a result")
         accounted = (
-            len(result_clients)
-            + len(self.dropped_clients)
-            + len(self.failed_clients)
+            len(result_clients) + len(self.dropped_clients) + len(self.failed_clients)
         )
         if accounted != self.selected_clients:
             raise RuntimeError("chaos round client accounting mismatch")

@@ -89,8 +89,7 @@ class DropoutRecoveryContext:
         if not self.tensor_element_counts:
             raise ValueError("tensor element counts must not be empty")
         if any(
-            not name or count <= 0
-            for name, count in self.tensor_element_counts.items()
+            not name or count <= 0 for name, count in self.tensor_element_counts.items()
         ):
             raise ValueError("tensor names/counts must be non-empty and positive")
 
@@ -177,9 +176,7 @@ def compute_dropout_mask_correction(
             context.dropout_worker_id,
             survivor_id,
         )
-        for tensor_name, element_count in sorted(
-            context.tensor_element_counts.items()
-        ):
+        for tensor_name, element_count in sorted(context.tensor_element_counts.items()):
             mask_context = canonical_mask_context(
                 provider=context.provider,
                 protocol_version=context.protocol_version,

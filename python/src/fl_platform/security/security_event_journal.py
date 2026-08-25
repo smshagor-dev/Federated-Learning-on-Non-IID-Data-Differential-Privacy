@@ -41,7 +41,7 @@ _DEFAULT_MAX_RETAINED_FILES = 5
 def _now_iso8601() -> str:
     import datetime
 
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _serialize_full_event(event: SecurityEvent) -> str:

@@ -35,8 +35,8 @@ from fl_platform.secure_aggregation.threshold_recovery import (
     make_recovery_receipt,
 )
 from fl_platform.security.signed_envelope import (
-    EnvelopeFields,
     MESSAGE_STREAM_SECURE_AGGREGATION,
+    EnvelopeFields,
     SignedEnvelope,
     sign_envelope,
 )
@@ -101,17 +101,23 @@ class EncryptedRecoveryShareRelay:
         ):
             _validate_binding(name, value)
         if self.owner_worker_id == self.holder_worker_id:
-            raise RecoveryShareRelayError("relay owner and holder must be different workers")
+            raise RecoveryShareRelayError(
+                "relay owner and holder must be different workers"
+            )
         if self.schema_version != RELAY_SCHEMA_VERSION:
             raise RecoveryShareRelayError("unsupported recovery relay schema version")
         if self.field_id != FIELD_ID:
             raise RecoveryShareRelayError("unsupported recovery relay field")
         if self.round_id < 0 or self.generation < 0:
-            raise RecoveryShareRelayError("round_id and generation must be non-negative")
+            raise RecoveryShareRelayError(
+                "round_id and generation must be non-negative"
+            )
         if not 2 <= self.threshold <= self.total_shares:
             raise RecoveryShareRelayError("threshold must be in [2, total_shares]")
         if not 1 <= self.share_index <= self.total_shares:
-            raise RecoveryShareRelayError("share_index is outside the declared share set")
+            raise RecoveryShareRelayError(
+                "share_index is outside the declared share set"
+            )
         if not 1 <= self.secret_length <= 64:
             raise RecoveryShareRelayError("secret_length must be in [1, 64]")
         for name, value in (
@@ -125,19 +131,31 @@ class EncryptedRecoveryShareRelay:
             nonce = bytes.fromhex(self.nonce_hex)
             ciphertext = bytes.fromhex(self.ciphertext_hex)
         except ValueError as exc:
-            raise RecoveryShareRelayError("relay nonce/ciphertext is not canonical hex") from exc
+            raise RecoveryShareRelayError(
+                "relay nonce/ciphertext is not canonical hex"
+            ) from exc
         if self.nonce_hex != nonce.hex() or len(nonce) != CHACHA20_NONCE_LENGTH:
-            raise RecoveryShareRelayError("relay nonce must be canonical 12-byte lowercase hex")
+            raise RecoveryShareRelayError(
+                "relay nonce must be canonical 12-byte lowercase hex"
+            )
         if self.ciphertext_hex != ciphertext.hex():
-            raise RecoveryShareRelayError("relay ciphertext must be canonical lowercase hex")
+            raise RecoveryShareRelayError(
+                "relay ciphertext must be canonical lowercase hex"
+            )
         if len(ciphertext) != MAX_RELAY_CIPHERTEXT_BYTES:
             raise RecoveryShareRelayError("relay ciphertext has an unexpected length")
-        if not secrets.compare_digest(hashlib.sha256(ciphertext).hexdigest(), self.ciphertext_hash):
-            raise RecoveryShareRelayError("relay ciphertext_hash does not match ciphertext")
+        if not secrets.compare_digest(
+            hashlib.sha256(ciphertext).hexdigest(), self.ciphertext_hash
+        ):
+            raise RecoveryShareRelayError(
+                "relay ciphertext_hash does not match ciphertext"
+            )
         if not math.isfinite(self.issued_at) or not math.isfinite(self.expires_at):
             raise RecoveryShareRelayError("relay timestamps must be finite")
         if self.expires_at <= self.issued_at:
-            raise RecoveryShareRelayError("relay expires_at must be strictly after issued_at")
+            raise RecoveryShareRelayError(
+                "relay expires_at must be strictly after issued_at"
+            )
 
 
 def relay_key_context(relay: EncryptedRecoveryShareRelay) -> str:
@@ -182,7 +200,7 @@ def relay_aad(relay: EncryptedRecoveryShareRelay) -> bytes:
         f'"threshold":{relay.threshold},'
         f'"total_shares":{relay.total_shares}'
         "}"
-    ).encode("utf-8")
+    ).encode()
 
 
 def relay_payload_hash_input(relay: EncryptedRecoveryShareRelay) -> str:
@@ -233,7 +251,9 @@ def encrypt_recovery_share_for_holder(
     """Encrypt one owner-created Shamir share for its assigned holder."""
     make_recovery_receipt(share)  # structural/field-range validation
     if expires_after_seconds <= 0.0 or not math.isfinite(expires_after_seconds):
-        raise RecoveryShareRelayError("expires_after_seconds must be finite and positive")
+        raise RecoveryShareRelayError(
+            "expires_after_seconds must be finite and positive"
+        )
     now = time.time() if issued_at is None else float(issued_at)
     nonce = secrets.token_bytes(CHACHA20_NONCE_LENGTH)
 
@@ -255,7 +275,9 @@ def encrypt_recovery_share_for_holder(
         secret_length=share.secret_length,
         nonce_hex=nonce.hex(),
         ciphertext_hex="00" * MAX_RELAY_CIPHERTEXT_BYTES,
-        ciphertext_hash=hashlib.sha256(b"\x00" * MAX_RELAY_CIPHERTEXT_BYTES).hexdigest(),
+        ciphertext_hash=hashlib.sha256(
+            b"\x00" * MAX_RELAY_CIPHERTEXT_BYTES
+        ).hexdigest(),
         issued_at=now,
         expires_at=now + expires_after_seconds,
         field_id=share.field_id,
@@ -319,7 +341,9 @@ def decrypt_recovery_share_from_owner(
             "recovery relay authentication failed; ciphertext/AAD/key mismatch"
         ) from exc
     if len(plaintext) != RELAY_FIELD_BYTES:
-        raise RecoveryShareRelayError("decrypted recovery share has an invalid field width")
+        raise RecoveryShareRelayError(
+            "decrypted recovery share has an invalid field width"
+        )
     share = RecoveryShare(
         session_id=relay.session_id,
         owner_id=relay.owner_worker_id,
@@ -347,10 +371,16 @@ def build_signed_recovery_relay(
     """Sign ciphertext metadata for coordinator admission without exposing plaintext."""
     relay.validate()
     if relay.owner_worker_id != signing_identity.worker_id:
-        raise RecoveryShareRelayError("relay owner must match the signing worker identity")
+        raise RecoveryShareRelayError(
+            "relay owner must match the signing worker identity"
+        )
     if sequence_number < 1 or not envelope_nonce:
-        raise RecoveryShareRelayError("relay envelope requires sequence >= 1 and a nonce")
-    payload_hash = hashlib.sha256(relay_payload_hash_input(relay).encode("utf-8")).hexdigest()
+        raise RecoveryShareRelayError(
+            "relay envelope requires sequence >= 1 and a nonce"
+        )
+    payload_hash = hashlib.sha256(
+        relay_payload_hash_input(relay).encode("utf-8")
+    ).hexdigest()
     return sign_envelope(
         EnvelopeFields(
             message_type=MESSAGE_TYPE_SECURE_AGGREGATION_RECOVERY_RELAY,

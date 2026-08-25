@@ -9,6 +9,8 @@ from http.client import HTTPConnection
 from pathlib import Path
 from typing import Any
 
+from test_experiment_registry import _base_specification
+
 from fl_platform.research import (
     ResearchCommandHTTPServer,
     ResearchCommandService,
@@ -23,7 +25,6 @@ from fl_platform.research.command_contracts import (
     command_result_to_json,
     sha256_json,
 )
-from test_experiment_registry import _base_specification
 
 
 def _timestamp(offset_seconds: int = 0) -> str:

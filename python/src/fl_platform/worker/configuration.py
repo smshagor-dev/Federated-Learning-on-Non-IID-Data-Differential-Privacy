@@ -7,11 +7,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
-
-import tomllib
 
 
 @dataclass(slots=True)

@@ -81,9 +81,12 @@ def test_signed_recovery_share_uses_independent_message_type() -> None:
     assert signed.fields.worker_id == "worker-a"
     assert signed.fields.run_id == "run-9"
     assert signed.fields.round_id == 4
-    assert signed.fields.payload_hash == hashlib.sha256(
-        recovery_share_payload_hash_input(payload).encode("utf-8")
-    ).hexdigest()
+    assert (
+        signed.fields.payload_hash
+        == hashlib.sha256(
+            recovery_share_payload_hash_input(payload).encode("utf-8")
+        ).hexdigest()
+    )
     identity.verify_key.verify(
         envelope_signing_bytes(signed.fields),
         bytes.fromhex(signed.signature_hex),
