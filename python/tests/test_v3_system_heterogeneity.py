@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from fl_platform.execution import ExecutionMode, MultiprocessingOrchestrator, SchedulingConfig
+from fl_platform.execution import (
+    ExecutionMode,
+    MultiprocessingOrchestrator,
+    SchedulingConfig,
+)
 from fl_platform.v3.heterogeneity import ClientSystemProfile, EdgeRequirements
 from fl_platform.v3.heterogeneous_execution import HeterogeneityAdmissionPolicy
 from fl_platform.workers import TrainingResult, TrainingTask, WorkerService
