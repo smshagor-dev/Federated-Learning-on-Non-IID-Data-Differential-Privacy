@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fl-platform"
-version = "2.0.0"
+version = "3.0.0.dev0"
 description = "Federated learning execution platform for heterogeneous data, privacy, and distributed coordination"
 requires-python = ">=3.11"
 
