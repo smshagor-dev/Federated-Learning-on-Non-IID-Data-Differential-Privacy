@@ -11,9 +11,11 @@ on:
       - "python/src/fl_platform/secure_aggregation/share_relay.py"
       - "python/tests/test_secure_aggregation_share_relay.py"
       - "cpp/coordinator/include/fl_coordinator/secure_aggregation_share_relay_service.hpp"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_share_relay_store.hpp"
       - "cpp/coordinator/include/fl_coordinator/coordinator_service.hpp"
       - "cpp/coordinator/include/fl_coordinator/replay_protection_store.hpp"
       - "cpp/coordinator/src/replay_protection_store.cpp"
+      - "cpp/coordinator/tests/secure_aggregation_share_relay_store_test.cpp"
       - ".github/workflows/v3-share-relay.yml"
   pull_request:
     branches:
@@ -25,9 +27,11 @@ on:
       - "python/src/fl_platform/secure_aggregation/share_relay.py"
       - "python/tests/test_secure_aggregation_share_relay.py"
       - "cpp/coordinator/include/fl_coordinator/secure_aggregation_share_relay_service.hpp"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_share_relay_store.hpp"
       - "cpp/coordinator/include/fl_coordinator/coordinator_service.hpp"
       - "cpp/coordinator/include/fl_coordinator/replay_protection_store.hpp"
       - "cpp/coordinator/src/replay_protection_store.cpp"
+      - "cpp/coordinator/tests/secure_aggregation_share_relay_store_test.cpp"
       - ".github/workflows/v3-share-relay.yml"
 
 jobs:
@@ -78,6 +82,20 @@ jobs:
             fl_coordinator_grpc_tests \
             fl_secure_aggregation_session_manager_tests \
             -j"$(nproc)"
+      - name: Build encrypted relay persistence regression test
+        run: |
+          c++ -std=c++20 -O2 \
+            -Icpp/coordinator/include \
+            -Icpp/generated \
+            cpp/coordinator/tests/secure_aggregation_share_relay_store_test.cpp \
+            cpp/coordinator/src/secure_aggregation_crypto.cpp \
+            cpp/generated/recovery/recovery.pb.cc \
+            cpp/generated/worker/worker.pb.cc \
+            cpp/generated/privacy/privacy.pb.cc \
+            -lprotobuf -lssl -lcrypto -pthread \
+            -o build/cpp-share-relay/fl_share_relay_store_test
+      - name: Run encrypted relay persistence regression test
+        run: build/cpp-share-relay/fl_share_relay_store_test build/cpp-share-relay/relay-store-scratch
       - name: Run recovery-adjacent coordinator tests
         run: |
           ctest --test-dir build/cpp-share-relay --output-on-failure -R \
