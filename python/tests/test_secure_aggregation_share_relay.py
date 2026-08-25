@@ -199,9 +199,10 @@ def test_owner_signs_ciphertext_metadata_with_distinct_message_type() -> None:
     assert signed.fields.worker_id == "owner-1"
     assert signed.fields.client_id == ""
     assert signed.fields.task_id == ""
-    assert signed.fields.payload_hash == hashlib.sha256(
-        relay_payload_hash_input(relay).encode("utf-8")
-    ).hexdigest()
+    assert (
+        signed.fields.payload_hash
+        == hashlib.sha256(relay_payload_hash_input(relay).encode("utf-8")).hexdigest()
+    )
     identity.verify_key.verify(
         envelope_signing_bytes(signed.fields),
         bytes.fromhex(signed.signature_hex),

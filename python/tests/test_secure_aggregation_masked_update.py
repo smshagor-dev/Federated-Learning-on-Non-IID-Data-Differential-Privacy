@@ -9,6 +9,7 @@ from __future__ import annotations
 import unittest
 
 import torch
+
 from fl_platform.secure_aggregation.crypto import generate_x25519_keypair
 from fl_platform.secure_aggregation.fixed_point_encoding import (
     FixedPointEncodingProfile,

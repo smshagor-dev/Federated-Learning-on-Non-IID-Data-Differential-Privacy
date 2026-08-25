@@ -34,8 +34,7 @@ def test_kubernetes_renderer_requires_complete_exact_image_lock(tmp_path: Path) 
     source = tmp_path / "input"
     source.mkdir()
     (source / "app.yaml").write_text(
-        "containers:\n  - image: fl-platform/api:latest\n"
-        "  - image: postgres:16\n",
+        "containers:\n  - image: fl-platform/api:latest\n  - image: postgres:16\n",
         encoding="utf-8",
     )
     assert discover_kubernetes_images(source) == (

@@ -12,7 +12,11 @@ from fl_platform.v3.async_execution import (
     DurableAsyncResultProcessor,
 )
 from fl_platform.v3.async_membership import ElasticClientRegistry
-from fl_platform.v3.async_runtime import AsyncModelState, AsyncStateSnapshot, AsyncUpdate
+from fl_platform.v3.async_runtime import (
+    AsyncModelState,
+    AsyncStateSnapshot,
+    AsyncUpdate,
+)
 from fl_platform.workers import TrainingResult
 
 

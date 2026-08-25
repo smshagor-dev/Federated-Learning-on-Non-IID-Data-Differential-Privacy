@@ -64,8 +64,7 @@ class PrivacyUtilityPoint:
         if not 0.0 <= self.utility <= 1.0 or not math.isfinite(self.utility):
             raise ValueError("utility must be finite and in [0, 1]")
         if self.attack_auc is not None and (
-            not 0.0 <= self.attack_auc <= 1.0
-            or not math.isfinite(self.attack_auc)
+            not 0.0 <= self.attack_auc <= 1.0 or not math.isfinite(self.attack_auc)
         ):
             raise ValueError("attack_auc must be finite and in [0, 1]")
 
@@ -157,9 +156,10 @@ def gradient_leakage_similarity(
         raise ValueError("gradient vectors must have non-zero norm")
     dot = sum(a * b for a, b in zip(left, right, strict=True))
     cosine = max(-1.0, min(1.0, dot / (left_norm * right_norm)))
-    error = math.sqrt(
-        sum((a - b) ** 2 for a, b in zip(left, right, strict=True))
-    ) / left_norm
+    error = (
+        math.sqrt(sum((a - b) ** 2 for a, b in zip(left, right, strict=True)))
+        / left_norm
+    )
     return GradientLeakageResult(cosine, error)
 
 

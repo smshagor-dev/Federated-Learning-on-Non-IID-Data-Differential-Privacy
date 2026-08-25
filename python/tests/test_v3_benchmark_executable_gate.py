@@ -17,14 +17,13 @@ def test_primitive_only_algorithm_is_not_marked_benchmark_runnable() -> None:
         privacy_conditions=(PrivacyCondition("non-private", None),),
         attacks=(AttackKind.NONE,),
         aggregation_strategies=("mean",),
-        heterogeneity_conditions=(
-            HeterogeneityCondition("nominal", "baseline"),
-        ),
+        heterogeneity_conditions=(HeterogeneityCondition("nominal", "baseline"),),
         minimum_replicates=3,
     )
     cells = plan.expand(minimum_replicates=3)
     assert all(not cell.runnable for cell in cells)
     assert all(
-        cell.exclusion_reason == "algorithm is not registered in canonical worker runtime"
+        cell.exclusion_reason
+        == "algorithm is not registered in canonical worker runtime"
         for cell in cells
     )

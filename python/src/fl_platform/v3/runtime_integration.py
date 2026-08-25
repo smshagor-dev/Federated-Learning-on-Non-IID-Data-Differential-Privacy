@@ -28,9 +28,7 @@ from fl_platform.v3.server_optimizers import (
 from fl_platform.workers import TrainingResult
 
 Vector = tuple[float, ...]
-ROBUST_STRATEGIES = frozenset(
-    {"median", "trimmed_mean", "krum", "multi_krum"}
-)
+ROBUST_STRATEGIES = frozenset({"median", "trimmed_mean", "krum", "multi_krum"})
 
 
 @dataclass(frozen=True)
@@ -136,9 +134,7 @@ class V3AggregationEngine:
                 f"client {result.client_id} update contains non-finite values"
             )
         if result.sample_count <= 0:
-            raise ValueError(
-                f"client {result.client_id} sample_count must be positive"
-            )
+            raise ValueError(f"client {result.client_id} sample_count must be positive")
         return vector
 
     def _aggregate_vectors(
@@ -189,9 +185,7 @@ class V3AggregationEngine:
             weights = [1.0 / len(vectors)] * len(vectors)
         else:
             total_samples = sum(result.sample_count for result in results)
-            weights = [
-                result.sample_count / total_samples for result in results
-            ]
+            weights = [result.sample_count / total_samples for result in results]
         return tuple(
             sum(
                 weight * vector[index]

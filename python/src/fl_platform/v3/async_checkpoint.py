@@ -80,9 +80,7 @@ class AsyncStateStore:
         envelope = {
             "schema_version": 1,
             "payload": payload,
-            "payload_sha256": hashlib.sha256(
-                payload_json.encode("utf-8")
-            ).hexdigest(),
+            "payload_sha256": hashlib.sha256(payload_json.encode("utf-8")).hexdigest(),
         }
         encoded = (_canonical_json(envelope) + "\n").encode("utf-8")
         self._path.parent.mkdir(parents=True, exist_ok=True)

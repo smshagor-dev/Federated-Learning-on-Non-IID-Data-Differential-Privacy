@@ -151,7 +151,9 @@ class V3BenchmarkPlan:
             if not partition.name.strip():
                 raise ValueError("partition name must not be empty")
             if partition.strategy not in SUPPORTED_PARTITION_STRATEGIES:
-                raise ValueError(f"unsupported partition strategy: {partition.strategy}")
+                raise ValueError(
+                    f"unsupported partition strategy: {partition.strategy}"
+                )
         for privacy in self.privacy_conditions:
             privacy.validate()
         for heterogeneity in self.heterogeneity_conditions:
@@ -332,7 +334,10 @@ def validate_v3_evidence(
         if cell is None:
             unexpected.add(key)
             continue
-        if observation.condition_id != cell.condition_id or observation.seed != cell.seed:
+        if (
+            observation.condition_id != cell.condition_id
+            or observation.seed != cell.seed
+        ):
             raise ValueError("benchmark observation cell provenance mismatch")
         if observation.metric not in plan.primary_metrics:
             unexpected.add(key)
@@ -365,9 +370,7 @@ def summarize_v3_evidence(
 
     values: dict[tuple[str, str], list[float]] = defaultdict(list)
     for observation in normalized:
-        values[(observation.condition_id, observation.metric)].append(
-            observation.value
-        )
+        values[(observation.condition_id, observation.metric)].append(observation.value)
 
     summaries: list[V3MetricSummary] = []
     for (condition_id, metric), metric_values in sorted(values.items()):
@@ -401,7 +404,9 @@ def standard_heterogeneity_conditions() -> tuple[HeterogeneityCondition, ...]:
         HeterogeneityCondition("nominal", "uniformly available baseline clients"),
         HeterogeneityCondition("compute-skew", "heterogeneous local compute speed"),
         HeterogeneityCondition("network-skew", "bandwidth and latency heterogeneity"),
-        HeterogeneityCondition("availability-dropout", "client availability and dropout"),
+        HeterogeneityCondition(
+            "availability-dropout", "client availability and dropout"
+        ),
         HeterogeneityCondition(
             "edge-constrained",
             "resource and payload constrained edge clients",

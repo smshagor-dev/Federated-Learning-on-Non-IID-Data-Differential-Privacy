@@ -116,9 +116,7 @@ def create_recovery_shares(
         raise ValueError("threshold must be in [2, number of holders]")
 
     coefficients = [int.from_bytes(secret, "big")]
-    coefficients.extend(
-        secrets.randbelow(_FIELD_PRIME) for _ in range(threshold - 1)
-    )
+    coefficients.extend(secrets.randbelow(_FIELD_PRIME) for _ in range(threshold - 1))
     digest = _context_digest(
         secret,
         session_id=session_id,
@@ -295,9 +293,9 @@ class ThresholdRecoveryCoordinator:
     submitted: dict[tuple[str, int], dict[str, RecoveryShare]] = field(
         default_factory=dict
     )
-    persisted_receipts: dict[
-        tuple[str, int], dict[str, RecoveryShareReceipt]
-    ] = field(default_factory=dict)
+    persisted_receipts: dict[tuple[str, int], dict[str, RecoveryShareReceipt]] = field(
+        default_factory=dict
+    )
 
     def submit(self, share: RecoveryShare) -> None:
         if share.session_id != self.session_id:
@@ -311,8 +309,7 @@ class ThresholdRecoveryCoordinator:
                 "holder submitted share conflicting with persisted commitment"
             )
         if any(
-            existing.holder_id != share.holder_id
-            and existing.index == share.index
+            existing.holder_id != share.holder_id and existing.index == share.index
             for existing in persisted.values()
         ):
             raise ThresholdRecoveryError("duplicate recovery share index")

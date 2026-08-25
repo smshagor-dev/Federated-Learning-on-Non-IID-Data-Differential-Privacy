@@ -48,8 +48,7 @@ def test_int8_codec_round_trip_is_bounded_and_compressed() -> None:
     assert encoded.compressed_bytes < encoded.dense_float64_bytes
     assert encoded.compression_ratio > 1.0
     maximum_error = max(
-        abs(left - right)
-        for left, right in zip(update, restored, strict=True)
+        abs(left - right) for left, right in zip(update, restored, strict=True)
     )
     assert maximum_error <= encoded.maximum_absolute_error + 1e-12
 

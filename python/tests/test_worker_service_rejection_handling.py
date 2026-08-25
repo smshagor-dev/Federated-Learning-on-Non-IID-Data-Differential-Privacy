@@ -22,6 +22,7 @@ from __future__ import annotations
 import unittest
 
 import torch
+
 from fl_platform.worker.coordinator_client import (
     ClientTrainingTask,
     CoordinatorRejectedError,

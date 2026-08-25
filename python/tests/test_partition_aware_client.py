@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from fl_platform.worker.coordinator_client import (
     ClientTrainingTask,
     GrpcCoordinatorClient,
