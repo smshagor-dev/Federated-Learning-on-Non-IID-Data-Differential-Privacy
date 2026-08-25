@@ -162,7 +162,8 @@ class LiveRecoveryRegistry:
             )
         if session.privacy_mode != "none":
             raise RecoveryAdmissionError(
-                "live threshold recovery currently supports non-private secure rounds only"
+                "live threshold recovery currently supports non-private secure "
+                "rounds only"
             )
 
         missing = session.missing_contributors

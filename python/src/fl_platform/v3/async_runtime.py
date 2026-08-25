@@ -44,9 +44,7 @@ class AsyncStateSnapshot:
             raise ValueError("snapshot model must be a non-empty finite vector")
         if self.version < 0:
             raise ValueError("snapshot version must be non-negative")
-        if not 0.0 < self.mixing_alpha <= 1.0 or not math.isfinite(
-            self.mixing_alpha
-        ):
+        if not 0.0 < self.mixing_alpha <= 1.0 or not math.isfinite(self.mixing_alpha):
             raise ValueError("snapshot mixing_alpha must be finite and in (0, 1]")
         if self.max_staleness is not None and self.max_staleness < 0:
             raise ValueError("snapshot max_staleness must be non-negative")
@@ -142,7 +140,9 @@ class AsyncModelState:
         if update.base_version > self._version:
             return AsyncApplyResult(False, self._version, 0, 0.0, "future version")
         if update.base_version < 0:
-            return AsyncApplyResult(False, self._version, 0, 0.0, "invalid base version")
+            return AsyncApplyResult(
+                False, self._version, 0, 0.0, "invalid base version"
+            )
         staleness = self._version - update.base_version
         if self._max_staleness is not None and staleness > self._max_staleness:
             return AsyncApplyResult(
