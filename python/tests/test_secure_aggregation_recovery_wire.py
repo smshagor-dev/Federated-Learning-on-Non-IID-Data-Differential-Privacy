@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 
 import pytest
 
@@ -47,12 +48,7 @@ def test_recovery_payload_hash_is_deterministic_and_bound() -> None:
     assert '"owner_worker_id":"worker-dropout"' in first
     assert '"cohort_commitment":"' + "a" * 64 + '"' in first
 
-    changed = RecoverySharePayload(
-        **{
-            **payload.__dict__,
-            "cohort_commitment": "b" * 64,
-        }
-    )
+    changed = replace(payload, cohort_commitment="b" * 64)
     assert recovery_share_payload_hash_input(changed) != first
 
 
@@ -90,23 +86,10 @@ def test_holder_must_match_signing_identity() -> None:
 
 def test_owner_cannot_submit_its_own_recovery_share() -> None:
     payload = _payload()
-    invalid = RecoverySharePayload(
-        session_id=payload.session_id,
-        run_id=payload.run_id,
-        round_id=payload.round_id,
-        model_version=payload.model_version,
-        cohort_commitment=payload.cohort_commitment,
+    invalid = replace(
+        payload,
         owner_worker_id="worker-a",
         holder_worker_id="worker-a",
-        generation=payload.generation,
-        threshold=payload.threshold,
-        total_shares=payload.total_shares,
-        share_index=payload.share_index,
-        share_value_hex=payload.share_value_hex,
-        secret_digest=payload.secret_digest,
-        secret_length=payload.secret_length,
-        issued_at=payload.issued_at,
-        expires_at=payload.expires_at,
     )
     with pytest.raises(RecoveryWireError, match="owner and holder"):
         invalid.validate()
@@ -114,45 +97,8 @@ def test_owner_cannot_submit_its_own_recovery_share() -> None:
 
 def test_share_hex_and_field_are_fail_closed() -> None:
     payload = _payload()
-    bad_hex = RecoverySharePayload(
-        session_id=payload.session_id,
-        run_id=payload.run_id,
-        round_id=payload.round_id,
-        model_version=payload.model_version,
-        cohort_commitment=payload.cohort_commitment,
-        owner_worker_id=payload.owner_worker_id,
-        holder_worker_id=payload.holder_worker_id,
-        generation=payload.generation,
-        threshold=payload.threshold,
-        total_shares=payload.total_shares,
-        share_index=payload.share_index,
-        share_value_hex="NOT-HEX",
-        secret_digest=payload.secret_digest,
-        secret_length=payload.secret_length,
-        issued_at=payload.issued_at,
-        expires_at=payload.expires_at,
-    )
     with pytest.raises(RecoveryWireError, match="share_value_hex"):
-        bad_hex.validate()
+        replace(payload, share_value_hex="NOT-HEX").validate()
 
-    bad_field = RecoverySharePayload(
-        session_id=payload.session_id,
-        run_id=payload.run_id,
-        round_id=payload.round_id,
-        model_version=payload.model_version,
-        cohort_commitment=payload.cohort_commitment,
-        owner_worker_id=payload.owner_worker_id,
-        holder_worker_id=payload.holder_worker_id,
-        generation=payload.generation,
-        threshold=payload.threshold,
-        total_shares=payload.total_shares,
-        share_index=payload.share_index,
-        share_value_hex=payload.share_value_hex,
-        secret_digest=payload.secret_digest,
-        secret_length=payload.secret_length,
-        field_id="unknown-field",
-        issued_at=payload.issued_at,
-        expires_at=payload.expires_at,
-    )
     with pytest.raises(RecoveryWireError, match="unsupported recovery field"):
-        bad_field.validate()
+        replace(payload, field_id="unknown-field").validate()
