@@ -72,7 +72,12 @@ def test_prometheus_text_contains_aggregate_round_privacy_and_robustness_metrics
 def test_registry_has_no_client_identity_or_raw_update_fields() -> None:
     events = _registry().events()
     names = {event.name for event in events}
-    forbidden_fragments = ("client_id", "gradient", "model_update", "sample_value")
+    forbidden_fragments = (
+        "client_id",
+        "gradient",
+        "model_update",
+        "sample_value",
+    )
     assert all(
         fragment not in name
         for name in names
@@ -91,18 +96,25 @@ def test_generic_sink_receives_same_deterministic_metric_events() -> None:
     )
 
 
-def test_jsonl_sink_writes_machine_readable_aggregate_records(tmp_path: Path) -> None:
+def test_jsonl_sink_writes_machine_readable_aggregate_records(
+    tmp_path: Path,
+) -> None:
     registry = _registry()
     path = tmp_path / "metrics.jsonl"
     registry.export_to(JsonlMetricSink(path))
-    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    records = [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
 
     assert len(records) == len(registry.events())
-    assert all(set(record) == {"attributes", "name", "value"} for record in records)
+    assert all(
+        set(record) == {"attributes", "name", "value"} for record in records
+    )
     assert not any("client" in json.dumps(record).lower() for record in records)
 
 
-def test_recording_new_round_replaces_gauge_values_instead_of_accumulating() -> None:
+def test_recording_new_round_replaces_gauges_and_removes_stale_epsilon() -> None:
     registry = _registry()
     registry.record_round(
         RoundMetrics(
@@ -116,8 +128,12 @@ def test_recording_new_round_replaces_gauge_values_instead_of_accumulating() -> 
             download_bytes=20,
         )
     )
-    values = {event.name: event.value for event in registry.events() if not event.attributes}
+    values = {
+        event.name: event.value
+        for event in registry.events()
+        if not event.attributes
+    }
     assert values["fl_round_id"] == 8
     assert values["fl_round_cohort_size"] == 6
     assert values["fl_round_communication_bytes"] == 30
-    assert values["fl_round_privacy_epsilon"] == 1.75
+    assert "fl_round_privacy_epsilon" not in values
