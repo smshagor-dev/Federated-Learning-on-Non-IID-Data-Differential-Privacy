@@ -15,6 +15,9 @@ on:
       - "python/tests/test_v3_adversarial_robustness.py"
       - "python/tests/test_v3_privacy_validation.py"
       - "python/tests/test_v3_algorithm_suite.py"
+      - "python/tests/test_v3_system_heterogeneity.py"
+      - "python/tests/test_v3_federated_workloads.py"
+      - "python/tests/test_v3_observability_runtime.py"
       - "python/tests/test_secure_aggregation_threshold_recovery.py"
       - "python/tests/test_execution_foundations.py"
       - "python/tests/test_worker_service.py"
@@ -68,6 +71,9 @@ jobs:
             python/tests/test_v3_adversarial_robustness.py \
             python/tests/test_v3_privacy_validation.py \
             python/tests/test_v3_algorithm_suite.py \
+            python/tests/test_v3_system_heterogeneity.py \
+            python/tests/test_v3_federated_workloads.py \
+            python/tests/test_v3_observability_runtime.py \
             python/tests/test_secure_aggregation_threshold_recovery.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
@@ -85,6 +91,9 @@ jobs:
             python/tests/test_v3_adversarial_robustness.py \
             python/tests/test_v3_privacy_validation.py \
             python/tests/test_v3_algorithm_suite.py \
+            python/tests/test_v3_system_heterogeneity.py \
+            python/tests/test_v3_federated_workloads.py \
+            python/tests/test_v3_observability_runtime.py \
             python/tests/test_secure_aggregation_threshold_recovery.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
@@ -107,6 +116,9 @@ jobs:
             tests/test_v3_adversarial_robustness.py \
             tests/test_v3_privacy_validation.py \
             tests/test_v3_algorithm_suite.py \
+            tests/test_v3_system_heterogeneity.py \
+            tests/test_v3_federated_workloads.py \
+            tests/test_v3_observability_runtime.py \
             tests/test_secure_aggregation_threshold_recovery.py \
             tests/test_execution_foundations.py \
             tests/test_worker_service.py
