@@ -40,6 +40,34 @@ if TYPE_CHECKING:
     )
     from .registry import DatasetDescriptor, DatasetRegistry
 
+__all__ = [
+    "DATASET_LOADERS",
+    "DatasetDescriptor",
+    "DatasetRegistry",
+    "DatasetRegistryEntry",
+    "DatasetRegistryError",
+    "DatasetShardSpec",
+    "DatasetStatus",
+    "FederatedDatasetBundle",
+    "FederatedDatasetError",
+    "FederatedDatasetManifest",
+    "FederatedUserPartition",
+    "FilesystemDatasetRegistry",
+    "PartitionError",
+    "PartitionManifestRecord",
+    "create_dirichlet_partition",
+    "create_iid_partition",
+    "create_pathological_partition",
+    "create_quantity_skew_partition",
+    "load_cifar10",
+    "load_federated_leaf_dataset",
+    "load_femnist_leaf",
+    "load_mnist",
+    "load_sent140_leaf",
+    "load_shakespeare_leaf",
+    "sha256_file",
+]
+
 _LAZY_EXPORTS = {
     "DatasetRegistryEntry": ("dataset_registry", "DatasetRegistryEntry"),
     "DatasetRegistryError": ("dataset_registry", "DatasetRegistryError"),
@@ -90,6 +118,3 @@ def __getattr__(name: str) -> object:
 
 def __dir__() -> list[str]:
     return sorted(set(globals()).union(_LAZY_EXPORTS))
-
-
-__all__ = sorted(_LAZY_EXPORTS)

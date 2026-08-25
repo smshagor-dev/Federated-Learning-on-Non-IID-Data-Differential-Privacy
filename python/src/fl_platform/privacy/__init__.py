@@ -72,6 +72,54 @@ if TYPE_CHECKING:
         worker_reports_secure_random_support,
     )
 
+__all__ = [
+    "ALGORITHMS",
+    "PRIVACY_SAFE_WEIGHTING_STRATEGIES",
+    "SAMPLE_LEVEL_DP_COMPATIBILITY",
+    "SUPPORTED_ACCOUNTANTS",
+    "USER_LEVEL_DP_COMPATIBILITY",
+    "AdaptiveClipConfig",
+    "AdaptiveClipController",
+    "AdaptiveClipStepResult",
+    "AdaptiveClippingAccountant",
+    "AdaptiveClippingConfig",
+    "AdaptiveClippingLedgerEntry",
+    "CompatibilityEntry",
+    "CompatibilityStatus",
+    "MechanismProjection",
+    "PrivacyBudgetPolicy",
+    "PrivacyConfig",
+    "PrivacyLedger",
+    "PrivacyMode",
+    "PrivacyProjection",
+    "PrivacyValidationResult",
+    "SampleLevelAccountant",
+    "SampleLevelDPConfig",
+    "SampleLevelLedgerEntry",
+    "SamplePrivacyBudgetPolicy",
+    "SecureRandomTaskRejectedError",
+    "SecureRandomUnavailableError",
+    "UserLevelAccountant",
+    "UserLevelAccountantState",
+    "UserLevelDPConfig",
+    "UserLevelLedgerEntry",
+    "build_privacy_config",
+    "ensure_metrics_server_started",
+    "hybrid_status",
+    "is_usable",
+    "opacus_capabilities",
+    "opacus_secure_mode_available",
+    "record_sample_level_training_rejected",
+    "record_sample_level_training_success",
+    "require_opacus_secure_mode",
+    "require_secure_random",
+    "sample_level_status",
+    "secure_random_available",
+    "user_level_status",
+    "validate_privacy_config",
+    "worker_reports_secure_random_support",
+]
+
 _LAZY_EXPORTS = {
     "AdaptiveClippingAccountant": ("accounting", "AdaptiveClippingAccountant"),
     "SampleLevelAccountant": ("accounting", "SampleLevelAccountant"),
@@ -154,6 +202,3 @@ def __getattr__(name: str) -> object:
 
 def __dir__() -> list[str]:
     return sorted(set(globals()).union(_LAZY_EXPORTS))
-
-
-__all__ = sorted(_LAZY_EXPORTS)
