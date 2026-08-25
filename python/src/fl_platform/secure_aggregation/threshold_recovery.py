@@ -2,8 +2,9 @@
 
 This module provides Shamir secret sharing over a large prime field for
 recovering opaque mask seeds after client dropout. Shares are explicitly bound
-to a session, secret owner, holder, threshold, generation, and secret digest.
-It is protocol state, not a network transport or universal async-secagg claim.
+to a session, secret owner, holder, threshold, generation, secret length, and
+secret digest. It is protocol state, not a network transport or universal
+async-secagg claim.
 """
 
 from __future__ import annotations
@@ -12,9 +13,6 @@ import hashlib
 import secrets
 from dataclasses import dataclass, field
 
-# 2**521 - 1 is a Mersenne prime and comfortably contains an opaque 64-byte
-# seed. The field choice is versioned in share records so it cannot silently
-# change across a persisted/restarted recovery session.
 FIELD_ID = "mersenne-521-v1"
 _FIELD_PRIME = (1 << 521) - 1
 _MAX_SECRET_BYTES = 64
@@ -35,6 +33,7 @@ class RecoveryShare:
     index: int
     value: int
     secret_digest: str
+    secret_length: int
     field_id: str = FIELD_ID
 
 
@@ -62,6 +61,7 @@ def _context_digest(
     digest.update(b"\x00")
     digest.update(str(generation).encode("ascii"))
     digest.update(b"\x00")
+    digest.update(len(secret).to_bytes(2, "big"))
     digest.update(secret)
     return digest.hexdigest()
 
@@ -110,12 +110,11 @@ def create_recovery_shares(
 
     shares: list[RecoveryShare] = []
     for index, holder_id in enumerate(holder_ids, start=1):
-        x = index
         value = 0
         power = 1
         for coefficient in coefficients:
             value = (value + coefficient * power) % _FIELD_PRIME
-            power = (power * x) % _FIELD_PRIME
+            power = (power * index) % _FIELD_PRIME
         shares.append(
             RecoveryShare(
                 session_id=session_id,
@@ -127,6 +126,7 @@ def create_recovery_shares(
                 index=index,
                 value=value,
                 secret_digest=digest,
+                secret_length=len(secret),
             )
         )
     return tuple(shares)
@@ -146,6 +146,8 @@ def reconstruct_recovery_secret(shares: tuple[RecoveryShare, ...]) -> RecoveredS
     first = shares[0]
     if first.field_id != FIELD_ID:
         raise ThresholdRecoveryError("unsupported recovery field")
+    if not 1 <= first.secret_length <= _MAX_SECRET_BYTES:
+        raise ThresholdRecoveryError("invalid recovery secret length")
     if len(shares) < first.threshold:
         raise ThresholdRecoveryError("insufficient recovery shares")
 
@@ -161,6 +163,7 @@ def reconstruct_recovery_secret(shares: tuple[RecoveryShare, ...]) -> RecoveredS
             or share.threshold != first.threshold
             or share.total_shares != first.total_shares
             or share.secret_digest != first.secret_digest
+            or share.secret_length != first.secret_length
         ):
             raise ThresholdRecoveryError("recovery share context mismatch")
         if not 1 <= share.index <= first.total_shares:
@@ -187,8 +190,12 @@ def reconstruct_recovery_secret(shares: tuple[RecoveryShare, ...]) -> RecoveredS
         lagrange = numerator * _mod_inverse(denominator) % _FIELD_PRIME
         secret_value = (secret_value + share_i.value * lagrange) % _FIELD_PRIME
 
-    byte_length = max(1, (secret_value.bit_length() + 7) // 8)
-    secret = secret_value.to_bytes(byte_length, "big")
+    try:
+        secret = secret_value.to_bytes(first.secret_length, "big")
+    except OverflowError as exc:
+        raise ThresholdRecoveryError(
+            "reconstructed secret exceeds bound secret length"
+        ) from exc
     digest = _context_digest(
         secret,
         session_id=first.session_id,
@@ -230,9 +237,12 @@ class ThresholdRecoveryCoordinator:
                 share.threshold != reference.threshold
                 or share.total_shares != reference.total_shares
                 or share.secret_digest != reference.secret_digest
+                or share.secret_length != reference.secret_length
                 or share.field_id != reference.field_id
             ):
-                raise ThresholdRecoveryError("share conflicts with recovery session metadata")
+                raise ThresholdRecoveryError(
+                    "share conflicts with recovery session metadata"
+                )
         owner_shares[share.holder_id] = share
 
     def can_recover(self, owner_id: str, generation: int = 0) -> bool:
@@ -246,9 +256,7 @@ class ThresholdRecoveryCoordinator:
         owner_shares = self.submitted.get((owner_id, generation), {})
         if not owner_shares:
             raise ThresholdRecoveryError("no recovery shares submitted for owner")
-        ordered = tuple(
-            sorted(owner_shares.values(), key=lambda share: share.index)
-        )
+        ordered = tuple(sorted(owner_shares.values(), key=lambda share: share.index))
         return reconstruct_recovery_secret(ordered)
 
     def snapshot(self) -> tuple[RecoveryShare, ...]:
