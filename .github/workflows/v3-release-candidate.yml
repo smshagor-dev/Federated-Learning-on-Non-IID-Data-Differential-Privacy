@@ -238,5 +238,3 @@ jobs:
         run: docker build -f infra/docker/go-api.Dockerfile -t fl-platform/api:rc .
       - name: Build release Python worker image
         run: docker build -f infra/docker/python-worker.Dockerfile -t fl-platform/python-worker:rc .
-      - name: Build release web image
-        run: docker build -f infra/docker/web.Dockerfile -t fl-platform/web:rc .
