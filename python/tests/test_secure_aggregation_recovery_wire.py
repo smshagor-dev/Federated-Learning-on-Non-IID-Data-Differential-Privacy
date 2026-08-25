@@ -52,6 +52,22 @@ def test_recovery_payload_hash_is_deterministic_and_bound() -> None:
     assert recovery_share_payload_hash_input(changed) != first
 
 
+def test_recovery_payload_float_format_matches_cpp_defaultfloat_17() -> None:
+    payload = _payload()
+    canonical = recovery_share_payload_hash_input(payload)
+    # The C++ recovery verifier uses setprecision(17)+defaultfloat. Integral
+    # binary64 values therefore serialize without a trailing `.0`, unlike
+    # Python's stock json.dumps(float). This is an explicit cross-language
+    # security serialization contract, not a presentation preference.
+    assert '"issued_at":1000,' in canonical
+    assert '"expires_at":1060,' in canonical
+
+    fractional = replace(payload, issued_at=1000.125, expires_at=1060.125)
+    fractional_canonical = recovery_share_payload_hash_input(fractional)
+    assert '"issued_at":1000.125,' in fractional_canonical
+    assert '"expires_at":1060.125,' in fractional_canonical
+
+
 def test_signed_recovery_share_uses_independent_message_type() -> None:
     payload = _payload()
     identity = generate_signing_identity("worker-a")

@@ -1,14 +1,44 @@
-// Distributed partition parity wrapper.
+// Distributed partition parity + v3 live recovery compatibility wrapper.
 //
 // The prior coordinator service implementation is preserved byte-for-byte in
-// coordinator_service_legacy.cpp.  Only CreateRun is wrapped here so canonical
-// dataset-partition metadata can enter RunConfig before the run is created.
+// coordinator_service_legacy.cpp. CreateRun is wrapped for canonical dataset
+// partition metadata. Recovery is injected additively through the constructor's
+// existing secure-aggregation dependency tail; no recovery service is created
+// for legacy/unit-test instances that did not provide all security/session
+// authorities.
 
 #include "fl_coordinator/coordinator_service.hpp"
 
+// coordinator_service.hpp deliberately leaves this type-token substitution
+// active for coordinator/main.cpp so its existing grpc::ServerBuilder becomes
+// recovery-aware. This implementation file must not carry the macro into the
+// preserved legacy implementation.
+#undef ServerBuilder
+
 #define CreateRun CreateRun_legacy
+#define secure_aggregation_masked_update_window_seconds_(...)                       \
+    secure_aggregation_masked_update_window_seconds_(__VA_ARGS__),                  \
+        recovery_service_(                                                          \
+            identity_registry != nullptr && signing_key_registry != nullptr &&      \
+                    replay_store != nullptr && secure_aggregation_manager != nullptr \
+                ? std::make_unique<SecureAggregationRecoveryServiceImpl>(           \
+                      manager,                                                       \
+                      *identity_registry,                                            \
+                      *signing_key_registry,                                         \
+                      *replay_store,                                                 \
+                      *secure_aggregation_manager)                                   \
+                : nullptr)
 #include "coordinator_service_legacy.cpp"
+#undef secure_aggregation_masked_update_window_seconds_
 #undef CreateRun
+
+// The main CMake target already compiles coordinator_service.cpp in both the
+// live server and gRPC test binary. Including the generated recovery service
+// implementation here keeps this additive slice out of the long explicit
+// source lists while still producing exactly one copy per binary. Generation is
+// handled by scripts/generate_protos.sh before the gRPC build.
+#include "recovery/recovery.pb.cc"
+#include "recovery/recovery.grpc.pb.cc"
 
 #include <cmath>
 #include <stdexcept>
