@@ -7,12 +7,14 @@ on:
       - "python/src/fl_platform/v3/**"
       - "python/src/fl_platform/privacy/**"
       - "python/src/fl_platform/secure_aggregation/**"
+      - "python/src/fl_platform/datasets/**"
       - "python/src/fl_platform/execution/**"
       - "python/src/fl_platform/workers/**"
       - "python/tests/test_v3_foundations.py"
       - "python/tests/test_v3_runtime_integration.py"
       - "python/tests/test_v3_adversarial_robustness.py"
       - "python/tests/test_v3_privacy_validation.py"
+      - "python/tests/test_v3_federated_workloads.py"
       - "python/tests/test_secure_aggregation_threshold_recovery.py"
       - "python/tests/test_execution_foundations.py"
       - "python/tests/test_worker_service.py"
@@ -48,6 +50,7 @@ jobs:
         run: |
           python -m compileall -q \
             python/src/fl_platform/v3 \
+            python/src/fl_platform/datasets/federated_loaders.py \
             python/src/fl_platform/secure_aggregation/threshold_recovery.py \
             python/src/fl_platform/execution \
             python/src/fl_platform/workers
@@ -55,6 +58,7 @@ jobs:
         run: |
           ruff check \
             python/src/fl_platform/v3 \
+            python/src/fl_platform/datasets/federated_loaders.py \
             python/src/fl_platform/secure_aggregation/threshold_recovery.py \
             python/src/fl_platform/execution/modes.py \
             python/src/fl_platform/execution/multiprocessing_orchestrator.py \
@@ -63,6 +67,7 @@ jobs:
             python/tests/test_v3_runtime_integration.py \
             python/tests/test_v3_adversarial_robustness.py \
             python/tests/test_v3_privacy_validation.py \
+            python/tests/test_v3_federated_workloads.py \
             python/tests/test_secure_aggregation_threshold_recovery.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
@@ -70,6 +75,7 @@ jobs:
         run: |
           ruff format --check \
             python/src/fl_platform/v3 \
+            python/src/fl_platform/datasets/federated_loaders.py \
             python/src/fl_platform/secure_aggregation/threshold_recovery.py \
             python/src/fl_platform/execution/modes.py \
             python/src/fl_platform/execution/multiprocessing_orchestrator.py \
@@ -78,6 +84,7 @@ jobs:
             python/tests/test_v3_runtime_integration.py \
             python/tests/test_v3_adversarial_robustness.py \
             python/tests/test_v3_privacy_validation.py \
+            python/tests/test_v3_federated_workloads.py \
             python/tests/test_secure_aggregation_threshold_recovery.py \
             python/tests/test_execution_foundations.py \
             python/tests/test_worker_service.py
@@ -86,6 +93,7 @@ jobs:
         run: |
           mypy \
             src/fl_platform/v3 \
+            src/fl_platform/datasets/federated_loaders.py \
             src/fl_platform/secure_aggregation/threshold_recovery.py \
             src/fl_platform/execution/modes.py \
             src/fl_platform/execution/multiprocessing_orchestrator.py \
@@ -98,6 +106,7 @@ jobs:
             tests/test_v3_runtime_integration.py \
             tests/test_v3_adversarial_robustness.py \
             tests/test_v3_privacy_validation.py \
+            tests/test_v3_federated_workloads.py \
             tests/test_secure_aggregation_threshold_recovery.py \
             tests/test_execution_foundations.py \
             tests/test_worker_service.py
