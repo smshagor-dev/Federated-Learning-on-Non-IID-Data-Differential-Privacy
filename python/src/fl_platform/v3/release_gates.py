@@ -26,7 +26,11 @@ class ReleaseGateReport:
     results: dict[str, bool]
 
     def missing(self) -> tuple[str, ...]:
-        return tuple(gate for gate in REQUIRED_V3_GATES if not self.results.get(gate, False))
+        return tuple(
+            gate
+            for gate in REQUIRED_V3_GATES
+            if not self.results.get(gate, False)
+        )
 
     def release_ready(self) -> bool:
         return not self.missing()
