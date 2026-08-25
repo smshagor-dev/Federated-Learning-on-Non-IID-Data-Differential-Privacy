@@ -24,6 +24,17 @@ from fl_platform.v3.attacks import (
 from fl_platform.v3.capabilities import CapabilityRequest, validate_capability_request
 from fl_platform.v3.heterogeneity import ClientSystemProfile, EdgeRequirements
 from fl_platform.v3.observability import RobustnessMetrics, RoundMetrics
+from fl_platform.v3.privacy_validation import (
+    GradientLeakageResult,
+    LedgerResumeValidation,
+    MembershipInferenceResult,
+    PrivacyUtilityPoint,
+    PrivacyValidationReport,
+    build_privacy_utility_curve,
+    gradient_leakage_similarity,
+    membership_inference_auc,
+    validate_sample_ledger_resume,
+)
 from fl_platform.v3.release_gates import REQUIRED_V3_GATES, ReleaseGateReport
 from fl_platform.v3.robust_aggregation import (
     coordinate_median,
@@ -49,7 +60,12 @@ __all__ = [
     "CapabilityRequest",
     "ClientSystemProfile",
     "EdgeRequirements",
+    "GradientLeakageResult",
+    "LedgerResumeValidation",
+    "MembershipInferenceResult",
     "OptimizerConfig",
+    "PrivacyUtilityPoint",
+    "PrivacyValidationReport",
     "REQUIRED_V3_GATES",
     "ReleaseGateReport",
     "RobustnessBenchmarkSummary",
@@ -61,13 +77,17 @@ __all__ = [
     "WORKLOADS",
     "apply_training_data_attack",
     "apply_update_attack",
+    "build_privacy_utility_curve",
     "coordinate_median",
     "get_workload",
+    "gradient_leakage_similarity",
     "krum",
+    "membership_inference_auc",
     "multi_krum",
     "run_robustness_benchmark",
     "run_robustness_trial",
     "staleness_weight",
     "trimmed_mean",
     "validate_capability_request",
+    "validate_sample_ledger_resume",
 ]
