@@ -35,10 +35,15 @@ protoc --proto_path=proto \
 mkdir -p cpp/generated
 protoc --proto_path=proto --cpp_out=cpp/generated "${proto_files[@]}"
 if command -v grpc_cpp_plugin >/dev/null 2>&1; then
+  # Only proto files that actually declare C++ services need grpc stubs.
+  # coordinator.proto is the long-lived service; recovery.proto is the v3
+  # threshold-dropout recovery service registered in the same coordinator
+  # process. Message-only protos continue to use plain --cpp_out above.
   protoc --proto_path=proto \
     --grpc_out=cpp/generated \
     --plugin=protoc-gen-grpc="$(command -v grpc_cpp_plugin)" \
-    proto/coordinator/coordinator.proto
+    proto/coordinator/coordinator.proto \
+    proto/recovery/recovery.proto
 else
   echo "info: grpc_cpp_plugin not found; skipped C++ gRPC service stub generation (message types were still generated)." >&2
 fi
