@@ -10,6 +10,8 @@ from .multiprocessing_orchestrator import (
     MultiprocessingOrchestrator,
     OrchestratorResult,
     ResultAggregator,
+    TaskAdmissionDecision,
+    TaskAdmissionPolicy,
 )
 
 __all__ = [
@@ -19,5 +21,7 @@ __all__ = [
     "ResultAggregator",
     "SchedulingConfig",
     "SchedulingValidationResult",
+    "TaskAdmissionDecision",
+    "TaskAdmissionPolicy",
     "validate_scheduling_config",
 ]

@@ -14,11 +14,25 @@ class ResultAggregator(Protocol):
     def aggregate(self, results: list[TrainingResult]) -> object: ...
 
 
+@dataclass(frozen=True)
+class TaskAdmissionDecision:
+    admitted: bool
+    reason: str = ""
+
+
+class TaskAdmissionPolicy(Protocol):
+    """Optional pre-training policy for resource/availability admission."""
+
+    def evaluate(self, task: TrainingTask) -> TaskAdmissionDecision: ...
+
+
 @dataclass(slots=True)
 class OrchestratorResult:
     accepted: list[TrainingResult] = field(default_factory=list)
     deferred: list[TrainingResult] = field(default_factory=list)
     rejected: list[TrainingResult] = field(default_factory=list)
+    skipped_tasks: list[TrainingTask] = field(default_factory=list)
+    skip_reasons: dict[str, str] = field(default_factory=dict)
     aggregation: object | None = None
 
 
@@ -27,7 +41,8 @@ class MultiprocessingOrchestrator:
 
     Current scope:
     - preserves input ordering
-    - applies mode-specific admission rules
+    - supports optional pre-training admission policies
+    - applies mode-specific result admission rules
     - supports explicit model-version staleness admission
     - can invoke an opt-in aggregation engine after admission
     - does not yet spawn child processes or remote async workers
@@ -38,15 +53,33 @@ class MultiprocessingOrchestrator:
         service: WorkerService,
         scheduling: SchedulingConfig,
         aggregator: ResultAggregator | None = None,
+        admission_policy: TaskAdmissionPolicy | None = None,
     ) -> None:
         self._service = service
         self._scheduling = scheduling
         self._aggregator = aggregator
+        self._admission_policy = admission_policy
 
     def run(self, tasks: Iterable[TrainingTask]) -> OrchestratorResult:
         task_list = list(tasks)
-        results = [self._service.handle_task(task) for task in task_list]
+        admitted_tasks: list[TrainingTask] = []
+        skipped_tasks: list[TrainingTask] = []
+        skip_reasons: dict[str, str] = {}
+        for task in task_list:
+            if self._admission_policy is None:
+                admitted_tasks.append(task)
+                continue
+            decision = self._admission_policy.evaluate(task)
+            if decision.admitted:
+                admitted_tasks.append(task)
+            else:
+                skipped_tasks.append(task)
+                skip_reasons[task.client_id] = decision.reason or "admission_rejected"
+
+        results = [self._service.handle_task(task) for task in admitted_tasks]
         classified = self._classify(results)
+        classified.skipped_tasks = skipped_tasks
+        classified.skip_reasons = skip_reasons
         if self._aggregator is not None and classified.accepted:
             classified.aggregation = self._aggregator.aggregate(classified.accepted)
         return classified
