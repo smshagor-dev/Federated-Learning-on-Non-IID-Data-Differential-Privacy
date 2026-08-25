@@ -16,6 +16,8 @@
 
 #include "fl_coordinator/secure_aggregation_recovery_service_compile.hpp"
 
+#include <grpcpp/server_builder.h>
+
 namespace grpc {
 class RecoveryAwareServerBuilder;
 }
