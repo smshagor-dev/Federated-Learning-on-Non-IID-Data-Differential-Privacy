@@ -42,7 +42,6 @@ from fl_platform.secure_aggregation.tensor_mask import (
 from fl_platform.secure_aggregation.threshold_recovery import (
     RecoveredSecret,
     RecoveryShare,
-    ThresholdRecoveryError,
     create_recovery_shares,
     reconstruct_recovery_secret,
 )
