@@ -2,7 +2,6 @@ FROM python:3.12-slim
 
 WORKDIR /app
 COPY python ./python
-COPY federated ./federated
 
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
     && python -m pip install --no-cache-dir ./python
