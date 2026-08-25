@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from fl_platform.v3.algorithm_suite import fednova_aggregate
 from fl_platform.v3.capabilities import (
     CapabilityRequest,
     validate_capability_request,
@@ -60,6 +61,7 @@ class V3AggregationEngine:
     def __init__(self, dimension: int, config: AggregationConfig) -> None:
         if dimension <= 0:
             raise ValueError("dimension must be positive")
+        algorithm = config.algorithm.lower()
         strategy = config.strategy.lower()
         if strategy not in {"mean", *ROBUST_STRATEGIES}:
             raise ValueError(f"unknown aggregation strategy: {config.strategy}")
@@ -70,10 +72,16 @@ class V3AggregationEngine:
             raise ValueError("robust aggregation requires uniform weighting")
         if config.byzantine_clients < 0:
             raise ValueError("byzantine_clients must be non-negative")
+        if algorithm == "fednova" and strategy != "mean":
+            raise ValueError("FedNova cannot be combined with robust aggregation")
+        if algorithm == "fednova" and config.optimizer is not None:
+            raise ValueError("FedNova + adaptive server optimizer is not validated")
+        if algorithm == "fednova" and config.secure_aggregation:
+            raise ValueError("FedNova secure aggregation is not release-validated")
 
         validate_capability_request(
             CapabilityRequest(
-                algorithm=config.algorithm,
+                algorithm=algorithm,
                 differential_privacy=config.differential_privacy,
                 secure_aggregation=config.secure_aggregation,
                 robust_aggregation=strategy in ROBUST_STRATEGIES,
@@ -82,6 +90,7 @@ class V3AggregationEngine:
 
         self._dimension = dimension
         self._config = config
+        self._algorithm = algorithm
         self._strategy = strategy
         self._weighting = weighting
         self._optimizer = (
@@ -137,6 +146,8 @@ class V3AggregationEngine:
         vectors: list[Vector],
         results: list[TrainingResult],
     ) -> Vector:
+        if self._algorithm == "fednova":
+            return self._fednova(vectors, results)
         if self._strategy == "mean":
             return self._mean(vectors, results)
         if self._strategy == "median":
@@ -152,6 +163,21 @@ class V3AggregationEngine:
             vectors,
             byzantine_clients=self._config.byzantine_clients,
             select=self._config.multi_krum_select,
+        )
+
+    def _fednova(
+        self,
+        vectors: list[Vector],
+        results: list[TrainingResult],
+    ) -> Vector:
+        if self._weighting == "uniform":
+            weights = tuple(1.0 for _ in results)
+        else:
+            weights = tuple(float(result.sample_count) for result in results)
+        return fednova_aggregate(
+            tuple(vectors),
+            local_steps=tuple(result.local_step_count for result in results),
+            weights=weights,
         )
 
     def _mean(

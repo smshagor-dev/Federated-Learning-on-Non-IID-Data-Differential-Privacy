@@ -7,6 +7,18 @@ from .dataset_registry import (
     DatasetStatus,
     FilesystemDatasetRegistry,
 )
+from .federated_loaders import (
+    DatasetShardSpec,
+    FederatedDatasetBundle,
+    FederatedDatasetError,
+    FederatedDatasetManifest,
+    FederatedUserPartition,
+    load_federated_leaf_dataset,
+    load_femnist_leaf,
+    load_sent140_leaf,
+    load_shakespeare_leaf,
+    sha256_file,
+)
 from .loaders import DATASET_LOADERS, load_cifar10, load_mnist
 from .partitioning import (
     PartitionError,
@@ -24,7 +36,12 @@ __all__ = [
     "DatasetRegistry",
     "DatasetRegistryEntry",
     "DatasetRegistryError",
+    "DatasetShardSpec",
     "DatasetStatus",
+    "FederatedDatasetBundle",
+    "FederatedDatasetError",
+    "FederatedDatasetManifest",
+    "FederatedUserPartition",
     "FilesystemDatasetRegistry",
     "PartitionError",
     "PartitionManifestRecord",
@@ -33,5 +50,10 @@ __all__ = [
     "create_pathological_partition",
     "create_quantity_skew_partition",
     "load_cifar10",
+    "load_federated_leaf_dataset",
+    "load_femnist_leaf",
     "load_mnist",
+    "load_sent140_leaf",
+    "load_shakespeare_leaf",
+    "sha256_file",
 ]

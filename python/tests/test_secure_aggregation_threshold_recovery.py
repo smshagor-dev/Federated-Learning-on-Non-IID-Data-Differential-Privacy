@@ -73,17 +73,24 @@ def test_tampered_share_fails_digest_validation() -> None:
         reconstruct_recovery_secret((shares[0], shares[1], tampered))
 
 
-def test_restartable_coordinator_recovers_after_threshold_arrives() -> None:
+def test_restart_persists_only_receipts_and_requires_share_resubmission() -> None:
     shares = _shares()
     coordinator = ThresholdRecoveryCoordinator("session-7")
     coordinator.submit(shares[0])
     coordinator.submit(shares[2])
     assert not coordinator.can_recover("dropout-client", generation=2)
 
-    restored = ThresholdRecoveryCoordinator.restore(
-        "session-7",
-        coordinator.snapshot(),
-    )
+    receipts = coordinator.snapshot()
+    assert len(receipts) == 2
+    assert all(receipt.share_commitment for receipt in receipts)
+    assert all(not hasattr(receipt, "value") for receipt in receipts)
+
+    restored = ThresholdRecoveryCoordinator.restore("session-7", receipts)
+    assert not restored.can_recover("dropout-client", generation=2)
+
+    restored.submit(shares[0])
+    restored.submit(shares[2])
+    assert not restored.can_recover("dropout-client", generation=2)
     restored.submit(shares[4])
     assert restored.can_recover("dropout-client", generation=2)
     recovered = restored.recover("dropout-client", generation=2)
@@ -102,6 +109,19 @@ def test_idempotent_replay_is_allowed_but_conflicting_replay_is_rejected() -> No
         coordinator.submit(conflict)
 
 
+def test_restart_receipt_rejects_conflicting_share_value() -> None:
+    shares = _shares()
+    coordinator = ThresholdRecoveryCoordinator("session-7")
+    coordinator.submit(shares[0])
+    restored = ThresholdRecoveryCoordinator.restore(
+        "session-7",
+        coordinator.snapshot(),
+    )
+    conflict = replace(shares[0], value=shares[0].value + 1)
+    with pytest.raises(ThresholdRecoveryError, match="persisted commitment"):
+        restored.submit(conflict)
+
+
 def test_coordinator_rejects_wrong_session_and_inconsistent_metadata() -> None:
     shares = _shares()
     coordinator = ThresholdRecoveryCoordinator("session-7")
@@ -111,6 +131,34 @@ def test_coordinator_rejects_wrong_session_and_inconsistent_metadata() -> None:
     coordinator.submit(shares[0])
     with pytest.raises(ThresholdRecoveryError, match="metadata"):
         coordinator.submit(replace(shares[1], threshold=4))
+
+
+def test_restore_rejects_wrong_session_duplicate_index_and_metadata_mismatch() -> None:
+    shares = _shares()
+    coordinator = ThresholdRecoveryCoordinator("session-7")
+    coordinator.submit(shares[0])
+    coordinator.submit(shares[1])
+    receipts = coordinator.snapshot()
+
+    with pytest.raises(ThresholdRecoveryError, match="different session"):
+        ThresholdRecoveryCoordinator.restore(
+            "session-other",
+            receipts,
+        )
+
+    duplicate_index = replace(receipts[1], index=receipts[0].index)
+    with pytest.raises(ThresholdRecoveryError, match="duplicate"):
+        ThresholdRecoveryCoordinator.restore(
+            "session-7",
+            (receipts[0], duplicate_index),
+        )
+
+    mismatched = replace(receipts[1], threshold=4)
+    with pytest.raises(ThresholdRecoveryError, match="metadata"):
+        ThresholdRecoveryCoordinator.restore(
+            "session-7",
+            (receipts[0], mismatched),
+        )
 
 
 def test_share_generation_rejects_invalid_threshold_and_duplicate_holders() -> None:
