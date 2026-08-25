@@ -38,7 +38,7 @@ class HeterogeneityAdmissionPolicy:
         self,
         profiles: tuple[ClientSystemProfile, ...],
         *,
-        requirements: EdgeRequirements = EdgeRequirements(),
+        requirements: EdgeRequirements | None = None,
         baseline_training_seconds: float,
         payload_bytes: int,
         round_deadline_seconds: float | None = None,
@@ -49,7 +49,9 @@ class HeterogeneityAdmissionPolicy:
         if baseline_training_seconds < 0.0 or not math.isfinite(
             baseline_training_seconds
         ):
-            raise ValueError("baseline_training_seconds must be finite and non-negative")
+            raise ValueError(
+                "baseline_training_seconds must be finite and non-negative"
+            )
         if payload_bytes < 0:
             raise ValueError("payload_bytes must be non-negative")
         if round_deadline_seconds is not None and (
@@ -63,7 +65,7 @@ class HeterogeneityAdmissionPolicy:
                 raise ValueError(f"duplicate client profile: {profile.client_id}")
             profile_map[profile.client_id] = profile
         self._profiles = profile_map
-        self._requirements = requirements
+        self._requirements = requirements or EdgeRequirements()
         self._baseline_training_seconds = baseline_training_seconds
         self._payload_bytes = payload_bytes
         self._round_deadline_seconds = round_deadline_seconds
