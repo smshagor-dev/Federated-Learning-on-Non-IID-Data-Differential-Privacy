@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,9 @@ def _snapshot_from_payload(payload: dict[str, Any]) -> AsyncStateSnapshot:
             applied_updates=applied_updates,
         )
     except (KeyError, TypeError, ValueError, IndexError) as exc:
-        raise AsyncStateStoreError("async checkpoint payload has invalid structure") from exc
+        raise AsyncStateStoreError(
+            "async checkpoint payload has invalid structure"
+        ) from exc
     try:
         snapshot.validate()
     except ValueError as exc:
@@ -61,9 +64,11 @@ class AsyncStateStore:
     """Atomic JSON checkpoint with a SHA-256 integrity envelope."""
 
     def __init__(self, path: str | Path) -> None:
-        self._path = Path(path)
-        if not str(self._path):
+        if isinstance(path, str) and not path.strip():
             raise ValueError("async state checkpoint path must not be empty")
+        self._path = Path(path)
+        if self._path.exists() and self._path.is_dir():
+            raise ValueError("async state checkpoint path must be a file path")
 
     @property
     def path(self) -> Path:
@@ -75,7 +80,9 @@ class AsyncStateStore:
         envelope = {
             "schema_version": 1,
             "payload": payload,
-            "payload_sha256": hashlib.sha256(payload_json.encode("utf-8")).hexdigest(),
+            "payload_sha256": hashlib.sha256(
+                payload_json.encode("utf-8")
+            ).hexdigest(),
         }
         encoded = (_canonical_json(envelope) + "\n").encode("utf-8")
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -87,20 +94,24 @@ class AsyncStateStore:
                 os.fsync(handle.fileno())
             os.replace(temp_path, self._path)
         except OSError as exc:
-            try:
+            with suppress(OSError):
                 temp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            raise AsyncStateStoreError("failed to persist async state checkpoint") from exc
+            raise AsyncStateStoreError(
+                "failed to persist async state checkpoint"
+            ) from exc
 
     def load(self) -> AsyncStateSnapshot | None:
         if not self._path.exists():
             return None
+        if not self._path.is_file():
+            raise AsyncStateStoreError("async checkpoint path is not a regular file")
         try:
             raw = self._path.read_text(encoding="utf-8")
             envelope = json.loads(raw)
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise AsyncStateStoreError("async checkpoint is unreadable or invalid JSON") from exc
+            raise AsyncStateStoreError(
+                "async checkpoint is unreadable or invalid JSON"
+            ) from exc
         if not isinstance(envelope, dict) or envelope.get("schema_version") != 1:
             raise AsyncStateStoreError("unsupported async checkpoint envelope schema")
         payload = envelope.get("payload")
