@@ -1,0 +1,103 @@
+name: v3 live recovery
+
+on:
+  push:
+    branches:
+      - secure-aggregation-live-recovery
+    paths:
+      - "proto/recovery/**"
+      - "proto/worker/worker.proto"
+      - "scripts/generate_protos.sh"
+      - "python/src/fl_platform/secure_aggregation/**"
+      - "python/tests/test_secure_aggregation_recovery_*.py"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_recovery_service*.hpp"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_session_manager.hpp"
+      - "cpp/coordinator/include/fl_coordinator/coordinator_service.hpp"
+      - "cpp/coordinator/src/coordinator_service.cpp"
+      - "cpp/coordinator/src/replay_protection_store.cpp"
+      - "cpp/coordinator/tests/replay_protection_store_test.cpp"
+      - ".github/workflows/v3-live-recovery.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "proto/recovery/**"
+      - "proto/worker/worker.proto"
+      - "scripts/generate_protos.sh"
+      - "python/src/fl_platform/secure_aggregation/**"
+      - "python/tests/test_secure_aggregation_recovery_*.py"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_recovery_service*.hpp"
+      - "cpp/coordinator/include/fl_coordinator/secure_aggregation_session_manager.hpp"
+      - "cpp/coordinator/include/fl_coordinator/coordinator_service.hpp"
+      - "cpp/coordinator/src/coordinator_service.cpp"
+      - "cpp/coordinator/src/replay_protection_store.cpp"
+      - "cpp/coordinator/tests/replay_protection_store_test.cpp"
+      - ".github/workflows/v3-live-recovery.yml"
+
+jobs:
+  python-recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package and dev tooling
+        run: python -m pip install -e "python[dev]"
+      - name: Recovery unit tests
+        run: |
+          python -m pytest \
+            python/tests/test_secure_aggregation_recovery_wire.py \
+            python/tests/test_secure_aggregation_recovery_runtime.py \
+            python/tests/test_secure_aggregation_dropout_recovery.py
+      - name: Recovery lint
+        run: |
+          python -m ruff check \
+            python/src/fl_platform/secure_aggregation/recovery_wire.py \
+            python/src/fl_platform/secure_aggregation/recovery_runtime.py \
+            python/src/fl_platform/secure_aggregation/dropout_recovery.py \
+            python/src/fl_platform/secure_aggregation/threshold_recovery.py \
+            python/tests/test_secure_aggregation_recovery_wire.py \
+            python/tests/test_secure_aggregation_recovery_runtime.py
+      - name: Recovery format
+        run: |
+          python -m ruff format --check \
+            python/src/fl_platform/secure_aggregation/recovery_wire.py \
+            python/src/fl_platform/secure_aggregation/recovery_runtime.py \
+            python/src/fl_platform/secure_aggregation/dropout_recovery.py \
+            python/src/fl_platform/secure_aggregation/threshold_recovery.py \
+            python/tests/test_secure_aggregation_recovery_wire.py \
+            python/tests/test_secure_aggregation_recovery_runtime.py
+      - name: Recovery mypy
+        run: |
+          python -m mypy --config-file=python/pyproject.toml \
+            python/src/fl_platform/secure_aggregation/recovery_wire.py \
+            python/src/fl_platform/secure_aggregation/recovery_runtime.py \
+            python/src/fl_platform/secure_aggregation/dropout_recovery.py \
+            python/src/fl_platform/secure_aggregation/threshold_recovery.py
+
+  cpp-recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install protoc + gRPC/OpenSSL C++ dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            protobuf-compiler protobuf-compiler-grpc libprotobuf-dev \
+            libgrpc++-dev libssl-dev pkg-config
+      - name: Generate protobuf and gRPC bindings
+        run: bash scripts/generate_protos.sh generated
+      - name: Configure coordinator gRPC build
+        run: cmake -S cpp -B build/cpp-recovery -DCMAKE_BUILD_TYPE=Release
+      - name: Build live coordinator and gRPC tests
+        run: |
+          cmake --build build/cpp-recovery --target \
+            fl_coordinator_grpc_server \
+            fl_coordinator_grpc_tests \
+            fl_secure_aggregation_session_manager_tests \
+            -j"$(nproc)"
+      - name: Run recovery-adjacent coordinator tests
+        run: |
+          ctest --test-dir build/cpp-recovery --output-on-failure -R \
+            '^(fl_coordinator_grpc_tests|fl_secure_aggregation_session_manager_tests)$'
