@@ -196,7 +196,11 @@ def validate_sample_ledger_resume(
     for entry in after:
         if entry.run_id != run_id:
             return LedgerResumeValidation(
-                False, len(before), len(after), entry.epsilon, "run_id changed after resume"
+                False,
+                len(before),
+                len(after),
+                entry.epsilon,
+                "run_id changed after resume",
             )
         if entry.round_id < previous_round:
             return LedgerResumeValidation(
