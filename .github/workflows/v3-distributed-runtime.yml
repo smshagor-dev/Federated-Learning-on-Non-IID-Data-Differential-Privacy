@@ -1,0 +1,109 @@
+name: v3 distributed runtime evidence
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/security-validation/**"
+      - "scripts/pki/**"
+      - "infra/compose/**"
+      - "infra/docker/**"
+      - "cpp/**"
+      - "go/**"
+      - "proto/**"
+      - "python/src/fl_platform/worker/**"
+      - "python/src/fl_platform/security/**"
+      - "python/src/fl_platform/secure_aggregation/**"
+      - ".github/workflows/v3-distributed-runtime.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: v3-distributed-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  live-distributed-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Generate development PKI
+        run: |
+          bash scripts/pki/generate-dev-ca.sh
+          bash scripts/pki/issue-service-cert.sh coordinator
+          bash scripts/pki/issue-service-cert.sh go-api
+          bash scripts/pki/issue-worker-cert.sh worker-1
+      - name: Build real distributed runtime images
+        run: |
+          docker compose \
+            -f infra/compose/docker-compose.dev.yml \
+            -f infra/compose/docker-compose.security.yml \
+            build coordinator api python-worker research-writer
+      - name: Run backend distributed/security release matrix
+        run: |
+          python scripts/security-validation/run.py \
+            --group transport,worker-identity,worker-keys,signed-messages,privacy-authenticity,signed-tasks,event-centralization,event-journal,audit-journal,security-api,metrics,secure-user-level-dp,secure-hybrid-dp,secure-adaptive-clipping,recovery,research-registry,regression \
+            --keep-stack \
+            --output-dir artifacts/v3-distributed-runtime
+      - name: Restart real Python worker container
+        run: |
+          docker compose \
+            -f infra/compose/docker-compose.dev.yml \
+            -f infra/compose/docker-compose.security.yml \
+            restart python-worker
+          deadline=$((SECONDS + 60))
+          while [ "${SECONDS}" -lt "${deadline}" ]; do
+            running="$(docker compose \
+              -f infra/compose/docker-compose.dev.yml \
+              -f infra/compose/docker-compose.security.yml \
+              ps --status running -q python-worker)"
+            if [ -n "${running}" ]; then
+              break
+            fi
+            sleep 2
+          done
+          test -n "${running:-}"
+      - name: Revalidate worker identity and event delivery after restart
+        run: |
+          python scripts/security-validation/run.py \
+            --group worker-identity,event-centralization \
+            --no-compose \
+            --output-dir artifacts/v3-worker-restart-runtime
+      - name: Validate runtime evidence sanitation
+        if: always()
+        run: |
+          python scripts/security-validation/check_artifact_sanitation.py \
+            artifacts/v3-distributed-runtime
+          python scripts/security-validation/check_artifact_sanitation.py \
+            artifacts/v3-worker-restart-runtime
+      - name: Capture distributed container state
+        if: always()
+        run: |
+          mkdir -p artifacts/v3-runtime-state
+          docker compose \
+            -f infra/compose/docker-compose.dev.yml \
+            -f infra/compose/docker-compose.security.yml \
+            ps --format json > artifacts/v3-runtime-state/compose-ps.json || true
+      - name: Tear down distributed runtime
+        if: always()
+        run: |
+          docker compose \
+            -f infra/compose/docker-compose.dev.yml \
+            -f infra/compose/docker-compose.security.yml \
+            down -v --remove-orphans
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v3-distributed-runtime-evidence
+          path: |
+            artifacts/v3-distributed-runtime/
+            artifacts/v3-worker-restart-runtime/
+            artifacts/v3-runtime-state/
+          if-no-files-found: warn
+          retention-days: 30
