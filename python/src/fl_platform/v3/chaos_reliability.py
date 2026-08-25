@@ -181,17 +181,17 @@ class ChaosRoundExecutor:
                     continue
                 retry_attempts += 1
 
-            result = self._service.handle_task(task)
-            if result.client_id != task.client_id:
+            training_result = self._service.handle_task(task)
+            if training_result.client_id != task.client_id:
                 raise RuntimeError("worker result client identity mismatch")
             if decision.fault == ChaosFault.RESULT_DELAY:
-                delayed.append(result)
+                delayed.append(training_result)
             else:
-                on_time.append(result)
+                on_time.append(training_result)
             if decision.fault == ChaosFault.DUPLICATE_REPLAY:
                 replay_rejections += 1
 
-        result = ChaosRoundResult(
+        round_result = ChaosRoundResult(
             selected_clients=len(tasks),
             results=(*on_time, *delayed),
             decisions=tuple(decisions),
@@ -201,8 +201,8 @@ class ChaosRoundExecutor:
             retry_attempts=retry_attempts,
             replay_rejections=replay_rejections,
         )
-        result.validate_invariants()
-        return result
+        round_result.validate_invariants()
+        return round_result
 
 
 __all__ = [

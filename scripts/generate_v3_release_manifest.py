@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 from fl_platform.v3.release_security import build_release_artifact_manifest
 

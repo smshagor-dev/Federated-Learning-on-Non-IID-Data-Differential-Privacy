@@ -12,7 +12,10 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from fl_platform.benchmark.matrix import BenchmarkPartition, standard_partition_conditions
+from fl_platform.benchmark.matrix import (
+    BenchmarkPartition,
+    standard_partition_conditions,
+)
 from fl_platform.benchmark.v3_matrix import (
     HeterogeneityCondition,
     PrivacyCondition,
