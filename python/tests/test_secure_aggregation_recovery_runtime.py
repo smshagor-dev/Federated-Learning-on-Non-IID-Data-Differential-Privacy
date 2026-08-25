@@ -96,14 +96,13 @@ def test_recovery_owner_must_be_exactly_the_missing_contributor() -> None:
         )
 
 
-def test_recovery_holder_must_already_be_a_surviving_contributor() -> None:
+def test_foreign_holder_is_not_a_surviving_contributor() -> None:
     _, payloads, session = _fixture()
-    bad_session = replace(
-        session,
-        submitted_contributors=frozenset({"worker-b"}),
-    )
-    with pytest.raises(RecoveryAdmissionError, match="exactly one missing"):
-        LiveRecoveryRegistry().submit(payloads[0], bad_session)
+    with pytest.raises(RecoveryAdmissionError, match="holder must be"):
+        LiveRecoveryRegistry().submit(
+            replace(payloads[0], holder_worker_id="worker-z"),
+            session,
+        )
 
 
 def test_multiple_dropouts_are_fail_closed_in_initial_live_policy() -> None:
