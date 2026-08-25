@@ -27,9 +27,7 @@ class ReleaseGateReport:
 
     def missing(self) -> tuple[str, ...]:
         return tuple(
-            gate
-            for gate in REQUIRED_V3_GATES
-            if not self.results.get(gate, False)
+            gate for gate in REQUIRED_V3_GATES if not self.results.get(gate, False)
         )
 
     def release_ready(self) -> bool:

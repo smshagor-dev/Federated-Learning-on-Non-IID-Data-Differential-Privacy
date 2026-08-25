@@ -245,9 +245,7 @@ def run_robustness_trial(config: RobustnessTrialConfig) -> RobustnessTrialResult
                 )
             )
         aggregate = engine.aggregate(results).update
-        model = _as_model(
-            tuple(model[index] + aggregate[index] for index in range(4))
-        )
+        model = _as_model(tuple(model[index] + aggregate[index] for index in range(4)))
 
     test_data = _make_dataset(config.seed + 999, config.test_samples)
     clean_accuracy = _accuracy(model, test_data)

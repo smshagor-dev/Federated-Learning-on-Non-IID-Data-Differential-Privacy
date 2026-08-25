@@ -44,14 +44,11 @@ class AdaptiveServerOptimizer:
         cfg = self.config
         result: list[float] = []
         for index, gradient in enumerate(aggregate_delta):
-            self._m[index] = (
-                cfg.beta1 * self._m[index] + (1.0 - cfg.beta1) * gradient
-            )
+            self._m[index] = cfg.beta1 * self._m[index] + (1.0 - cfg.beta1) * gradient
             squared = gradient * gradient
             if self._name == "fedadam":
                 self._v[index] = (
-                    cfg.beta2 * self._v[index]
-                    + (1.0 - cfg.beta2) * squared
+                    cfg.beta2 * self._v[index] + (1.0 - cfg.beta2) * squared
                 )
             elif self._name == "fedyogi":
                 direction = 1.0 if self._v[index] - squared >= 0.0 else -1.0

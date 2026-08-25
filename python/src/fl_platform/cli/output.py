@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TextIO
 
 
@@ -36,7 +36,7 @@ class Console:
         message: str,
         stream: TextIO = sys.stdout,
     ) -> None:
-        timestamp = datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S")
+        timestamp = datetime.now(UTC).astimezone().strftime("%H:%M:%S")
         self._safe_write(
             f"[{timestamp}] {level:<7} {component:<14} {message}",
             stream,

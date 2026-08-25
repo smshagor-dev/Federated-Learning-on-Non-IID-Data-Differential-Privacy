@@ -106,9 +106,7 @@ def test_release_candidate_plan_rejects_unvalidated_federated_workload() -> None
             privacy_conditions=(PrivacyCondition("non-private", None),),
             attacks=(AttackKind.NONE,),
             aggregation_strategies=("mean",),
-            heterogeneity_conditions=(
-                HeterogeneityCondition("nominal", "baseline"),
-            ),
+            heterogeneity_conditions=(HeterogeneityCondition("nominal", "baseline"),),
             require_validated_workloads=True,
             minimum_replicates=3,
         )

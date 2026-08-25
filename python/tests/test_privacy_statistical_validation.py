@@ -13,12 +13,13 @@ from __future__ import annotations
 import unittest
 
 import numpy as np
+from opacus.accountants import create_accountant
+
 from fl_platform.privacy.accounting import UserLevelAccountant
 from fl_platform.privacy.adaptive_clipping import (
     AdaptiveClipConfig,
     AdaptiveClipController,
 )
-from opacus.accountants import create_accountant
 
 
 class NoiseMultiplierEpsilonRelationshipTests(unittest.TestCase):

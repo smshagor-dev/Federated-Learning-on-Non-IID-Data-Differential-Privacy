@@ -18,6 +18,7 @@ import unittest
 from types import SimpleNamespace
 
 import nacl.signing
+
 from fl_platform.secure_aggregation.key_advertisement import (
     SecureCohortHandshakeError,
     build_signed_key_advertisement,

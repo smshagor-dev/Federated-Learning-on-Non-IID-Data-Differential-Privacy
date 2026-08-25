@@ -48,18 +48,26 @@ class RecoverySessionView:
 
     def validate(self) -> None:
         if not self.session_id or not self.run_id or not self.model_version:
-            raise RecoveryAdmissionError("session view has empty run/session/model binding")
+            raise RecoveryAdmissionError(
+                "session view has empty run/session/model binding"
+            )
         if not self.cohort_commitment:
             raise RecoveryAdmissionError("session view has no frozen cohort commitment")
         if len(self.participant_public_keys) < 3:
-            raise RecoveryAdmissionError("threshold recovery requires a cohort of at least 3")
+            raise RecoveryAdmissionError(
+                "threshold recovery requires a cohort of at least 3"
+            )
         if any(
             not worker_id or len(public_key) != 32
             for worker_id, public_key in self.participant_public_keys.items()
         ):
-            raise RecoveryAdmissionError("session view contains an invalid X25519 public key")
+            raise RecoveryAdmissionError(
+                "session view contains an invalid X25519 public key"
+            )
         if not self.submitted_contributors <= self.participants:
-            raise RecoveryAdmissionError("submitted contributors are outside the frozen cohort")
+            raise RecoveryAdmissionError(
+                "submitted contributors are outside the frozen cohort"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,9 +112,7 @@ class LiveRecoveryRegistry:
         submitted = collector.submitted.get(
             (payload.owner_worker_id, payload.generation), {}
         )
-        recoverable = collector.can_recover(
-            payload.owner_worker_id, payload.generation
-        )
+        recoverable = collector.can_recover(payload.owner_worker_id, payload.generation)
         if not recoverable:
             return RecoveryAdmissionResult(
                 accepted=True,
@@ -151,7 +157,9 @@ class LiveRecoveryRegistry:
         if payload.model_version != session.model_version:
             raise RecoveryAdmissionError("recovery share model_version mismatch")
         if payload.cohort_commitment != session.cohort_commitment:
-            raise RecoveryAdmissionError("recovery share frozen cohort commitment mismatch")
+            raise RecoveryAdmissionError(
+                "recovery share frozen cohort commitment mismatch"
+            )
         if session.privacy_mode != "none":
             raise RecoveryAdmissionError(
                 "live threshold recovery currently supports non-private secure rounds only"
@@ -163,7 +171,9 @@ class LiveRecoveryRegistry:
                 "initial live recovery supports exactly one missing contributor"
             )
         if payload.owner_worker_id not in missing:
-            raise RecoveryAdmissionError("recovery owner is not the missing contributor")
+            raise RecoveryAdmissionError(
+                "recovery owner is not the missing contributor"
+            )
         if payload.holder_worker_id not in session.submitted_contributors:
             raise RecoveryAdmissionError(
                 "recovery holder must be a surviving submitted contributor"

@@ -15,8 +15,8 @@ from dataclasses import dataclass
 
 from fl_platform.secure_aggregation.threshold_recovery import RecoveryShare
 from fl_platform.security.signed_envelope import (
-    EnvelopeFields,
     MESSAGE_STREAM_SECURE_AGGREGATION,
+    EnvelopeFields,
     SignedEnvelope,
     SignedEnvelopeError,
     sign_envelope,
@@ -83,7 +83,9 @@ class RecoverySharePayload:
         ):
             _validate_safe_binding(name, value)
         if self.owner_worker_id == self.holder_worker_id:
-            raise RecoveryWireError("recovery share owner and holder must be different workers")
+            raise RecoveryWireError(
+                "recovery share owner and holder must be different workers"
+            )
         if self.round_id < 0 or self.generation < 0:
             raise RecoveryWireError("round_id and generation must be non-negative")
         if not 2 <= self.threshold <= self.total_shares:
@@ -104,7 +106,9 @@ class RecoverySharePayload:
             or not _LOWER_HEX.fullmatch(self.share_value_hex)
             or (len(self.share_value_hex) > 1 and self.share_value_hex.startswith("0"))
         ):
-            raise RecoveryWireError("share_value_hex is not canonical lowercase field hex")
+            raise RecoveryWireError(
+                "share_value_hex is not canonical lowercase field hex"
+            )
         if int(self.share_value_hex, 16) >= _RECOVERY_FIELD_PRIME:
             raise RecoveryWireError("share_value_hex is outside the recovery field")
         if not math.isfinite(self.issued_at) or not math.isfinite(self.expires_at):

@@ -38,11 +38,7 @@ def _validate_metric_value(value: float, *, name: str) -> float:
 
 
 def _escape_label(value: str) -> str:
-    return (
-        value.replace("\\", "\\\\")
-        .replace("\n", "\\n")
-        .replace('"', '\\"')
-    )
+    return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
 
 
 class V3MetricRegistry:

@@ -10,6 +10,7 @@ import unittest
 
 import nacl.exceptions
 import nacl.signing
+
 from fl_platform.secure_aggregation.adaptive_clipping_binding import (
     AdaptiveClippingBindingFields,
     adaptive_clipping_binding_payload_hash_input,

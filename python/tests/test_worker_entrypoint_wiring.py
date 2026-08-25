@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 
 import grpc
+
 from fl_platform.worker import __main__ as worker_main
 from fl_platform.worker.configuration import WorkerConfig
 from fl_platform.worker.coordinator_client import (

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import unittest
 
+from opacus.accountants import create_accountant
+
 from fl_platform.privacy import SamplePrivacyBudgetPolicy
 from fl_platform.privacy.budget_enforcement import (
     SampleBudgetEnforcer,
@@ -22,7 +24,6 @@ from fl_platform.privacy.budget_enforcement import (
     project_next_epsilon,
     restore_enforcer,
 )
-from opacus.accountants import create_accountant
 
 
 def _fresh_accountant():

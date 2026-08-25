@@ -18,6 +18,7 @@ import dataclasses
 import unittest
 
 import nacl.signing
+
 from fl_platform.security.coordinator_task_signing import (
     AggregationManifestFields,
     CoordinatorTaskSigningError,

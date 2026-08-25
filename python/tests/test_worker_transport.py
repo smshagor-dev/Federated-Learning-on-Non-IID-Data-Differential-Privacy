@@ -18,6 +18,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
+
 from fl_platform.security.transport import (
     TransportConfigurationError,
     TransportMode,
@@ -119,6 +120,7 @@ def _start_real_server(
     require_client_auth: bool,
 ):
     import grpc
+
     from fl_platform.rpc import ensure_generated_on_path
 
     ensure_generated_on_path()
