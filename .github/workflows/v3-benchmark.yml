@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - "python/src/fl_platform/benchmark/**"
+      - "python/src/fl_platform/algorithms/**"
+      - "python/src/fl_platform/v3/attacks.py"
+      - "python/src/fl_platform/v3/capabilities.py"
+      - "python/src/fl_platform/v3/workloads.py"
       - "python/tests/test_v3_benchmark_matrix.py"
       - "python/tests/test_v3_benchmark_executable_gate.py"
       - "scripts/generate_v3_benchmark_manifest.py"
