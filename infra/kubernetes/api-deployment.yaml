@@ -4,7 +4,12 @@ metadata:
   name: api
   namespace: fl-platform
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: api
@@ -13,6 +18,14 @@ spec:
       labels:
         app: api
     spec:
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: api
       containers:
         - name: api
           image: fl-platform/api:latest
@@ -25,10 +38,18 @@ spec:
             httpGet:
               path: /healthz
               port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               path: /healthz
               port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
           resources:
             requests:
               cpu: "100m"

@@ -14,6 +14,7 @@ spec:
       labels:
         app: postgres
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
         - name: postgres
           image: postgres:16
@@ -21,11 +22,59 @@ spec:
             - containerPort: 5432
           env:
             - name: POSTGRES_DB
-              value: fl_platform
+              valueFrom:
+                secretKeyRef:
+                  name: fl-platform-postgres
+                  key: database
             - name: POSTGRES_USER
-              value: fl_platform
+              valueFrom:
+                secretKeyRef:
+                  name: fl-platform-postgres
+                  key: username
             - name: POSTGRES_PASSWORD
-              value: fl_platform
+              valueFrom:
+                secretKeyRef:
+                  name: fl-platform-postgres
+                  key: password
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
 ---
 apiVersion: v1
 kind: Service
@@ -33,6 +82,7 @@ metadata:
   name: postgres
   namespace: fl-platform
 spec:
+  clusterIP: None
   selector:
     app: postgres
   ports:
@@ -55,11 +105,55 @@ spec:
       labels:
         app: redis
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
         - name: redis
           image: redis:7
+          args:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
           ports:
             - containerPort: 6379
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: Service
@@ -67,6 +161,7 @@ metadata:
   name: redis
   namespace: fl-platform
 spec:
+  clusterIP: None
   selector:
     app: redis
   ports:
