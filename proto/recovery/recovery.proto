@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package fl.recovery.v1;
+
+option go_package = "github.com/smshagor-dev/federated-learning-super-system/go/generated/recovery/v1;recoveryv1";
+
+import "worker/worker.proto";
+
+// Worker-authenticated share submission. The SignedWorkerEnvelope must use
+// MESSAGE_TYPE_SECURE_AGGREGATION_RECOVERY_SHARE and its payload_hash must be
+// SHA-256 of the canonical recovery-share payload. Raw share values are
+// volatile coordinator memory only; durable recovery state stores commitment
+// receipts, never share_value_hex.
+message SubmitRecoveryShareRequest {
+  fl.worker.v1.SignedWorkerEnvelope envelope = 1;
+  fl.worker.v1.SecureAggregationRecoveryShare recovery_share = 2;
+}
+
+message SubmitRecoveryShareResponse {
+  bool accepted = 1;
+  string rejection_code = 2;
+  string reason = 3;
+  uint32 submitted_share_count = 4;
+  uint32 threshold = 5;
+  bool recoverable = 6;
+  bool recovery_applied = 7;
+  bool round_advanced = 8;
+}
+
+// Read-only operational status. No raw share, reconstructed private key, mask
+// correction, tensor value, or client update is ever returned.
+message GetRecoveryStatusRequest {
+  string session_id = 1;
+  string owner_worker_id = 2;
+  uint32 generation = 3;
+}
+
+message RecoveryShareReceiptSummary {
+  string holder_worker_id = 1;
+  uint32 share_index = 2;
+  string share_commitment = 3;
+}
+
+message GetRecoveryStatusResponse {
+  bool found = 1;
+  string session_id = 2;
+  string owner_worker_id = 3;
+  uint32 generation = 4;
+  uint32 submitted_share_count = 5;
+  uint32 threshold = 6;
+  bool recoverable = 7;
+  bool recovered = 8;
+  bool recovery_applied = 9;
+  repeated RecoveryShareReceiptSummary receipts = 10;
+  string state = 11;
+}
+
+service SecureAggregationRecoveryService {
+  rpc SubmitRecoveryShare(SubmitRecoveryShareRequest) returns (SubmitRecoveryShareResponse);
+  rpc GetRecoveryStatus(GetRecoveryStatusRequest) returns (GetRecoveryStatusResponse);
+}
