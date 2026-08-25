@@ -23,6 +23,11 @@ from fl_platform.v3.attacks import (
 )
 from fl_platform.v3.capabilities import CapabilityRequest, validate_capability_request
 from fl_platform.v3.heterogeneity import ClientSystemProfile, EdgeRequirements
+from fl_platform.v3.heterogeneous_execution import (
+    HeterogeneityAdmissionPolicy,
+    HeterogeneityEvaluation,
+    HeterogeneityRoundMetrics,
+)
 from fl_platform.v3.observability import RobustnessMetrics, RoundMetrics
 from fl_platform.v3.privacy_validation import (
     GradientLeakageResult,
@@ -61,6 +66,9 @@ __all__ = [
     "ClientSystemProfile",
     "EdgeRequirements",
     "GradientLeakageResult",
+    "HeterogeneityAdmissionPolicy",
+    "HeterogeneityEvaluation",
+    "HeterogeneityRoundMetrics",
     "LedgerResumeValidation",
     "MembershipInferenceResult",
     "OptimizerConfig",
