@@ -59,7 +59,7 @@ def _registry() -> V3MetricRegistry:
     return registry
 
 
-def test_prometheus_text_contains_aggregate_round_privacy_and_robustness_metrics() -> None:
+def test_prometheus_text_contains_aggregate_metrics() -> None:
     text = _registry().prometheus_text()
     assert "fl_round_accepted_updates 8" in text
     assert "fl_round_communication_bytes 3000" in text
