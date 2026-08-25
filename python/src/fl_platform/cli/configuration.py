@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 
-class ServiceCategory(str, Enum):
+class ServiceCategory(StrEnum):
     DATABASE = "DATABASE"
     CACHE = "CACHE"
     COORDINATOR = "COORDINATOR"
