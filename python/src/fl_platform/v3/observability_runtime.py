@@ -38,7 +38,11 @@ def _validate_metric_value(value: float, *, name: str) -> float:
 
 
 def _escape_label(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace('"', '\\"')
+    )
 
 
 class V3MetricRegistry:
@@ -57,6 +61,11 @@ class V3MetricRegistry:
         labels = tuple(sorted((attributes or {}).items()))
         self._values[(name, labels)] = _validate_metric_value(float(value), name=name)
 
+    def _delete(self, name: str) -> None:
+        keys = [key for key in self._values if key[0] == name]
+        for key in keys:
+            del self._values[key]
+
     def record_round(self, metrics: RoundMetrics) -> None:
         metrics.validate()
         self._set("fl_round_id", metrics.round_id)
@@ -68,7 +77,9 @@ class V3MetricRegistry:
         self._set("fl_round_upload_bytes", metrics.upload_bytes)
         self._set("fl_round_download_bytes", metrics.download_bytes)
         self._set("fl_round_communication_bytes", metrics.communication_bytes)
-        if metrics.privacy_epsilon is not None:
+        if metrics.privacy_epsilon is None:
+            self._delete("fl_round_privacy_epsilon")
+        else:
             self._set("fl_round_privacy_epsilon", metrics.privacy_epsilon)
 
     def record_robustness(self, metrics: RobustnessMetrics) -> None:
