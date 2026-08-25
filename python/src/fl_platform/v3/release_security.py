@@ -101,7 +101,8 @@ def build_release_artifact_manifest(
 def validate_immutable_image_reference(image: str) -> None:
     if _DIGEST_REF.fullmatch(image) is None:
         raise ValueError(
-            "release image reference must be immutable and use @sha256:<64 lowercase hex>"
+            "release image reference must be immutable and use "
+            "@sha256:<64 lowercase hex>"
         )
 
 
