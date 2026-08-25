@@ -48,13 +48,21 @@ class ElasticClientRegistry:
         self._generations: dict[str, int] = {}
         self._leases: dict[str, ClientLease] = {}
 
-    def join(self, client_id: str, *, now: float, lease_seconds: float) -> ClientLease:
+    def join(
+        self,
+        client_id: str,
+        *,
+        now: float,
+        lease_seconds: float,
+    ) -> ClientLease:
         self._validate_time(now, lease_seconds)
         if not client_id:
             raise ValueError("client_id must not be empty")
         self._expire(now)
         if client_id in self._leases:
-            raise ValueError("client is already active; use heartbeat to renew its lease")
+            raise ValueError(
+                "client is already active; use heartbeat to renew its lease"
+            )
         generation = self._generations.get(client_id, 0) + 1
         lease = ClientLease(client_id, generation, now + lease_seconds)
         self._generations[client_id] = generation
