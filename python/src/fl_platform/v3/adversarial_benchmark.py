@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 import random
 import statistics
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from fl_platform.v3.attacks import (
@@ -82,6 +83,17 @@ class RobustnessBenchmarkSummary:
     attacked_accuracy_stddev: float
 
 
+def _as_model(values: Sequence[float]) -> Model:
+    if len(values) != 4:
+        raise ValueError("benchmark model must contain exactly four values")
+    return (
+        float(values[0]),
+        float(values[1]),
+        float(values[2]),
+        float(values[3]),
+    )
+
+
 def _sigmoid(value: float) -> float:
     if value >= 0.0:
         exp_value = math.exp(-value)
@@ -128,7 +140,12 @@ def _local_update(
             weights[1] -= learning_rate * error * features[1]
             weights[2] -= learning_rate * error * features[2]
             weights[3] -= learning_rate * error
-    return tuple(weights[index] - model[index] for index in range(4))  # type: ignore[return-value]
+    return (
+        weights[0] - model[0],
+        weights[1] - model[1],
+        weights[2] - model[2],
+        weights[3] - model[3],
+    )
 
 
 def _predict(model: Model, features: tuple[float, ...]) -> int:
@@ -142,7 +159,9 @@ def _predict(model: Model, features: tuple[float, ...]) -> int:
 
 
 def _accuracy(model: Model, examples: tuple[LabeledExample, ...]) -> float:
-    correct = sum(_predict(model, features) == label for features, label in examples)
+    correct = sum(
+        int(_predict(model, features) == label) for features, label in examples
+    )
     return correct / len(examples)
 
 
@@ -159,7 +178,7 @@ def _backdoor_success_rate(
     successes = 0
     for features in source:
         triggered = (features[0], features[1], 1.0)
-        successes += _predict(model, triggered) == target_label
+        successes += int(_predict(model, triggered) == target_label)
     return successes / len(source)
 
 
@@ -207,11 +226,13 @@ def run_robustness_trial(config: RobustnessTrialConfig) -> RobustnessTrialResult
                 local_epochs=config.local_epochs,
             )
             if malicious:
-                update = apply_update_attack(
-                    update,
-                    config.attack,
-                    scale=config.attack_scale,
-                )  # type: ignore[assignment]
+                update = _as_model(
+                    apply_update_attack(
+                        update,
+                        config.attack,
+                        scale=config.attack_scale,
+                    )
+                )
             results.append(
                 TrainingResult(
                     run_id="v3-robustness",
@@ -224,9 +245,9 @@ def run_robustness_trial(config: RobustnessTrialConfig) -> RobustnessTrialResult
                 )
             )
         aggregate = engine.aggregate(results).update
-        model = tuple(
-            model[index] + aggregate[index] for index in range(4)
-        )  # type: ignore[assignment]
+        model = _as_model(
+            tuple(model[index] + aggregate[index] for index in range(4))
+        )
 
     test_data = _make_dataset(config.seed + 999, config.test_samples)
     clean_accuracy = _accuracy(model, test_data)
