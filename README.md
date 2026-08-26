@@ -21,7 +21,7 @@ A capability is described as supported only when an executable implementation an
 **Source version:** `3.0.0`  
 **Primary themes:** Federated Learning · Non-IID Data · Differential Privacy · Personalized FL · Robust Aggregation · Secure Aggregation · Fairness · Reproducible Benchmarking · Distributed ML Systems
 
-> **Mathematics:** display equations use GitHub's native fenced `math` blocks. GitHub renders these expressions with MathJax in Markdown files, so fractions, summations, norms, Greek symbols, subscripts, and superscripts display as proper academic mathematics.
+> **Mathematics:** display equations use GitHub fenced `math` blocks and a conservative MathJax-compatible macro subset. This keeps fractions, summations, norms, Greek symbols, subscripts, superscripts, and worked calculations readable directly on GitHub.
 
 ---
 
@@ -295,7 +295,7 @@ w_{k,t}^{(e+1)}
 =
 w_{k,t}^{(e)}
 -
-\eta_k\nabla\ell_k\!\left(w_{k,t}^{(e)};B_{k,e}\right).
+\eta_k\nabla\ell_k\left(w_{k,t}^{(e)};B_{k,e}\right).
 ```
 
 After local training,
@@ -457,8 +457,8 @@ The outer objective evaluates the adapted model `w'_k`. Per-FedAvg belongs to th
 Federated client data are non-IID when at least two clients have different joint distributions:
 
 ```math
-P_k(X,Y)\neq P_j(X,Y)
-\quad\text{for some }k\neq j.
+P_k(X,Y)\neq P_j(X,Y),
+\qquad k\neq j.
 ```
 
 ### 6.1 IID partitioning
@@ -478,7 +478,7 @@ For each class `c`, client proportions are sampled from a symmetric Dirichlet di
 ```math
 (\pi_{1c},\ldots,\pi_{Kc})
 \sim
-\operatorname{Dirichlet}(\alpha,\ldots,\alpha).
+\mathrm{Dirichlet}(\alpha,\ldots,\alpha).
 ```
 
 Interpretation:
@@ -513,13 +513,13 @@ Quantity skew changes how many examples each client owns while sample assignment
 A log-normal weighting model can be represented as
 
 ```math
-z_k\sim\operatorname{LogNormal}(0,\sigma_q^2),
+z_k\sim\mathrm{LogNormal}(0,\sigma_q^2),
 ```
 
 followed by
 
 ```math
-q_k=\frac{z_k}{\sum_jz_j},
+q_k=\frac{z_k}{\sum_{j=1}^{K}z_j},
 \qquad
 n_k\approx Nq_k.
 ```
@@ -562,7 +562,7 @@ For client update `Δ_k` and clipping threshold `C`,
 =
 \Delta_k
 \cdot
-\min\!\left(1,\frac{C}{\|\Delta_k\|_2}\right).
+\min\left(1,\frac{C}{\|\Delta_k\|_2}\right).
 ```
 
 Therefore,
@@ -573,29 +573,17 @@ Therefore,
 
 #### Worked clipping calculation
 
-If
+If the original update norm is `5` and the clipping threshold is `2`, then
 
 ```math
-\|\Delta_k\|_2=5
-\qquad\text{and}\qquad
-C=2,
-```
-
-then the scaling factor is
-
-```math
-\min\!\left(1,\frac{2}{5}\right)=0.4.
+\min\left(1,\frac{2}{5}\right)=0.4.
 ```
 
 So
 
 ```math
-\widetilde{\Delta}_k=0.4\Delta_k
-```
-
-and
-
-```math
+\widetilde{\Delta}_k=0.4\Delta_k,
+\qquad
 \|\widetilde{\Delta}_k\|_2=2.
 ```
 
@@ -604,9 +592,7 @@ and
 The clipped aggregate is randomized with Gaussian noise. Conceptually,
 
 ```math
-Z
-\sim
-\mathcal{N}\!\left(0,\sigma^2S^2I\right),
+Z\sim\mathcal{N}(0,\sigma^2S^2I),
 ```
 
 where `S` is the mechanism sensitivity and `σ` is the noise multiplier.
@@ -624,7 +610,7 @@ The exact sensitivity and scaling depend on the qualified runtime's sampling and
 For client `k` at round `t`,
 
 ```math
-I_{k,t}\sim\operatorname{Bernoulli}(q),
+I_{k,t}\sim\mathrm{Bernoulli}(q),
 ```
 
 where `q` is the configured client sample rate.
@@ -636,9 +622,9 @@ The release-qualified root DP path uses Poisson client sampling and uniform clie
 At Rényi order `r`, privacy costs compose additively across releases:
 
 ```math
-\operatorname{RDP}_{\mathrm{total}}(r)
+\mathrm{RDP}_{\mathrm{total}}(r)
 =
-\sum_t\operatorname{RDP}_t(r).
+\sum_{t=1}^{T}\mathrm{RDP}_t(r).
 ```
 
 A common conversion to an `(ε, δ)` guarantee is
@@ -648,7 +634,7 @@ A common conversion to an `(ε, δ)` guarantee is
 =
 \min_{r>1}
 \left[
-\operatorname{RDP}_{\mathrm{total}}(r)
+\mathrm{RDP}_{\mathrm{total}}(r)
 +
 \frac{\log(1/\delta)}{r-1}
 \right].
@@ -695,15 +681,17 @@ y_i
 =
 x_i
 +
-\sum_{j>i}r_{ij}
+\sum_{j=i+1}^{K}r_{ij}
 -
-\sum_{j<i}r_{ji}.
+\sum_{j=1}^{i-1}r_{ji}.
 ```
 
 Across all workers, the pairwise masks cancel:
 
 ```math
-\sum_i y_i=\sum_i x_i.
+\sum_{i=1}^{K}y_i
+=
+\sum_{i=1}^{K}x_i.
 ```
 
 The coordinator can recover the aggregate without requiring each individual plaintext update to be directly stored by the aggregation layer under the protocol assumptions.
@@ -728,20 +716,16 @@ a_2z^2
 a_{t-1}z^{t-1}.
 ```
 
-Share `i` is
+Share `i` is `(i, f(i))`.
 
-```math
-(i,f(i)).
-```
-
-Given a valid threshold set, the secret is reconstructed by Lagrange interpolation:
+For a valid threshold set `T`, Lagrange interpolation reconstructs the secret:
 
 ```math
 s=f(0)
 =
 \sum_{i\in T}
 f(i)
-\prod_{\substack{j\in T\\j\ne i}}
+\prod_{j\in T,\,j\neq i}
 \frac{-j}{i-j}.
 ```
 
@@ -754,7 +738,7 @@ For coordinate `j`,
 ```math
 \widehat{x}_j
 =
-\operatorname{median}(x_{1j},x_{2j},\ldots,x_{mj}).
+\mathrm{median}(x_{1j},x_{2j},\ldots,x_{mj}).
 ```
 
 This reduces the influence of extreme coordinate outliers.
@@ -778,7 +762,7 @@ After removing the `b` smallest and `b` largest values,
 
 #### Worked trimmed-mean calculation
 
-Suppose one coordinate contains
+Suppose one coordinate contains:
 
 ```text
 0.10, 0.12, 0.11, 2.50, -1.80
@@ -788,7 +772,6 @@ With `b = 1`, sort the values and remove one value from each tail:
 
 ```text
 -1.80, 0.10, 0.11, 0.12, 2.50
-          ^     ^     ^
 ```
 
 The retained values are `0.10`, `0.11`, and `0.12`, so
@@ -825,13 +808,12 @@ No training sample is reused for held-out evaluation.
 
 ### 9.2 Client metrics
 
-For client `k`,
+Let `c_k` be the number of correct predictions for client `k`, and let `n_k^test` be the number of held-out examples for that client.
 
 ```math
 a_k
 =
-\frac{\text{correct predictions on client }k}
-{n_k^{\mathrm{test}}}.
+\frac{c_k}{n_k^{\mathrm{test}}}.
 ```
 
 Mean client accuracy is
@@ -864,30 +846,22 @@ J
 {K\sum_{k=1}^{K}a_k^2}.
 ```
 
-`J` approaches `1` when performance is distributed more evenly across clients.
-
 #### Worked Jain-index calculation
 
-For three clients with accuracies `0.80`, `0.70`, and `0.60`,
+For client accuracies `0.80`, `0.70`, and `0.60`,
 
 ```math
 J
 =
 \frac{(0.80+0.70+0.60)^2}
-{3(0.80^2+0.70^2+0.60^2)}.
-```
-
-Therefore,
-
-```math
-J
+{3(0.80^2+0.70^2+0.60^2)}
 =
 \frac{4.41}{4.47}
 \approx
 0.9866.
 ```
 
-A high Jain index does **not** mean the absolute accuracy is high; it only indicates that the client accuracies are comparatively even.
+A high Jain index does not mean the absolute accuracy is high; it indicates that client accuracies are comparatively even.
 
 The runtime also reports median, p10, worst-client, best-client, standard deviation, range, and client-level loss statistics.
 
@@ -1144,7 +1118,7 @@ Local-backend pause/resume is communication-round-boundary safe. Checkpoint SHA-
 - CMake
 - C++20 compiler
 - Go toolchain
-- Protocol Buffers/gRPC development dependencies for direct native builds
+- Protocol Buffers/gRPC development dependencies when building native RPC components directly
 
 Clone:
 
@@ -1241,7 +1215,7 @@ python main.py --cli \
 | CIFAR-10 | 50,000 | 10,000 | 10 | 3 |
 | CIFAR-100 | 50,000 | 10,000 | 100 | 3 |
 
-MNIST and FashionMNIST are resized to `32x32`, allowing the same GroupNorm CNN family to be used while selecting the correct classifier output dimension.
+MNIST and FashionMNIST are resized to `32x32` so the root runtime can use the same GroupNorm CNN family while selecting the appropriate classifier output dimension.
 
 ---
 
@@ -1370,13 +1344,13 @@ The development stack includes:
 
 The distributed runtime includes execution persistence/reconciliation, worker identity, signed-message validation, replay protection, secure-aggregation components, deterministic fault/heterogeneity simulation, distributed metrics, and release-validation infrastructure.
 
-A distributed-platform result and a root-simulator result remain different runtime identities even when they use the same algorithm name.
+A distributed-platform result and a root-simulator result are different runtime identities even when they use the same algorithm name.
 
 ---
 
 ## 17. Developer workflow
 
-Before modifying a component, answer three questions:
+Before changing a component, answer three questions:
 
 1. Which runtime owns the behavior?
 2. What invariant must remain true?
