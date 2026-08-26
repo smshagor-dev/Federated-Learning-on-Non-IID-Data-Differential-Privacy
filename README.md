@@ -21,6 +21,8 @@ The project deliberately keeps implementation claims narrow. A capability is des
 **Source version:** `3.0.0`  
 **Primary themes:** Federated Learning · Non-IID Data · Differential Privacy · Robust Aggregation · Secure Aggregation · Fairness · Reproducible Benchmarking · Distributed ML Systems
 
+> **Math rendering note:** all academic equations in this README use renderer-independent Unicode notation inside plain text blocks. No MathJax or LaTeX renderer is required, so the formulas remain readable on GitHub web, mobile, cloned Markdown viewers, and plain-text environments.
+
 ---
 
 ## Contents
@@ -63,7 +65,7 @@ The project is useful for four classes of questions:
 
 1. **Utility** — how well does a shared model learn under heterogeneous client data?
 2. **Privacy** — what utility is lost when client updates are clipped and randomized under a defined privacy mechanism?
-3. **Reliability and security** — what happens when workers are delayed, duplicated, unavailable, replayed, or adversarial?
+3. **Reliability and security** — what happens when workers are delayed, duplicated, unavailable, replayed, dropped, or adversarial?
 4. **Reproducibility** — can every reported result be tied to an exact configuration, seed, partition, commit, privacy budget, and artifact set?
 
 The repository is not one monolithic simulator. It intentionally contains two runtime identities with different scopes.
@@ -80,7 +82,7 @@ The root runtime is the shortest path from an experiment idea to a reproducible 
 python main.py --cli
 ```
 
-It performs real PyTorch training on torchvision datasets and provides deterministic client partitioning, FedAvg/FedProx/SCAFFOLD, supported client-level differential privacy, held-out client evaluation, fairness metrics, checkpoints, manifests, and multi-seed benchmark execution.
+It performs real PyTorch training on torchvision datasets and provides deterministic client partitioning, FedAvg/FedProx/SCAFFOLD, supported client-level differential privacy, held-out client evaluation, fairness metrics, checkpoints, manifests, plots, and multi-seed benchmark execution.
 
 Primary areas:
 
@@ -182,169 +184,115 @@ Advanced code outside the stable release contract is listed explicitly under [Kn
 
 ## 4. Mathematical formulation
 
+The equations below are written in renderer-independent notation. Subscripts use `_`, superscripts are written descriptively, and Greek symbols use Unicode.
+
 ### 4.1 Client datasets
 
-Assume there are $K$ clients. Client $k$ owns a local dataset
+Assume there are `K` clients. Client `k` owns dataset `D_k` with `n_k` examples.
 
-$$
-\mathcal{D}_k = \{(x_i,y_i)\}_{i=1}^{n_k},
-$$
+```text
+D_k = {(x_i, y_i) : i = 1, ..., n_k}
 
-where
+n_k = |D_k|
+```
 
-$$
-n_k = |\mathcal{D}_k|.
-$$
+For model parameters `w`, the local empirical objective is:
 
-For model parameters $w \in \mathbb{R}^d$, the local empirical objective is
+```text
+F_k(w) = (1 / n_k) · Σ_(x,y ∈ D_k) ℓ(w; x, y)
+```
 
-$$
-F_k(w)
-=
-\frac{1}{n_k}
-\sum_{(x,y)\in\mathcal{D}_k}
-\ell(w;x,y),
-$$
-
-where $\ell$ is the task loss.
+Here `ℓ` is the task loss.
 
 ### 4.2 Global federated objective
 
-A standard federated objective is
+The global objective combines local client objectives using non-negative client weights.
 
-$$
-\min_w F(w),
-$$
+```text
+minimize_w  F(w)
 
-with
+F(w) = Σ_(k=1..K) p_k · F_k(w)
 
-$$
-F(w)
-=
-\sum_{k=1}^{K} p_k F_k(w),
-$$
+p_k ≥ 0
+Σ_(k=1..K) p_k = 1
+```
 
-subject to
+Sample-count weighting:
 
-$$
-p_k \ge 0,
-\qquad
-\sum_{k=1}^{K}p_k = 1.
-$$
+```text
+p_k = n_k / Σ_(j=1..K) n_j
+```
 
-For sample-count weighting,
+Uniform client weighting:
 
-$$
-p_k
-=
-\frac{n_k}{\sum_{j=1}^{K}n_j}.
-$$
+```text
+p_k = 1 / K
+```
 
-For uniform client weighting,
-
-$$
-p_k = \frac{1}{K}.
-$$
-
-The runtime configuration decides which weighting rule is valid for a specific experiment. This is not only an optimization choice: weighting also affects the sensitivity assumptions of a private release.
+The runtime configuration decides which weighting rule is valid for a specific experiment. This is also relevant to privacy because weighting changes the sensitivity of the released aggregate.
 
 ### 4.3 One communication round
 
-At communication round $t$:
+At communication round `t`:
 
-1. the server holds global parameters $w_t$;
-2. a client subset $S_t$ is selected;
-3. each selected client trains from $w_t$;
-4. client $k$ returns an update $\Delta_{k,t}$;
+1. the server holds global parameters `w_t`;
+2. a client subset `S_t` is selected;
+3. each selected client trains from `w_t`;
+4. client `k` returns update `Δ_(k,t)`;
 5. the server validates, optionally clips/transforms, aggregates, and applies the update;
-6. the next model $w_{t+1}$ is produced.
+6. the next model `w_(t+1)` is produced.
 
-A generic server update can be written as
+A generic server update is:
 
-$$
-w_{t+1}
-=
-w_t
-+
-\eta_s A_t,
-$$
+```text
+w_(t+1) = w_t + η_s · A_t
+```
 
-where $\eta_s$ is the server step size and $A_t$ is the accepted aggregate update.
+where `η_s` is the server step size and `A_t` is the accepted aggregate update.
 
 ---
 
 ## 5. Federated algorithms
 
-## 5.1 FedAvg
+### 5.1 FedAvg
 
-Let client $k$ start round $t$ from $w_t$. One local SGD step is
+A local SGD step for client `k` can be written as:
 
-$$
-w_{k,t}^{(e+1)}
-=
-w_{k,t}^{(e)}
--
-\eta_k
-\nabla \ell_k\!\left(w_{k,t}^{(e)};B_{k,e}\right),
-$$
+```text
+w_(k,t,e+1) = w_(k,t,e) - η_k · ∇ℓ_k(w_(k,t,e); B_(k,e))
+```
 
-where $B_{k,e}$ is a local mini-batch.
+After local training:
 
-After local training, define
+```text
+Δ_(k,t) = w_(k,t,local) - w_t
+```
 
-$$
-\Delta_{k,t}
-=
-w_{k,t}^{\text{local}} - w_t.
-$$
+For normalized aggregation weights `α_(k,t)`:
 
-For normalized weights $\alpha_{k,t}$,
+```text
+Σ_(k ∈ S_t) α_(k,t) = 1
 
-$$
-\sum_{k\in S_t}\alpha_{k,t}=1,
-$$
+A_t = Σ_(k ∈ S_t) α_(k,t) · Δ_(k,t)
 
-FedAvg forms
+w_(t+1) = w_t + η_s · A_t
+```
 
-$$
-A_t
-=
-\sum_{k\in S_t}
-\alpha_{k,t}\Delta_{k,t},
-$$
+With `η_s = 1`, this is equivalent to weighted averaging of the accepted local models.
 
-and updates
+### 5.2 FedProx
 
-$$
-w_{t+1}
-=
-w_t + \eta_s A_t.
-$$
+FedProx adds a proximal penalty that discourages excessive local movement away from the current global model.
 
-If $\eta_s=1$, this is equivalent to averaging the accepted local models under the same weights.
+```text
+Local objective:
+F_k(w) + (μ / 2) · ||w - w_t||²
 
-## 5.2 FedProx
+Gradient contribution:
+∇F_k(w) + μ · (w - w_t)
+```
 
-FedProx modifies each client objective by penalizing local movement away from the current global model:
-
-$$
-\min_w
-\left[
-F_k(w)
-+
-\frac{\mu}{2}\|w-w_t\|_2^2
-\right].
-$$
-
-Its gradient is
-
-$$
-\nabla F_k(w)
-+
-\mu(w-w_t).
-$$
-
-The coefficient $\mu\ge0$ controls the strength of the proximal constraint. When $\mu=0$, the local objective reduces to the ordinary local objective used by FedAvg-style training.
+`μ = 0` reduces the local objective to the ordinary FedAvg-style objective.
 
 Example:
 
@@ -354,125 +302,82 @@ algorithm:
   mu: 0.01
 ```
 
-## 5.3 SCAFFOLD
+### 5.3 SCAFFOLD
 
-SCAFFOLD introduces a server control variate $c$ and client control variate $c_k$ to reduce drift caused by heterogeneous client objectives.
+SCAFFOLD uses a server control variate `c` and a client control variate `c_k` to reduce drift under heterogeneous local objectives.
 
-A simplified corrected local step is
+```text
+w ← w - η · [∇F_k(w) - c_k + c]
+```
 
-$$
-w
-\leftarrow
-w
--
-\eta
-\left[
-\nabla F_k(w)-c_k+c
-\right].
-$$
+In the root runtime, SCAFFOLD is available only when root client-level DP is disabled. The additional control-variate state is outside the current root client-level privacy guarantee, so DP-enabled SCAFFOLD fails closed.
 
-The control variates are updated across communication rounds using the method's state-transition rules.
+### 5.4 FedSAM
 
-In this repository, root-runtime SCAFFOLD is available only when root client-level DP is disabled. The additional control-variate state is not included in the current root client-level privacy guarantee, so DP-enabled SCAFFOLD fails closed.
+FedSAM uses sharpness-aware local optimization.
 
-## 5.4 FedSAM
+```text
+g = ∇F_k(w)
 
-FedSAM combines federated optimization with sharpness-aware local training. A SAM-style inner perturbation may be written as
+ε = ρ · g / (||g||₂ + τ)
+```
 
-$$
-\epsilon
-=
-\rho
-\frac{g}{\|g\|_2+\tau},
-$$
+The gradient is then evaluated around the perturbed parameters `w + ε`. FedSAM belongs to the platform-worker capability surface rather than the root CLI algorithm set.
 
-where
+### 5.5 Ditto
 
-$$
-g = \nabla F_k(w),
-$$
+Ditto maintains a personalized model `v_k` for each client while retaining a shared global model `w`.
 
-$\rho$ controls perturbation radius, and $\tau>0$ avoids numerical division by zero.
+```text
+Personalized objective:
+F_k(v_k) + (λ / 2) · ||v_k - w||²
+```
 
-The gradient is then evaluated around the perturbed parameters $w+\epsilon$. In this repository FedSAM belongs to the platform-worker capability surface rather than the root CLI algorithm set.
+`λ` controls how strongly the personalized model is pulled toward the shared model.
 
-## 5.5 Ditto
+### 5.6 Per-FedAvg
 
-Ditto maintains a personalized model $v_k$ for each client while retaining a shared global model $w$.
+Per-FedAvg optimizes a shared initialization that can adapt quickly to a client.
 
-A common personalized objective is
+```text
+One local adaptation step:
+w'_k = w - α · ∇F_k(w)
+```
 
-$$
-\min_{v_k}
-\left[
-F_k(v_k)
-+
-\frac{\lambda}{2}
-\|v_k-w\|_2^2
-\right].
-$$
-
-The personalization coefficient $\lambda$ controls how strongly the client-specific model is pulled toward the shared model.
-
-## 5.6 Per-FedAvg
-
-Per-FedAvg is a personalization-oriented meta-learning method. At a high level, it optimizes a shared initialization so that a small number of client-local gradient steps yields a strong personalized model.
-
-For one local adaptation step,
-
-$$
-w'_k
-=
-w
--
-\alpha \nabla F_k(w),
-$$
-
-and the outer objective evaluates the adapted model $w'_k$.
-
-In this repository Per-FedAvg is part of the platform-worker capability surface rather than the root CLI algorithm set.
+The outer objective evaluates the adapted model `w'_k`. Per-FedAvg is part of the platform-worker capability surface rather than the root CLI algorithm set.
 
 ---
 
 ## 6. Non-IID data modeling
 
-Federated learning becomes non-IID when client distributions differ:
+Client data are non-IID when at least two clients have different joint data distributions.
 
-$$
-P_k(X,Y) \ne P_j(X,Y)
-\quad
-\text{for some } k\ne j.
-$$
+```text
+P_k(X, Y) ≠ P_j(X, Y)  for some k ≠ j
+```
 
-The root runtime implements several controlled heterogeneity models.
+### 6.1 IID partitioning
 
-## 6.1 IID partitioning
+The training index set is shuffled under the configured seed and distributed without intentionally conditioning on class label.
 
-Let the training dataset contain $N$ sample indices. IID partitioning shuffles the index set under the configured seed and allocates samples across clients without intentionally conditioning on class label.
+For approximately equal allocation:
 
-For approximately equal allocation,
+```text
+n_k ≈ N / K
+```
 
-$$
-n_k \approx \frac{N}{K}.
-$$
+### 6.2 Dirichlet label skew
 
-## 6.2 Dirichlet label skew
+For each class `c`, client proportions are sampled from a symmetric Dirichlet distribution.
 
-For class $c$, sample client proportions from
-
-$$
-(\pi_{1c},\ldots,\pi_{Kc})
-\sim
-\operatorname{Dirichlet}
-(\alpha,\ldots,\alpha).
-$$
-
-Class-$c$ examples are then allocated according to those proportions.
+```text
+(π_1c, ..., π_Kc) ~ Dirichlet(α, ..., α)
+```
 
 Interpretation:
 
-- large $\alpha$: proportions become more balanced;
-- small $\alpha$: class ownership becomes more concentrated.
+- larger `α` generally produces more balanced class proportions;
+- smaller `α` generally produces stronger class concentration.
 
 Example:
 
@@ -482,277 +387,122 @@ data:
   alpha: 0.1
 ```
 
-The configured $\alpha$ alone is not a complete description of the realized partition. For reproducible academic reporting, also preserve the exact partition artifact/hash.
+The configured `α` is not enough for reproducible reporting. The exact partition artifact and partition hash should also be retained.
 
-## 6.3 Pathological class skew
+### 6.3 Pathological class skew
 
-Samples are grouped or ordered by label, divided into shards, and assigned so each client receives a restricted class subset.
+Samples are grouped by label, divided into shards, and assigned so each client receives a restricted class subset.
 
-If each client receives at most $r$ dominant classes, then
-
-$$
-|\mathcal{C}_k| \le r,
-$$
-
-where $\mathcal{C}_k$ is the set of classes represented on client $k$.
-
-Example:
-
-```yaml
-data:
-  partition: pathological
-  classes_per_client: 2
+```text
+|C_k| ≤ r
 ```
 
-## 6.4 Quantity skew
+where `C_k` is the set of classes represented on client `k` and `r` is the configured class bound.
 
-Quantity skew changes how many training samples each client owns while leaving sample assignment label-agnostic.
+### 6.4 Quantity skew
 
-A common weight model is log-normal:
+Quantity skew changes how many examples each client owns while keeping assignment label-agnostic.
 
-$$
-z_k \sim \mathcal{N}(0,\sigma_q^2),
-$$
+A common interpretation of the implemented log-normal weighting scheme is:
 
-$$
-q_k = e^{z_k},
-$$
+```text
+z_k ~ LogNormal(0, σ_q²)
 
-$$
-p_k
-=
-\frac{q_k}{\sum_{j=1}^{K}q_j}.
-$$
+q_k = z_k / Σ_j z_j
 
-Client counts are then derived approximately from
-
-$$
-n_k \approx N p_k,
-$$
-
-with deterministic integer corrections and minimum-size constraints.
-
-Example:
-
-```yaml
-data:
-  partition: quantity_skew
-  quantity_skew_sigma: 1.0
+n_k ≈ N · q_k
 ```
 
-## 6.5 Partition diagnostics
+Larger `σ_q` increases imbalance in client sample counts.
 
-The runtime records realized partition statistics rather than relying only on configuration labels.
+### 6.5 Realized heterogeneity evidence
 
-### Quantity coefficient of variation
+The runtime archives more than the requested partition parameters. The partition manifest records evidence such as:
 
-For client sample counts $n_1,\ldots,n_K$,
+- per-client sample counts
+- per-client label histograms
+- partition SHA-256
+- quantity coefficient of variation
+- normalized label entropy
+- Jensen-Shannon divergence
+- class coverage
+- effective label count
 
-$$
-\bar n
-=
-\frac{1}{K}
-\sum_{k=1}^{K}n_k,
-$$
-
-and
-
-$$
-\operatorname{CV}
-=
-\frac{s_n}{\bar n},
-$$
-
-where $s_n$ is the sample standard deviation of client counts.
-
-### Label entropy
-
-For a client label distribution $p_{k,c}$,
-
-$$
-H_k
-=
--
-\sum_c
-p_{k,c}\log p_{k,c}.
-$$
-
-A normalized version can be written as
-
-$$
-H_k^{\text{norm}}
-=
-\frac{H_k}{\log C},
-$$
-
-where $C$ is the number of classes.
-
-### Jensen-Shannon divergence
-
-For client distribution $P_k$ and a reference distribution $Q$,
-
-$$
-M
-=
-\frac{P_k+Q}{2},
-$$
-
-$$
-\operatorname{JSD}(P_k\|Q)
-=
-\frac{1}{2}\operatorname{KL}(P_k\|M)
-+
-\frac{1}{2}\operatorname{KL}(Q\|M).
-$$
-
-These realized metrics make the concrete heterogeneity auditable.
+This matters because two experiments can use the same nominal `α` or `σ_q` and still realize different concrete partitions when the seed or implementation changes.
 
 ---
 
 ## 7. Differential privacy
 
-The root private path implements a trusted-server client-level central-DP design for supported combinations.
+The root private path uses trusted-server **client-level central differential privacy** for qualified FedAvg/FedProx configurations.
 
-The important privacy unit is the **client contribution**, not an individual training example.
+### 7.1 Neighboring relation
 
-## 7.1 Neighboring relation
+The privacy unit is a whole client. Two neighboring datasets differ by the presence or absence of one client's complete contribution under the qualified sampling and weighting assumptions.
 
-A client-level neighboring relation compares two federated populations that differ by one client's contribution under the mechanism's stated adjacency model.
+This is not sample-level DP.
 
-A mechanism $M$ is $(\varepsilon,\delta)$-differentially private when, for every measurable output set $O$ and neighboring datasets $D\sim D'$,
+### 7.2 Client-update clipping
 
-$$
-\Pr[M(D)\in O]
-\le
- e^{\varepsilon}
-\Pr[M(D')\in O]
-+
-\delta.
-$$
+For client update `Δ_k` and clipping threshold `C`:
 
-Privacy claims are meaningful only together with the exact adjacency definition, sampling model, clipping rule, weighting rule, release count, and accountant.
+```text
+Δ̃_k = Δ_k · min(1, C / ||Δ_k||₂)
+```
 
-## 7.2 Client-update clipping
+Therefore:
 
-Let $\Delta_k$ be a complete client update and $C>0$ the clipping bound.
+```text
+||Δ̃_k||₂ ≤ C
+```
 
-The clipped update is
+Clipping limits the maximum contribution of a single accepted client to the private aggregation mechanism.
 
-$$
-\widetilde{\Delta}_k
-=
-\Delta_k
-\cdot
-\min\left(
-1,
-\frac{C}{\|\Delta_k\|_2}
-\right).
-$$
+### 7.3 Gaussian mechanism
 
-Therefore
+The clipped aggregate is randomized with Gaussian noise. Conceptually:
 
-$$
-\|\widetilde{\Delta}_k\|_2 \le C.
-$$
+```text
+Z ~ Normal(0, σ² · sensitivity² · I)
 
-Clipping limits the influence of any one accepted client contribution under the mechanism's assumptions.
+released_update = clipped_aggregate + Z
+```
 
-## 7.3 Private aggregate
+The exact sensitivity and scaling depend on the qualified runtime's sampling and weighting semantics. The effective runtime configuration should be treated as the source of truth for a reported experiment.
 
-A generic private release can be written as
+### 7.4 Poisson client sampling
 
-$$
-M_t
-=
-\operatorname{Agg}
-\left(
-\widetilde{\Delta}_{k,t}:k\in S_t
-\right)
-+
-Z_t,
-$$
+For client `k` at round `t`:
 
-where
+```text
+I_(k,t) ~ Bernoulli(q)
+```
 
-$$
-Z_t
-\sim
-\mathcal{N}
-\left(
-0,
-\Sigma_t
-\right).
-$$
+where `q` is the configured client sample rate.
 
-The exact covariance/noise scale is mechanism-dependent and must match the sensitivity, aggregation weighting, sampling model, and accountant used by the runtime. It should not be reconstructed from this README alone when reporting a privacy result; use the effective runtime configuration and summary artifacts.
+The release-qualified root DP path uses Poisson client sampling and uniform client weighting.
 
-## 7.4 Poisson client sampling
+### 7.5 RDP composition
 
-For Poisson client sampling with sampling probability $q$,
+Rényi Differential Privacy costs compose additively over releases at a fixed order `r`:
 
-$$
-I_{k,t}
-\sim
-\operatorname{Bernoulli}(q),
-$$
+```text
+RDP_total(r) = Σ_t RDP_t(r)
+```
 
-and
+The final `(ε, δ)` guarantee is obtained by converting the composed RDP curve and choosing the best supported order.
 
-$$
-S_t
-=
-\{k:I_{k,t}=1\}.
-$$
+A common conversion form is:
 
-The realized number of selected clients is random.
+```text
+ε(δ) = min_r [ RDP_total(r) + log(1 / δ) / (r - 1) ]
+```
 
-This distinction matters because privacy amplification depends on the actual sampling model.
+The runtime accountant implementation, not this README summary, is authoritative for the actual reported value.
 
-## 7.5 Rényi Differential Privacy accounting
+### 7.6 Target-epsilon calibration
 
-For Rényi order $\alpha>1$, let the per-round RDP cost be
-
-$$
-\varepsilon_{\mathrm{RDP},t}(\alpha).
-$$
-
-RDP composes additively across releases:
-
-$$
-\varepsilon_{\mathrm{RDP,total}}(\alpha)
-=
-\sum_{t=1}^{T}
-\varepsilon_{\mathrm{RDP},t}(\alpha).
-$$
-
-Conversion to an $(\varepsilon,\delta)$ bound uses an order search of the form
-
-$$
-\varepsilon(\delta)
-=
-\min_{\alpha>1}
-\left[
-\varepsilon_{\mathrm{RDP,total}}(\alpha)
-+
-\frac{\log(1/\delta)}{\alpha-1}
-\right],
-$$
-
-subject to the exact accountant implementation.
-
-## 7.6 Target-epsilon calibration
-
-When a target privacy budget $\varepsilon^*$ is configured, the runtime calibrates the Gaussian noise multiplier $\sigma$ so that
-
-$$
-\varepsilon(\sigma;q,T,\delta)
-\le
-\varepsilon^*.
-$$
-
-In practice this is solved numerically because the accountant is not a simple linear function of $\sigma$.
-
-Example:
+If a target privacy budget is requested, the runtime solves for a noise multiplier that satisfies the target under the effective sample rate, release count, clipping assumptions, and target `δ`.
 
 ```yaml
 dp:
@@ -772,249 +522,148 @@ python scripts/calibrate_client_level_dp.py \
   --delta 1e-5
 ```
 
-The effective runtime parameters are written to:
-
-```text
-results/_effective_runtime_config.yaml
-```
-
-If a manual noise multiplier is supplied, the effective configuration clears the target-epsilon claim rather than implying that the configured target was enforced.
+When `--noise` is supplied manually, the effective configuration clears `target_epsilon` so the output does not imply that a target budget was enforced.
 
 ---
 
 ## 8. Secure and robust aggregation
 
-Secure aggregation and robust aggregation solve different problems.
+Privacy, confidentiality, and Byzantine robustness are different properties. The platform keeps those boundaries explicit.
 
-- **Secure aggregation** hides individual contributions from the aggregator under protocol assumptions.
-- **Robust aggregation** attempts to reduce the effect of malformed or adversarial values on the aggregate.
-- **Differential privacy** controls information leakage from a randomized release.
+### 8.1 Pairwise-mask secure aggregation intuition
 
-None of the three should be treated as a substitute for the others.
+For a pairwise-mask construction, worker `i` sends a masked vector `y_i`:
 
-## 8.1 Pairwise-mask cancellation
+```text
+y_i = x_i
+      + Σ_(j > i) r_ij
+      - Σ_(j < i) r_ji
+```
 
-A simplified secure-aggregation construction assigns antisymmetric pairwise masks:
+Across all workers, pairwise masks cancel:
 
-$$
-m_{ij} = -m_{ji}.
-$$
+```text
+Σ_i y_i = Σ_i x_i
+```
 
-Client $i$ submits
+The coordinator can recover the aggregate without requiring each individual plaintext update to be directly stored by the aggregation layer under the protocol assumptions.
 
-$$
-y_i
-=
-x_i
-+
-\sum_{j\ne i}m_{ij}.
-$$
+### 8.2 Threshold recovery
 
-Summing all submitted masked vectors gives
+The recovery subsystem uses Shamir secret sharing for recovery material.
 
-$$
-\sum_i y_i
-=
-\sum_i x_i
-+
-\sum_i\sum_{j\ne i}m_{ij}.
-$$
+A secret `s` is represented as the constant term of a random polynomial:
 
-Because each pair cancels,
+```text
+f(z) = s + a_1 z + a_2 z² + ... + a_(t-1) z^(t-1)
+```
 
-$$
-m_{ij}+m_{ji}=0,
-$$
+Share `i` is:
 
-so ideally
+```text
+(i, f(i))
+```
 
-$$
-\sum_i y_i
-=
-\sum_i x_i.
-$$
+Any valid threshold set can reconstruct `s = f(0)` using Lagrange interpolation. Fewer than the threshold number of shares are insufficient in the ideal Shamir model.
 
-This cancellation identity is the core mathematical intuition; the implemented protocol adds authentication, session binding, replay controls, roster checks, and failure-state handling around it.
+The platform's threshold dropout recovery remains an explicitly bounded/experimental surface rather than a production-grade stable capability.
 
-## 8.2 Threshold recovery with Shamir sharing
+### 8.3 Coordinate-wise median
 
-For threshold $t$ over a finite field $\mathbb{F}_p$, encode secret $s$ as the constant term of a random polynomial
+For coordinate `j`, robust median aggregation computes:
 
-$$
-f(x)
-=
-s
-+
-a_1x
-+
-\cdots
-+
-a_{t-1}x^{t-1}
-\pmod p.
-$$
+```text
+x̂_j = median(x_1j, x_2j, ..., x_mj)
+```
 
-Holder $i$ receives a share
+This can reduce the influence of extreme coordinate outliers.
 
-$$
-(i,f(i)).
-$$
+### 8.4 Trimmed mean
 
-Given any $t$ valid shares, reconstruct
+Sort coordinate `j` across `m` client updates:
 
-$$
-s=f(0)
-=
-\sum_{i\in T}
- f(i)\lambda_i
-\pmod p,
-$$
+```text
+x_(1)j ≤ x_(2)j ≤ ... ≤ x_(m)j
+```
 
-where the Lagrange coefficient is
+Remove the `b` smallest and `b` largest values:
 
-$$
-\lambda_i
-=
-\prod_{j\in T,\,j\ne i}
-\frac{-j}{i-j}
-\pmod p.
-$$
+```text
+x̂_j = [1 / (m - 2b)] · Σ_(i=b+1..m-b) x_(i)j
+```
 
-The repository contains threshold-recovery engineering paths, but production-grade threshold secure-aggregation dropout recovery is intentionally not promoted as stable v3 support.
-
-## 8.3 Coordinate-wise median
-
-Given $m$ client vectors $x_1,\ldots,x_m \in \mathbb{R}^d$, coordinate-wise median returns
-
-$$
-\widehat{x}_j
-=
-\operatorname{median}
-\{x_{1,j},\ldots,x_{m,j}\}.
-$$
-
-Median aggregation can reduce the influence of extreme coordinate outliers, but it is not automatically compatible with every DP, secure-aggregation, or asynchronous protocol.
-
-## 8.4 Trimmed mean
-
-For coordinate $j$, sort
-
-$$
-x_{(1),j}
-\le
-\cdots
-\le
-x_{(m),j}.
-$$
-
-After removing the $b$ smallest and $b$ largest values,
-
-$$
-\widehat{x}_j
-=
-\frac{1}{m-2b}
-\sum_{i=b+1}^{m-b}
-x_{(i),j},
-$$
-
-provided
-
-$$
-m>2b.
-$$
-
-The v3 stable contract validates median and trimmed mean only for supported non-private synchronous execution. Combined robust aggregation + DP and robust aggregation + secure aggregation are not generally claimed as stable combinations.
+The stable v3 contract qualifies median and trimmed mean only for supported non-private synchronous execution. Robust aggregation combined with DP or secure aggregation is not generally claimed as release-qualified.
 
 ---
 
 ## 9. Client-level evaluation and fairness
 
-A high global test accuracy can hide clients with poor performance. The root runtime therefore evaluates the final global model on a held-out client view constructed only from the official dataset test split.
+Global test accuracy can hide large differences between clients. The root runtime therefore builds a held-out client view using only the official test split.
 
-## 9.1 Matched held-out partition
+### 9.1 Held-out partition construction
 
-The process is:
+After training:
 
-1. train using the official training split only;
-2. measure each class's realized allocation across training clients;
-3. allocate official test examples according to those realized class proportions;
-4. use deterministic integer allocation;
-5. assign each test example exactly once;
-6. avoid duplicate test examples;
-7. apply minimal deterministic redistribution only when needed to avoid empty held-out clients.
+1. the official test split is loaded;
+2. the realized per-class training allocation is measured;
+3. each test class is distributed across clients according to those realized proportions;
+4. integer allocation is deterministic;
+5. every test example is assigned exactly once;
+6. test examples are not duplicated;
+7. minimal deterministic redistribution prevents empty client evaluation sets when necessary.
 
-No training example is reused for held-out evaluation.
+No training sample is reused for held-out evaluation.
 
-## 9.2 Client accuracy
+### 9.2 Client metrics
 
-For client $k$, let
+For client `k`:
 
-$$
-a_k
-=
-\frac{c_k}{n_k^{\text{test}}},
-$$
+```text
+a_k = correct_predictions_k / n_test_k
+```
 
-where $c_k$ is the number of correct predictions and $n_k^{\text{test}}$ is the held-out client sample count.
+Mean client accuracy:
 
-The unweighted mean client accuracy is
+```text
+mean_accuracy = (1 / K) · Σ_k a_k
+```
 
-$$
-\bar a
-=
-\frac{1}{K}
-\sum_{k=1}^{K}a_k.
-$$
+Held-out sample-weighted client accuracy:
 
-The held-out sample-weighted accuracy is
+```text
+weighted_accuracy = [Σ_k n_test_k · a_k] / [Σ_k n_test_k]
+```
 
-$$
-a_{\text{weighted}}
-=
-\frac{
-\sum_{k=1}^{K}
- n_k^{\text{test}}a_k
-}{
-\sum_{k=1}^{K}
- n_k^{\text{test}}
-}.
-$$
+Because the held-out client partitions form an exact non-overlapping cover of the official test set, the runtime validates consistency between weighted client accuracy and global test accuracy.
 
-Because the client test partitions form an exact non-overlapping cover of the official test set, the runtime checks consistency between this weighted value and global test accuracy.
+### 9.3 Jain fairness index
 
-## 9.3 Jain fairness index
+For non-negative client accuracies:
 
-For non-negative client accuracies,
-
-$$
-J(a_1,\ldots,a_K)
-=
-\frac{
-\left(\sum_{k=1}^{K}a_k\right)^2
-}{
-K\sum_{k=1}^{K}a_k^2
-}.
-$$
+```text
+J = (Σ_k a_k)² / [K · Σ_k a_k²]
+```
 
 Interpretation:
 
-- $J\approx1$: client performance is comparatively even;
-- smaller $J$: performance is more concentrated on a subset of clients.
+- `J` near `1` indicates comparatively even performance across clients;
+- a smaller value indicates stronger concentration of performance on a subset of clients.
 
-A fairness analysis should not rely on Jain's index alone. The runtime also reports median, p10, worst-client, best-client, standard deviation, range, and corresponding loss statistics.
+The runtime also reports median, p10, worst-client, best-client, standard deviation, range, and client-level loss statistics. Jain's index is not used as the only fairness measure.
 
 ---
 
 ## 10. Benchmark statistics
 
-The benchmark runner executes each benchmark cell in a fresh process and preserves exact per-cell evidence.
+The benchmark runner executes each cell in a fresh process and preserves exact per-cell evidence.
 
-Plan only:
+Dry run:
 
 ```bash
 python scripts/run_benchmark_matrix.py --dry-run
 ```
 
-Example execution:
+Example:
 
 ```bash
 python scripts/run_benchmark_matrix.py \
@@ -1028,141 +677,94 @@ python scripts/run_benchmark_matrix.py \
   --resume
 ```
 
-A benchmark condition normally requires multiple independent seeds. Release qualification uses an explicit five-seed baseline.
+### 10.1 Mean and sample standard deviation
 
-## 10.1 Mean
+For observations `x_1 ... x_n`:
 
-For observations $x_1,\ldots,x_n$,
+```text
+x̄ = (1 / n) · Σ_i x_i
 
-$$
-\bar x
-=
-\frac{1}{n}
-\sum_{i=1}^{n}x_i.
-$$
+s = sqrt( [1 / (n - 1)] · Σ_i (x_i - x̄)² )
+```
 
-## 10.2 Sample standard deviation
+### 10.2 Matched-seed differences
 
-$$
-s
-=
-\sqrt{
-\frac{1}{n-1}
-\sum_{i=1}^{n}
-(x_i-\bar x)^2
-}.
-$$
+When algorithms A and B use the same seeds and concrete partitions:
 
-## 10.3 Matched-seed differences
+```text
+d_i = x_i(A) - x_i(B)
 
-When algorithms A and B use the same seeds and concrete partitions,
+d̄ = (1 / n) · Σ_i d_i
+```
 
-$$
-d_i
-=
-x_i^{(A)}-x_i^{(B)}.
-$$
+Paired standardized effect size:
 
-The mean paired difference is
+```text
+d_z = d̄ / s_d
+```
 
-$$
-\bar d
-=
-\frac{1}{n}
-\sum_{i=1}^{n}d_i.
-$$
+where `s_d` is the sample standard deviation of the paired differences.
 
-## 10.4 Cohen's paired effect size
+### 10.3 Bootstrap confidence intervals
 
-Cohen's $d_z$ is
+The benchmark layer resamples seed-level observations with replacement under a deterministic bootstrap seed and records percentile-bootstrap confidence intervals.
 
-$$
-d_z
-=
-\frac{\bar d}{s_d},
-$$
+The independent observation unit is the experiment seed/cell result, not an individual communication round.
 
-where $s_d$ is the sample standard deviation of the paired differences.
+### 10.4 Paired sign-flip test
 
-## 10.5 Bootstrap confidence intervals
+Under the paired null model:
 
-The benchmark aggregation layer uses deterministic percentile-bootstrap confidence intervals by resampling seed-level observations with replacement under a controlled bootstrap seed.
+```text
+d*_i = s_i · d_i
 
-For bootstrap replicate $b$,
-
-$$
-\bar x^{*(b)}
-=
-\frac{1}{n}
-\sum_{i=1}^{n}
-x_{i_b}^{*}.
-$$
-
-Percentiles of the bootstrap replicate distribution form the reported interval.
-
-The independent unit is the configured seed/cell observation, not repeated communication rounds from the same run.
-
-## 10.6 Paired sign-flip test
-
-For paired differences $d_i$, generate null replicates using
-
-$$
-d_i^*
-=
-s_i d_i,
-\qquad
-s_i\in\{-1,+1\}.
-$$
+s_i ∈ {-1, +1}
+```
 
 The observed paired statistic is compared with the sign-flipped null distribution.
 
-## 10.7 Holm-Bonferroni correction
+### 10.5 Holm-Bonferroni control
 
-Sort $m$ raw p-values:
+For ordered p-values:
 
-$$
-p_{(1)}
-\le
-p_{(2)}
-\le
-\cdots
-\le
-p_{(m)}.
-$$
+```text
+p_(1) ≤ p_(2) ≤ ... ≤ p_(m)
+```
 
-At ordered position $i$, compare against
+The sequential threshold is:
 
-$$
-\frac{\alpha}{m-i+1}.
-$$
+```text
+α / (m - i + 1)
+```
 
-This controls family-wise error more carefully than reporting a large matrix of uncorrected p-values.
+The benchmark output records adjusted values rather than presenting a large family of uncorrected significance claims.
 
-## 10.8 Reproducibility identity
+### 10.6 Reproducibility identity
 
-A meaningful benchmark cell should retain at least:
+A publishable benchmark result should retain at least:
 
-- runtime identity: `root-simulator` or `distributed-platform`
-- source commit SHA
+- runtime identity (`root-simulator` or `distributed-platform`)
+- exact source commit SHA
 - effective configuration
 - dataset and official split identity
-- partition strategy and parameters
+- partition method and parameters
 - random seed
 - exact partition hash
-- algorithm and algorithm parameters
-- rounds and local epochs
-- sampling strategy
-- privacy parameters and accountant result
-- final model checkpoint
-- machine-readable result summary
+- algorithm and parameters
+- rounds/local epochs/batch size
+- client sampling strategy and rate
+- aggregation weighting
+- privacy inputs and accountant output
+- final checkpoint
+- result summary
 
-Configuration alone is not sufficient evidence. The exact realized partition and exact source state matter.
+Configuration alone is not sufficient evidence.
 
 ---
 
 ## 11. Architecture
 
-## 11.1 Root runtime
+### 11.1 Root runtime
 
 ```text
 main.py
@@ -1186,54 +788,50 @@ main.py
   |
   +--> final global model checkpoint
   |
-  +--> matched held-out client partition
-  |      +--> official test split only
-  |      +--> training-derived class allocation proportions
+  +--> held-out client partition
   |
   +--> client accuracy / loss / fairness metrics
   |
   +--> summary.md + summary.json
 ```
 
-## 11.2 Distributed platform
+### 11.2 Distributed platform
 
 ```text
-                   +-------------------------+
-                   |     Go Control Plane    |
-                   | execution lifecycle/API |
-                   +-----------+-------------+
-                               |
-                            gRPC
-                               |
-                   +-----------v-------------+
-                   |     C++20 Coordinator   |
-                   | aggregation / sessions  |
-                   +-----------+-------------+
-                               |
-                         gRPC / protobuf
-                               |
-                   +-----------v-------------+
-                   |    Python ML Workers    |
-                   | training / privacy      |
-                   +-------------------------+
+                         +-----------------------+
+                         |   Control / clients   |
+                         +-----------+-----------+
+                                     |
+                                REST / API
+                                     |
+                         +-----------v-----------+
+                         |   Go Control Plane    |
+                         | execution lifecycle   |
+                         +-----+-------------+---+
+                               |             |
+                            gRPC|             | persistence
+                               |             |
+                    +----------v---+     +---v------------------+
+                    | C++20        |     | PostgreSQL / Redis   |
+                    | Coordinator  |     | MinIO / MLflow       |
+                    +------+-------+     +----------------------+
+                           |
+                       gRPC / protobuf
+                           |
+                    +------v----------------+
+                    | Python ML Worker(s)   |
+                    | training / privacy    |
+                    +-----------------------+
 
-Persistence / services: PostgreSQL, Redis, MinIO, MLflow
-Observability: Prometheus, Grafana, OpenTelemetry
-Security: mTLS identities, signed messages, replay protection
+Observability: Prometheus + Grafana + OpenTelemetry
+Security: mTLS identity + signed messages + replay protection
 ```
 
-## 11.3 Execution lifecycle
+### 11.3 Execution lifecycle
 
-The Go API maintains durable execution records under `/api/v1/executions`.
+The Go control plane maintains durable execution records under `/api/v1/executions`. Reconciliation refreshes stable runtime state while avoiding races with active lifecycle transitions such as `STARTING`, `PAUSING`, `RESUMING`, and `CANCELING`.
 
-Runtime reconciliation refreshes stable executions while avoiding races with active lifecycle transitions such as:
-
-- `STARTING`
-- `PAUSING`
-- `RESUMING`
-- `CANCELING`
-
-Local-backend pause/resume is communication-round-boundary safe. Checkpoint SHA-256 sidecars detect changed or corrupted checkpoint bytes before restore. SHA-256 is an integrity check, not keyed authenticity against an actor who can replace both the checkpoint and its expected digest.
+Local-backend pause/resume is communication-round-boundary safe. Checkpoint SHA-256 sidecars detect changed or corrupted checkpoint bytes before restore. SHA-256 is an integrity check, not keyed authenticity against an actor able to replace both the checkpoint and expected digest.
 
 ---
 
@@ -1245,37 +843,35 @@ Local-backend pause/resume is communication-round-boundary safe. Checkpoint SHA-
 - Git
 - CPU or CUDA-capable PyTorch environment
 
-### Full platform development
+### Full platform development requirements
 
-Additionally:
-
-- Docker Engine or Docker Desktop with Compose
+- Docker Engine / Docker Desktop with Compose
 - CMake
-- a C++20 compiler
+- C++20 compiler
 - Go toolchain
-- protobuf/gRPC development dependencies when building native RPC components directly
+- Protocol Buffers/gRPC development dependencies when building native RPC components directly
 
-### Clone
+Clone:
 
 ```bash
 git clone https://github.com/smshagor-dev/Federated-Learning-on-Non-IID-Data-Differential-Privacy.git
 cd Federated-Learning-on-Non-IID-Data-Differential-Privacy
 ```
 
-### Root dependencies
+Root dependencies:
 
 ```bash
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Platform Python development package
+Platform development package:
 
 ```bash
 python -m pip install -e './python[dev,security]'
 ```
 
-### Platform runtime package
+Stable package runtime only:
 
 ```bash
 python -m pip install -e './python[security]'
@@ -1285,21 +881,19 @@ python -m pip install -e './python[security]'
 
 ## 13. Running experiments
 
-### Desktop UI
+Desktop UI:
 
 ```bash
 python main.py
 ```
 
-The desktop interface launches the same underlying experiment runtime used by CLI execution.
-
-### CLI default
+CLI default:
 
 ```bash
 python main.py --cli
 ```
 
-### MNIST + FedAvg + IID
+MNIST + FedAvg + IID:
 
 ```bash
 python main.py --cli \
@@ -1309,7 +903,7 @@ python main.py --cli \
   --dp off
 ```
 
-### FashionMNIST + FedProx + Dirichlet skew
+FashionMNIST + FedProx + Dirichlet skew:
 
 ```bash
 python main.py --cli \
@@ -1320,7 +914,7 @@ python main.py --cli \
   --dp off
 ```
 
-### CIFAR-100 + quantity skew
+CIFAR-100 + quantity skew:
 
 ```bash
 python main.py --cli \
@@ -1331,7 +925,7 @@ python main.py --cli \
   --dp off
 ```
 
-### CIFAR-10 + FedProx + client-level DP
+CIFAR-10 + FedProx + client-level DP:
 
 ```bash
 python main.py --cli \
@@ -1343,22 +937,22 @@ python main.py --cli \
   --rounds 50
 ```
 
-### Supported root datasets
+### Dataset reference
 
-| Dataset | Train samples | Test samples | Classes | Channels |
+| Dataset | Train | Test | Classes | Channels |
 |---|---:|---:|---:|---:|
 | MNIST | 60,000 | 10,000 | 10 | 1 |
 | FashionMNIST | 60,000 | 10,000 | 10 | 1 |
 | CIFAR-10 | 50,000 | 10,000 | 10 | 3 |
 | CIFAR-100 | 50,000 | 10,000 | 100 | 3 |
 
-MNIST and FashionMNIST are resized to `32x32` so the root runtime can use the same GroupNorm CNN family across the supported image workloads while selecting the correct classifier output dimension.
+MNIST and FashionMNIST are resized to `32x32` so the root runtime can use the same GroupNorm CNN family while selecting the appropriate classifier output dimension.
 
 ---
 
 ## 14. Configuration
 
-Primary root configuration file: [`config.yaml`](config.yaml)
+Primary configuration file: [`config.yaml`](config.yaml)
 
 Representative configuration:
 
@@ -1400,13 +994,13 @@ evaluation:
   eval_batch_size: 256
 ```
 
-Every root run writes the final effective configuration after CLI/config overrides to:
+Every root execution writes the final effective configuration after overrides to:
 
 ```text
 results/_effective_runtime_config.yaml
 ```
 
-For reporting, this effective configuration is more authoritative than the original YAML alone.
+For academic reporting, the effective runtime configuration is more important than the original YAML because it records the parameters actually executed.
 
 ---
 
@@ -1434,23 +1028,9 @@ results/
 └── generated plots
 ```
 
-The training partition manifest records, where applicable:
+`summary.json` is the machine-readable result interface consumed by benchmark tooling.
 
-- dataset identity
-- strategy and parameters
-- partition seed
-- partition SHA-256
-- per-client sample counts
-- per-client label histograms
-- quantity coefficient of variation
-- normalized label entropy
-- Jensen-Shannon divergence
-- class coverage
-- effective label count
-
-`summary.json` is the machine-readable interface consumed by benchmark tooling.
-
-### Benchmark directory
+Benchmark directory:
 
 ```text
 benchmarks/runs/<benchmark-id>/
@@ -1479,70 +1059,72 @@ Start the development topology with:
 docker compose -f infra/compose/docker-compose.dev.yml up --build
 ```
 
-The distributed development environment includes the components required by the current Compose/runtime contract, including the coordinator, API/control plane, Python worker path, persistence, tracking, and observability services.
+The development stack includes:
 
-The distributed runtime contains:
+- C++ gRPC coordinator
+- Go API/control plane
+- Python worker
+- Python command service
+- PostgreSQL
+- Redis
+- MinIO
+- MLflow
+- Prometheus
+- Grafana
+- OpenTelemetry Collector
 
-- execution persistence and reconciliation
-- worker identity
-- signed-message validation
-- replay protection
-- secure-aggregation components
-- failure and heterogeneity simulation
-- distributed metrics
-- observability integration
-- release-validation infrastructure
+The distributed runtime includes execution persistence/reconciliation, worker identity, signed-message validation, replay protection, secure-aggregation components, deterministic fault/heterogeneity simulation, distributed metrics, and release-validation infrastructure.
 
-Do not compare a `distributed-platform` result with a `root-simulator` result without recording the runtime identity. They are different execution systems even when algorithm names are the same.
+A distributed-platform result and a root-simulator result are different runtime identities even when they use the same algorithm name.
 
 ---
 
 ## 17. Developer workflow
 
-A contributor should be able to answer three questions before modifying a component:
+Before changing a component, answer three questions:
 
-1. Which runtime owns this behavior?
+1. Which runtime owns the behavior?
 2. What invariant must remain true?
-3. Which test or executable evidence demonstrates that invariant?
+3. Which executable test or evidence demonstrates that invariant?
 
-### Python tests
+Python tests:
 
 ```bash
 python -m pytest tests python/tests
 ```
 
-### Ruff
+Ruff:
 
 ```bash
 python -m ruff check .
 python -m ruff format --check .
 ```
 
-### Documentation/runtime validation
+Repository/runtime documentation validation:
 
 ```bash
 python scripts/validate_repository_docs.py
 ```
 
-### Baseline unittest target
+Baseline unittest:
 
 ```bash
 make test-baseline
 ```
 
-### Protocol contracts
+Protocol contracts:
 
 ```bash
 make proto-check
 ```
 
-### PKI validation
+PKI validation:
 
 ```bash
 make pki-verify
 ```
 
-### Go
+Go:
 
 ```bash
 cd go
@@ -1551,7 +1133,7 @@ go vet ./...
 go build ./...
 ```
 
-### C++ debug
+C++ Debug:
 
 ```bash
 cmake -S cpp -B build/cpp-debug -DCMAKE_BUILD_TYPE=Debug
@@ -1559,7 +1141,7 @@ cmake --build build/cpp-debug
 ctest --test-dir build/cpp-debug --output-on-failure
 ```
 
-### C++ release
+C++ Release:
 
 ```bash
 cmake -S cpp -B build/cpp-release -DCMAKE_BUILD_TYPE=Release
@@ -1567,68 +1149,72 @@ cmake --build build/cpp-release
 ctest --test-dir build/cpp-release --output-on-failure
 ```
 
-### Sanitizers
+Sanitizers:
 
 ```bash
 make cpp-asan
 make cpp-ubsan
 ```
 
-### Native formatting/static analysis
+Static analysis / formatting:
 
 ```bash
 make cpp-format-check
 make cpp-tidy
 ```
 
-### Native aggregation benchmark
+Native aggregation benchmark:
 
 ```bash
 make cpp-benchmark
 ```
 
-### Development rule
-
-If a change affects an algorithm, privacy mechanism, secure protocol, runtime state transition, dataset contract, or benchmark schema, update executable validation together with the implementation. Documentation-only support claims are not treated as runtime evidence.
+If a change affects an algorithm, privacy mechanism, secure protocol, runtime state transition, dataset contract, or benchmark schema, update its executable validation together with the implementation.
 
 ---
 
 ## 18. Validation and CI
 
-Repository CI covers more than unit tests. Depending on changed paths and workflow scope, validation includes:
+Repository CI covers substantially more than unit tests. Depending on path scope, validation includes:
 
 - Python tests
-- Ruff lint and format checks
-- type checking
-- Go tests, vet, and build
-- C++ debug/release builds
+- Ruff lint
+- Ruff format check
+- mypy
+- Go tests, race tests, vet, and build
+- C++ Debug and Release builds
 - CTest
 - clang-format
 - clang-tidy
 - AddressSanitizer
 - UndefinedBehaviorSanitizer
+- C++ gRPC build/tests
 - protobuf compatibility checks
 - PKI verification
-- secret/security checks
-- distributed runtime validation
+- secret scanning
+- security-runtime validation
+- Docker Compose validation
 - infrastructure validation
-- benchmark evidence validation
-- release qualification
-- supply-chain artifact validation
+- distributed runtime validation
+- benchmark evidence checks
+- ARM64 image validation
+- supply-chain validation
+- release-candidate validation
+- final release qualification
 
-A green individual job is not equivalent to a green release. Release qualification is bound to the exact commit SHA.
+A green individual job is not equivalent to a green release. Final release qualification is bound to the exact commit SHA.
 
 ---
 
 ## 19. v3.0.0 release qualification
 
-The source package reports:
+The Python package reports:
 
 ```text
 fl-platform == 3.0.0
 ```
 
-The final `v3.0.0` tag is publishable only when the **same tagged commit** has successful runs for all required release workflows:
+The final `v3.0.0` tag is publishable only when the same tagged commit has successful runs for:
 
 1. `ci.yml`
 2. `v3-release-candidate.yml`
@@ -1644,28 +1230,28 @@ The release-artifact workflow then:
 - resolves immutable image digests;
 - generates the release image lock;
 - renders digest-pinned deployment artifacts;
-- builds wheel and sdist artifacts;
+- builds wheel and source distribution artifacts;
 - creates a source archive;
 - generates CycloneDX SBOM data;
 - writes artifact SHA-256 metadata;
 - creates provenance attestations;
 - publishes the GitHub Release.
 
-### Empirical qualification baseline
+### Empirical release baseline
 
-The stable v3 contract includes a real five-seed root-runtime baseline:
+The stable v3 qualification includes a real five-seed root-runtime baseline:
 
 - runtime: `root-simulator`
 - dataset: MNIST
 - algorithm: FedAvg
 - partition: IID
-- privacy: non-private
+- privacy: disabled
 - seeds: `11, 23, 37, 53, 71`
 - qualification rounds: 1 per seed
 
-This qualifies the defined stable baseline. It does **not** imply that every algorithm × dataset × privacy × attack × heterogeneity combination has been exhaustively executed.
+This qualifies the defined stable baseline. It does not imply that every possible algorithm × dataset × privacy × attack × heterogeneity combination has been exhaustively executed.
 
-See [`RELEASE_NOTES_v3.0.0.md`](RELEASE_NOTES_v3.0.0.md) for the stable support contract and experimental boundaries.
+See [`RELEASE_NOTES_v3.0.0.md`](RELEASE_NOTES_v3.0.0.md) for stable support and explicit experimental boundaries.
 
 ---
 
@@ -1673,39 +1259,39 @@ See [`RELEASE_NOTES_v3.0.0.md`](RELEASE_NOTES_v3.0.0.md) for the stable support 
 
 This section is intentionally conservative.
 
-### Differential privacy does not imply secure aggregation
+### Differential privacy is not secure aggregation
 
-DP limits information leakage from a randomized release under a stated neighboring relation. It does not hide raw network messages before the private mechanism runs.
+Differential privacy limits information leakage from a randomized release under a stated neighboring relation. It does not automatically hide network messages before the mechanism is applied.
 
-### Secure aggregation does not imply differential privacy
+### Secure aggregation is not differential privacy
 
-Secure aggregation hides individual values from an aggregator under its protocol assumptions. An exact aggregate can still leak information, especially across repeated rounds or small cohorts.
+Secure aggregation hides individual contributions from an aggregator under protocol assumptions. An exact aggregate can still reveal information, especially over repeated rounds or small cohorts.
 
-### Secure aggregation does not stop poisoning
+### Secure aggregation is not poisoning defense
 
-A malicious authenticated client can still submit a harmful update. Robust aggregation, admission control, anomaly detection, and identity/trust policy address different parts of that problem.
+A cryptographically authenticated malicious client can still submit a harmful update. Robust aggregation, anomaly detection, admission control, and trust management address different risks.
 
 ### mTLS is not application authorization by itself
 
-mTLS authenticates transport peers. The platform additionally binds application messages to worker identity, signing-key state, session state, and replay state where required.
+mTLS authenticates the transport endpoint. The platform additionally binds application messages to identity/signing/replay state where required.
 
 ### Hashes are not keyed authentication
 
-SHA-256 artifact or checkpoint hashes detect changed bytes when the expected digest is trusted. They do not protect against an attacker able to replace both the content and the expected digest metadata.
+SHA-256 detects changed bytes when the expected digest is trusted. It does not protect against an actor able to replace both content and expected digest metadata.
 
-### Non-claims
+### Current non-claims
 
 The project does not claim:
 
-- formal cryptographic certification;
-- regulatory compliance;
-- Internet-scale production validation;
-- immunity to Byzantine clients;
-- Sybil resistance from secure aggregation alone;
-- private root-runtime SCAFFOLD under the current client-level DP guarantee;
-- production-grade threshold secure-aggregation dropout recovery;
-- crash-resumable in-flight secure rounds;
-- verified physical edge energy or thermal performance.
+- formal cryptographic certification
+- regulatory compliance
+- Internet-scale production validation
+- immunity to Byzantine clients
+- Sybil resistance from secure aggregation alone
+- root client-level-DP SCAFFOLD
+- production-grade threshold secure-aggregation dropout recovery
+- crash-resumable in-flight secure rounds
+- verified physical edge-device energy/thermal performance
 
 ---
 
@@ -1713,23 +1299,22 @@ The project does not claim:
 
 Stable support is narrower than the total amount of code in the repository.
 
-Important current boundaries include:
+Important boundaries:
 
 - the root runtime is single-machine orchestration, not a physical cross-device deployment;
-- root client-level DP supports qualified FedAvg/FedProx paths, not SCAFFOLD;
-- feature/covariate-shift partitioning is not currently a root partition strategy;
+- root client-level DP supports FedAvg/FedProx, not SCAFFOLD;
+- feature/covariate-shift partitioning is not a root partition strategy;
 - FedSAM, Ditto, and Per-FedAvg are platform-worker capabilities rather than root CLI algorithms;
 - true distributed asynchronous training remains experimental;
 - threshold secure-aggregation dropout recovery is not promoted as a production capability;
 - an in-flight secure round is not resumed after coordinator process loss;
-- FEMNIST, Shakespeare, and Sent140 loaders remain outside the stable v3 release scope;
-- combined robust aggregation + DP is not generally release-qualified;
-- combined robust aggregation + secure aggregation is not generally release-qualified;
+- FEMNIST, Shakespeare, and Sent140 loaders remain outside the stable v3 scope;
+- robust aggregation + DP and robust aggregation + secure aggregation are not generally release-qualified;
 - physical multi-host throughput/latency guarantees are not claimed;
-- physical ARM64 edge energy/thermal/throughput guarantees are not claimed;
+- physical ARM64 energy/thermal/throughput guarantees are not claimed;
 - the complete attack × privacy × heterogeneity benchmark cross-product has not been empirically exhausted.
 
-Unsupported combinations are expected to fail closed rather than silently appearing as supported.
+Unsupported combinations are expected to fail closed instead of being silently reported as stable.
 
 ---
 
@@ -1740,22 +1325,22 @@ Unsupported combinations are expected to fail closed rather than silently appear
 ├── main.py                         # root entry point
 ├── experiment_runtime.py           # root experiment orchestration
 ├── config.yaml                     # root configuration
-├── data/                           # root datasets / partitioning
-├── federated/                      # root client / server / DP logic
+├── data/                           # root datasets/partitioning
+├── federated/                      # root client/server/DP logic
 ├── models/                         # root neural networks
-├── utils/                          # metrics / evaluation / artifacts
+├── utils/                          # metrics/evaluation/artifacts
 ├── desktop/                        # PySide6 desktop UI
 │
-├── python/                         # platform Python package / workers
+├── python/                         # platform Python package/workers
 │   └── src/fl_platform/
-├── cpp/                            # C++20 coordinator / aggregation runtime
+├── cpp/                            # C++20 coordinator/aggregation/runtime
 ├── go/                             # Go API and execution control plane
-├── proto/                          # protobuf / gRPC contracts
-├── infra/                          # Docker / Kubernetes / observability
-├── scripts/                        # validation / release / benchmark tools
+├── proto/                          # protobuf/gRPC contracts
+├── infra/                          # Docker/Kubernetes/observability
+├── scripts/                        # validation/release/benchmark utilities
 ├── tests/                          # root tests
-├── docs/                           # architecture / privacy / runtime docs
-├── release/                        # release evidence and contracts
+├── docs/                           # architecture/privacy/runtime docs
+├── release/                        # release evidence/contracts
 │
 ├── RUNTIME.md                      # executable runtime source of truth
 ├── RELEASE_PLAN_v3.0.0.md          # release gates
@@ -1770,38 +1355,37 @@ Documentation precedence:
 1. executable source and enforced tests;
 2. `RUNTIME.md`;
 3. current release qualification documents;
-4. historical status/audit reports.
-
-Historical reports are useful context but do not override newer executable evidence.
+4. older status/audit reports.
 
 ---
 
 ## 23. Academic reporting and citation
 
-For academic use, a result should state at minimum:
+This repository is designed for controlled experiments where implementation, partition, privacy configuration, seed, and artifact identity are reported together.
 
-- repository version or exact commit SHA;
-- runtime identity;
-- dataset and official split;
-- client count;
-- partition method and realized partition hash;
-- model architecture;
-- algorithm and optimizer parameters;
-- communication rounds;
-- local epochs and batch size;
-- client sampling method and rate;
-- aggregation weighting;
-- privacy unit and neighboring relation when DP is enabled;
-- clipping norm;
-- noise multiplier;
-- target/final $(\varepsilon,\delta)$ when applicable;
-- random seeds;
-- number of independent runs;
-- mean and dispersion;
-- confidence interval;
-- client tail/fairness metrics when heterogeneity is central to the claim.
+A strong academic result should state at minimum:
 
-### Suggested citation
+- repository version or exact commit SHA
+- runtime identity
+- dataset and official split
+- number of clients
+- partition method and realized partition hash
+- model architecture
+- algorithm and optimizer parameters
+- communication rounds
+- local epochs and batch size
+- client sampling strategy/rate
+- aggregation weighting
+- privacy unit and neighboring relation when DP is enabled
+- clipping norm
+- noise multiplier
+- target/final `(epsilon, delta)` values when applicable
+- random seeds
+- number of independent runs
+- mean/dispersion/confidence interval
+- tail and fairness metrics when heterogeneity is central to the claim
+
+### Suggested repository citation
 
 ```bibtex
 @software{shagor2026federated,
@@ -1815,9 +1399,7 @@ For academic use, a result should state at minimum:
 
 ### Reproducibility note
 
-Do not report only a configured Dirichlet $\alpha$ value. Report the exact realized partition artifact/hash as well.
-
-Likewise, do not report only “DP enabled.” Report the privacy unit, adjacency assumption, sampling model, clipping norm, noise multiplier, release count, $\delta$, accountant, and achieved $\varepsilon$.
+Do not report only a configured Dirichlet `alpha` value. Report the exact partition artifact/hash as well. Likewise, do not report only “DP enabled”; report the accountant inputs, effective runtime parameters, and achieved privacy budget.
 
 ---
 
@@ -1831,8 +1413,7 @@ Affiliation: Voronezh State University of Forestry and Technologies
 **Research and engineering interests**
 
 - federated and privacy-preserving machine learning
-- Non-IID optimization
-- personalized federated learning
+- Non-IID optimization and personalized federated learning
 - differential privacy and privacy accounting
 - distributed AI/ML systems
 - secure and robust aggregation
@@ -1842,7 +1423,7 @@ Affiliation: Voronezh State University of Forestry and Technologies
 **GitHub:** [@smshagor-dev](https://github.com/smshagor-dev)  
 **Email:** `smshagor.ru@gmail.com`
 
-The repository is maintained as both an engineering codebase and an academic experiment platform. Design decisions are documented with an emphasis on implementation boundaries, reproducibility, measurable evidence, and avoiding claims that exceed the validated runtime.
+This repository is maintained as both an engineering codebase and an academic experiment platform. Design choices are documented with an emphasis on runtime boundaries, reproducibility, measurable evidence, and avoiding claims that exceed the validated implementation.
 
 ---
 
@@ -1856,7 +1437,7 @@ Before opening a pull request, read:
 - [`SECURITY.md`](SECURITY.md)
 - [`RUNTIME.md`](RUNTIME.md)
 
-Security issues should follow the process in `SECURITY.md` rather than being disclosed through a public issue when the report contains exploitable details.
+Security issues should follow `SECURITY.md` instead of being disclosed through a public issue when the report contains exploitable details.
 
 ### License
 
