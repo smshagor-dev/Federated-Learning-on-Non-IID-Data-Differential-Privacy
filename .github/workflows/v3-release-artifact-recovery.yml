@@ -1,0 +1,204 @@
+name: v3 release artifact recovery
+
+on:
+  push:
+    branches:
+      - release-artifact-orchestration
+    paths:
+      - ".github/workflows/v3-release-artifact-recovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  recover-release-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      RELEASE_TAG: v3.0.0
+      RELEASE_WORKFLOW: v3-release-artifacts.yml
+    steps:
+      - name: Resolve release tag and main binding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" \
+              --jq '.object.sha'
+          )"
+          main_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+              --jq '.object.sha'
+          )"
+          if [ -z "${release_sha}" ] || [ -z "${main_sha}" ]; then
+            echo "Unable to resolve release tag or main SHA" >&2
+            exit 1
+          fi
+          if [ "${release_sha}" != "${main_sha}" ]; then
+            echo "Recovery requires ${RELEASE_TAG} and main to point to the same commit." >&2
+            echo "release=${release_sha} main=${main_sha}" >&2
+            exit 1
+          fi
+          printf 'RELEASE_SHA=%s\n' "${release_sha}" >> "${GITHUB_ENV}"
+          echo "release/main binding: ${release_sha}"
+
+      - name: Dispatch missing same-SHA qualification workflows on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dispatchable=(
+            v3-release-candidate.yml
+            v3-distributed-runtime.yml
+            v3-final-qualification.yml
+          )
+
+          successful_run() {
+            local workflow="$1"
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?branch=main&per_page=100" \
+              --jq ".workflow_runs[] | select(.head_sha == \"${RELEASE_SHA}\" and .conclusion == \"success\") | .id" \
+              | head -n 1
+          }
+
+          active_run() {
+            local workflow="$1"
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?branch=main&per_page=100" \
+              --jq ".workflow_runs[] | select(.head_sha == \"${RELEASE_SHA}\" and (.status == \"queued\" or .status == \"in_progress\" or .status == \"waiting\" or .status == \"pending\" or .status == \"requested\")) | .id" \
+              | head -n 1
+          }
+
+          for workflow in "${dispatchable[@]}"; do
+            if [ -n "$(successful_run "${workflow}")" ]; then
+              echo "${workflow}: already qualified"
+              continue
+            fi
+            if [ -n "$(active_run "${workflow}")" ]; then
+              echo "${workflow}: qualification already active"
+              continue
+            fi
+            echo "${workflow}: dispatching on main for ${RELEASE_SHA}"
+            gh workflow run "${workflow}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --ref main
+          done
+
+      - name: Wait for all exact-SHA qualification workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          required=(
+            ci.yml
+            v3-release-candidate.yml
+            v3-distributed-runtime.yml
+            v3-final-qualification.yml
+          )
+
+          successful_run() {
+            local workflow="$1"
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?branch=main&per_page=100" \
+              --jq ".workflow_runs[] | select(.head_sha == \"${RELEASE_SHA}\" and .conclusion == \"success\") | .id" \
+              | head -n 1
+          }
+
+          active_run() {
+            local workflow="$1"
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?branch=main&per_page=100" \
+              --jq ".workflow_runs[] | select(.head_sha == \"${RELEASE_SHA}\" and (.status == \"queued\" or .status == \"in_progress\" or .status == \"waiting\" or .status == \"pending\" or .status == \"requested\")) | .id" \
+              | head -n 1
+          }
+
+          deadline=$((SECONDS + 5400))
+          while [ "${SECONDS}" -lt "${deadline}" ]; do
+            missing=0
+            for workflow in "${required[@]}"; do
+              run_id="$(successful_run "${workflow}")"
+              if [ -n "${run_id}" ]; then
+                echo "${workflow}: success run ${run_id}"
+                continue
+              fi
+              active_id="$(active_run "${workflow}")"
+              if [ -n "${active_id}" ]; then
+                echo "${workflow}: active run ${active_id}"
+                missing=1
+                continue
+              fi
+              echo "${workflow}: no successful or active exact-SHA run" >&2
+              exit 1
+            done
+            if [ "${missing}" -eq 0 ]; then
+              echo "All exact-SHA release qualification workflows succeeded."
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for exact-SHA release qualification." >&2
+          exit 1
+
+      - name: Rerun failed v3 release artifact workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id="$(
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${RELEASE_WORKFLOW}/runs?per_page=100" \
+              --jq ".workflow_runs[] | select(.head_sha == \"${RELEASE_SHA}\" and .conclusion == \"failure\") | .id" \
+              | head -n 1
+          )"
+          if [ -z "${run_id}" ]; then
+            successful_id="$(
+              gh api --paginate \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/${RELEASE_WORKFLOW}/runs?per_page=100" \
+                --jq ".workflow_runs[] | select(.head_sha == \"${RELEASE_SHA}\" and .conclusion == \"success\") | .id" \
+                | head -n 1
+            )"
+            if [ -n "${successful_id}" ]; then
+              echo "Release artifacts already succeeded in run ${successful_id}."
+              exit 0
+            fi
+            echo "No failed release-artifact run found for ${RELEASE_SHA}." >&2
+            exit 1
+          fi
+          echo "Rerunning failed release artifact run ${run_id}"
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/rerun-failed-jobs"
+          printf 'RELEASE_ARTIFACT_RUN_ID=%s\n' "${run_id}" >> "${GITHUB_ENV}"
+
+      - name: Verify recovered release artifact run completes successfully
+        if: env.RELEASE_ARTIFACT_RUN_ID != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 5400))
+          while [ "${SECONDS}" -lt "${deadline}" ]; do
+            status="$(
+              gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_ARTIFACT_RUN_ID}" \
+                --jq '.status'
+            )"
+            conclusion="$(
+              gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_ARTIFACT_RUN_ID}" \
+                --jq '.conclusion // ""'
+            )"
+            echo "release-artifacts run ${RELEASE_ARTIFACT_RUN_ID}: status=${status} conclusion=${conclusion:-pending}"
+            if [ "${status}" = "completed" ]; then
+              if [ "${conclusion}" != "success" ]; then
+                echo "Recovered release artifact run concluded ${conclusion}." >&2
+                exit 1
+              fi
+              echo "Recovered release artifact run succeeded."
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for recovered release artifact run." >&2
+          exit 1
