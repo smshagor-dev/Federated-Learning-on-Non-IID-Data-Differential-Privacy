@@ -44,8 +44,7 @@ def test_unqualified_high_risk_surfaces_remain_experimental() -> None:
     )
     assert any("FEMNIST" in item for item in workloads_gate.experimental_exclusions)
     assert any(
-        "full attack/privacy" in item
-        for item in benchmark_gate.experimental_exclusions
+        "full attack/privacy" in item for item in benchmark_gate.experimental_exclusions
     )
     assert any(
         "physical edge-device" in item for item in edge_gate.experimental_exclusions
@@ -53,7 +52,7 @@ def test_unqualified_high_risk_surfaces_remain_experimental() -> None:
 
 
 @pytest.mark.parametrize(
-    "request",
+    "capability_request",
     [
         CapabilityRequest(algorithm="fedavg", asynchronous=True),
         CapabilityRequest(
@@ -73,9 +72,11 @@ def test_unqualified_high_risk_surfaces_remain_experimental() -> None:
         ),
     ],
 )
-def test_experimental_combinations_fail_closed(request: CapabilityRequest) -> None:
+def test_experimental_combinations_fail_closed(
+    capability_request: CapabilityRequest,
+) -> None:
     with pytest.raises(ValueError):
-        validate_capability_request(request)
+        validate_capability_request(capability_request)
 
 
 def test_release_gate_report_requires_every_gate() -> None:
