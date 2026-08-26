@@ -69,9 +69,7 @@ def main() -> int:
                 "status": "qualified",
                 "mode": qualification.mode.value,
                 "stable_capabilities": list(qualification.stable_capabilities),
-                "experimental_exclusions": list(
-                    qualification.experimental_exclusions
-                ),
+                "experimental_exclusions": list(qualification.experimental_exclusions),
                 "checks": list(qualification.checks),
             }
         )
