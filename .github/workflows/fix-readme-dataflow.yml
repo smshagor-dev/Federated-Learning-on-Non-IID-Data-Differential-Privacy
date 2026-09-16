@@ -1,0 +1,65 @@
+name: Fix README data-flow section
+
+on:
+  push:
+    branches:
+      - document-training-dataflow-live-simulator
+    paths:
+      - .github/workflows/fix-readme-dataflow.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: document-training-dataflow-live-simulator
+          fetch-depth: 0
+
+      - name: Fix typo and section hierarchy
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("README.md")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace("CHFAR-100", "CIFAR-100")
+
+          live_marker = "\n---\n\n## Live simulator\n"
+          boundary_marker = "\n### 11.5 Runtime boundary\n"
+          workflow_marker = "\n---\n\n## System workflow\n"
+
+          live_start = text.find(live_marker)
+          boundary_start = text.find(boundary_marker, live_start)
+          workflow_start = text.find(workflow_marker, boundary_start)
+          if min(live_start, boundary_start, workflow_start) < 0:
+              raise SystemExit("unable to locate README sections for hierarchy fix")
+
+          live_block = text[live_start:boundary_start]
+          boundary_block = text[boundary_start:workflow_start]
+          text = text[:live_start] + boundary_block + live_block + text[workflow_start:]
+          path.write_text(text, encoding="utf-8")
+
+          updated = path.read_text(encoding="utf-8")
+          assert "CHFAR-100" not in updated
+          assert "CIFAR-100" in updated
+          assert updated.index("### 11.5 Runtime boundary") < updated.index("## Live simulator")
+          assert updated.index("## Live simulator") < updated.index("## System workflow")
+          PY
+
+          git diff --check
+          python scripts/validate_repository_docs.py
+
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "Shahanur Islam Shagor"
+          git config user.email "smshagor.ru@gmail.com"
+          git add README.md
+          git rm .github/workflows/fix-readme-dataflow.yml
+          git commit -m "Fix README data-flow hierarchy"
+          git push origin HEAD:document-training-dataflow-live-simulator
