@@ -39,6 +39,7 @@ A capability is described as supported only when an executable implementation an
 - [10. Benchmark statistics](#10-benchmark-statistics)
 - [11. System architecture](#11-system-architecture)
 - [System workflow](#system-workflow)
+- [Live simulator](#live-simulator)
 - [12. Installation](#12-installation)
 - [13. Running experiments](#13-running-experiments)
 - [14. Configuration](#14-configuration)
@@ -1234,9 +1235,146 @@ flowchart TB
     TRUST -. verifies and protects .-> WN
 ```
 
-### 11.4 Runtime boundary
+### 11.4 Where data comes from and where ML training happens
+
+The two runtime identities use different data-loading paths. The most important boundary is that the **training samples are consumed by the client/worker training code, while the aggregation layer receives model updates rather than raw training examples**.
+
+| Runtime | Data source | Where the samples live | Where ML training runs | What is returned for aggregation |
+|---|---|---|---|---|
+| `root-simulator` | `torchvision.datasets` for MNIST, FashionMNIST, CIFAR-10, and CIFAR-100 | Downloaded/cached under `./data_raw` by default; the official train split is partitioned by sample indices | `federated/client.py::Client.train()` in the root Python process, on the configured CPU/CUDA device, using a `DataLoader(Subset(train_set, client_indices))` | Model delta, sample count, local loss and update/clipping metadata; raw images/labels are not passed to `Server.aggregate()` |
+| `distributed-platform` | The current stable worker integration path uses a deterministic, download-free synthetic shard reconstructed from the coordinator-accepted `fl-partition-v1://synthetic?...` reference | Reconstructed inside each Python worker from the signed/verified partition parameters, client id and seed | `python/src/fl_platform/worker/task_runner.py`; non-private training reuses `federated.client.Client`, while qualified sample-level private training uses the Opacus path | Training outcome/model delta and task metadata go back toward the coordinator; the raw reconstructed samples do not traverse the coordinator |
+
+#### Root runtime data and training path
+
+```mermaid
+flowchart LR
+    SOURCE[torchvision dataset source]
+    CACHE[Local cache: ./data_raw]
+    TRAIN[Official training split]
+    TEST[Official test split]
+    PART[Non-IID partitioner]
+    IDX1[Client 0 sample indices]
+    IDX2[Client 1 sample indices]
+    IDXN[Client N sample indices]
+    C1[Client 0 DataLoader + Subset]
+    C2[Client 1 DataLoader + Subset]
+    CN[Client N DataLoader + Subset]
+    GLOBAL[Global model state]
+    T1[Client.train local PyTorch SGD]
+    T2[Client.train local PyTorch SGD]
+    TN[Client.train local PyTorch SGD]
+    SERVER[Server.aggregate]
+    NEXT[Next global model]
+    EVAL[Global and held-out evaluation]
+
+    SOURCE --> CACHE
+    CACHE --> TRAIN
+    CACHE --> TEST
+    TRAIN --> PART
+    PART --> IDX1 --> C1
+    PART --> IDX2 --> C2
+    PART --> IDXN --> CN
+    C1 -->|inputs + labels stay in client loader| T1
+    C2 -->|inputs + labels stay in client loader| T2
+    CN -->|inputs + labels stay in client loader| TN
+    GLOBAL --> T1
+    GLOBAL --> T2
+    GLOBAL --> TN
+    T1 -->|model delta + metadata| SERVER
+    T2 -->|model delta + metadata| SERVER
+    TN -->|model delta + metadata| SERVER
+    SERVER --> NEXT
+    NEXT --> GLOBAL
+    NEXT --> EVAL
+    TEST --> EVAL
+```
+
+`data/partitioner.py::get_dataset()` calls the relevant torchvision dataset loader with `download=True`, so the first run can download the official dataset and later runs reuse the local cache. Partitioning does **not** send copies of the complete dataset to a central server. It produces deterministic index arrays. Each root `Client` builds a `Subset` over the shared training dataset using only its assigned indices.
+
+During a selected communication round, `Server.broadcast()` exposes the current global state. `Client.train()` loads that state into the local model, moves each local batch to the configured device, performs the local optimizer steps, and returns a model update. For DP-enabled qualified paths the client update is clipped before transmission to the aggregation step; central Gaussian noise is applied in the server aggregation path.
+
+Because `root-simulator` is intentionally a **single-machine research runtime**, these client-local boundaries are logical isolation inside one Python process rather than physical device/network isolation. It should not be described as if raw samples are physically stored on separate phones or edge nodes.
+
+#### Distributed worker data and training path
+
+```mermaid
+flowchart LR
+    SPEC[Execution / partition specification]
+    REF[Signed dataset_reference]
+    VERIFY[Worker task acceptance + reference verification]
+    REBUILD[Worker reconstructs deterministic local shard]
+    LOCALDATA[Worker-local synthetic samples]
+    TASK[task_runner local training]
+    GLOBAL[Coordinator-provided global model state]
+    RESULT[Model delta + sample_count + avg_loss + optional privacy facts]
+    COORD[C++ coordinator / aggregation path]
+    MODEL[Next global model version]
+
+    SPEC --> REF --> VERIFY --> REBUILD --> LOCALDATA --> TASK
+    GLOBAL --> TASK
+    TASK --> RESULT --> COORD --> MODEL
+    MODEL --> GLOBAL
+```
+
+The current distributed worker dataset loader explicitly uses a synthetic integration dataset. A verified task carries the partition semantics rather than raw examples. The Python worker reconstructs its shard locally from the accepted reference, seed and client identity. This means the coordinator can select **which deterministic shard semantics** a worker should use without transporting that worker's raw samples through the coordinator.
+
+For non-private tasks, `worker/task_runner.py` deliberately reuses the root `federated.client.Client` local-training implementation. For qualified sample-level private tasks, the worker uses Opacus so the model, optimizer and `DataLoader` are wrapped by the privacy engine before optimizer steps are executed.
+
+### 11.5 Runtime boundary
 
 The two runtimes must not be treated as interchangeable. A feature implemented or validated in `root-simulator` is not automatically a distributed-platform capability, and the reverse is also true. Every benchmark and research result should retain the runtime identity together with the exact commit, effective configuration, partition identity, seed, privacy parameters, and resulting artifacts. [`RUNTIME.md`](RUNTIME.md) remains the runtime source of truth.
+
+---
+
+## Live simulator
+
+A lightweight live simulator is available at [`scripts/live_fl_simulator.py`](scripts/live_fl_simulator.py). It is intended to make the data and model-update path visible without requiring a dataset download or the full Docker/gRPC platform.
+
+The simulator is not a fake progress animation: it performs **real local PyTorch optimization** through the repository's existing `Client.train()` implementation and **real aggregation** through `Server.aggregate()`. Its dataset is intentionally synthetic and generated locally, and all simulated clients run inside one Python process, so it is a diagnostic/teaching view of the root runtime rather than a claim of physical cross-device deployment.
+
+Run the default live simulation:
+
+```bash
+python scripts/live_fl_simulator.py
+```
+
+Try stronger Non-IID label skew with FedProx:
+
+```bash
+python scripts/live_fl_simulator.py \
+  --clients 8 \
+  --rounds 10 \
+  --algorithm fedprox \
+  --partition dirichlet \
+  --alpha 0.1
+```
+
+Show the qualified root-style client clipping + central Gaussian-noise path:
+
+```bash
+python scripts/live_fl_simulator.py \
+  --rounds 5 \
+  --dp \
+  --noise-multiplier 0.8 \
+  --clip-norm 1.0
+```
+
+Fast smoke validation:
+
+```bash
+python scripts/live_fl_simulator.py --smoke
+```
+
+The live output shows, round by round:
+
+- each client's sample count and realized label distribution;
+- which clients were selected;
+- exactly when a client reads its local samples and trains;
+- local loss and update norm;
+- clipping information when the simulator DP path is enabled;
+- the point where only the model delta reaches aggregation;
+- the next global-model version; and
+- held-out synthetic evaluation accuracy after aggregation.
 
 ---
 
