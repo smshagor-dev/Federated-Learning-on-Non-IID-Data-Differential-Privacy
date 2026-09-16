@@ -1241,7 +1241,7 @@ The two runtime identities use different data-loading paths. The most important 
 
 | Runtime | Data source | Where the samples live | Where ML training runs | What is returned for aggregation |
 |---|---|---|---|---|
-| `root-simulator` | `torchvision.datasets` for MNIST, FashionMNIST, CIFAR-10, and CHFAR-100 | Downloaded/cached under `./data_raw` by default; the official train split is partitioned by sample indices | `federated/client.py::Client.train()` in the root Python process, on the configured CPU/CUDA device, using a `DataLoader(Subset(train_set, client_indices))` | Model delta, sample count, local loss and update/clipping metadata; raw images/labels are not passed to `Server.aggregate()` |
+| `root-simulator` | `torchvision.datasets` for MNIST, FashionMNIST, CIFAR-10, and CIFAR-100 | Downloaded/cached under `./data_raw` by default; the official train split is partitioned by sample indices | `federated/client.py::Client.train()` in the root Python process, on the configured CPU/CUDA device, using a `DataLoader(Subset(train_set, client_indices))` | Model delta, sample count, local loss and update/clipping metadata; raw images/labels are not passed to `Server.aggregate()` |
 | `distributed-platform` | The current stable worker integration path uses a deterministic, download-free synthetic shard reconstructed from the coordinator-accepted `fl-partition-v1://synthetic?...` reference | Reconstructed inside each Python worker from the signed/verified partition parameters, client id and seed | `python/src/fl_platform/worker/task_runner.py`; non-private training reuses `federated.client.Client`, while qualified sample-level private training uses the Opacus path | Training outcome/model delta and task metadata go back toward the coordinator; the raw reconstructed samples do not traverse the coordinator |
 
 #### Root runtime data and training path
@@ -1320,6 +1320,10 @@ The current distributed worker dataset loader explicitly uses a synthetic integr
 
 For non-private tasks, `worker/task_runner.py` deliberately reuses the root `federated.client.Client` local-training implementation. For qualified sample-level private tasks, the worker uses Opacus so the model, optimizer and `DataLoader` are wrapped by the privacy engine before optimizer steps are executed.
 
+### 11.5 Runtime boundary
+
+The two runtimes must not be treated as interchangeable. A feature implemented or validated in `root-simulator` is not automatically a distributed-platform capability, and the reverse is also true. Every benchmark and research result should retain the runtime identity together with the exact commit, effective configuration, partition identity, seed, privacy parameters, and resulting artifacts. [`RUNTIME.md`](RUNTIME.md) remains the runtime source of truth.
+
 ---
 
 ## Live simulator
@@ -1371,10 +1375,6 @@ The live output shows, round by round:
 - the point where only the model delta reaches aggregation;
 - the next global-model version; and
 - held-out synthetic evaluation accuracy after aggregation.
-
-### 11.5 Runtime boundary
-
-The two runtimes must not be treated as interchangeable. A feature implemented or validated in `root-simulator` is not automatically a distributed-platform capability, and the reverse is also true. Every benchmark and research result should retain the runtime identity together with the exact commit, effective configuration, partition identity, seed, privacy parameters, and resulting artifacts. [`RUNTIME.md`](RUNTIME.md) remains the runtime source of truth.
 
 ---
 
