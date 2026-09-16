@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Live, local federated-learning simulator using the real root Client/Server path.
+"""Live federated-learning simulator using the real root Client/Server path.
 
 The simulator is intentionally small enough to run without downloading a dataset.
-It generates a labeled synthetic dataset in memory, partitions it across simulated
-clients, performs real local PyTorch optimization through ``federated.client``,
-and aggregates model deltas through ``federated.server``.
+It generates labeled synthetic data in memory, partitions training samples across
+simulated clients, performs real local PyTorch optimization through
+``federated.client.Client``, and aggregates model deltas through
+``federated.server.Server``.
 
 Raw client samples never enter the Server object. Each Client owns a DataLoader
 backed by only its assigned dataset indices; the server receives model-update
@@ -14,27 +15,31 @@ results and metadata, matching the data-flow boundary of the root runtime.
 from __future__ import annotations
 
 import argparse
-import io
 import math
 import random
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, TextIO
 
-import numpy as np
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from data.partitioner import partition_dirichlet, partition_iid
-from federated.client import Client
-from federated.dp_accountant import MomentsAccountant
-from federated.server import Server
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+import torch.nn as nn  # noqa: E402
+from torch.utils.data import DataLoader, Dataset  # noqa: E402
+
+from data.partitioner import partition_dirichlet, partition_iid  # noqa: E402
+from federated.client import Client  # noqa: E402
+from federated.dp_accountant import MomentsAccountant  # noqa: E402
+from federated.server import Server  # noqa: E402
 
 
 class SyntheticFederatedDataset(Dataset):
-    """Small deterministic classification dataset with a torchvision-like API."""
+    """Deterministic classification data with a torchvision-like ``targets`` API."""
 
     def __init__(
         self,
@@ -43,6 +48,7 @@ class SyntheticFederatedDataset(Dataset):
         features: int,
         classes: int,
         seed: int,
+        prototypes: torch.Tensor | None = None,
     ) -> None:
         if samples < classes:
             raise ValueError("samples must be >= classes")
@@ -53,16 +59,23 @@ class SyntheticFederatedDataset(Dataset):
 
         generator = torch.Generator().manual_seed(seed)
         labels = torch.arange(samples, dtype=torch.long) % classes
-        permutation = torch.randperm(samples, generator=generator)
-        labels = labels[permutation]
+        labels = labels[torch.randperm(samples, generator=generator)]
 
-        prototypes = torch.randn(
-            classes,
-            features,
-            generator=generator,
-        ) * 2.5
+        if prototypes is None:
+            prototypes = torch.randn(
+                classes,
+                features,
+                generator=generator,
+            ) * 2.5
+        expected_shape = (classes, features)
+        if tuple(prototypes.shape) != expected_shape:
+            raise ValueError(
+                f"prototype shape must be {expected_shape}, got {tuple(prototypes.shape)}"
+            )
+
+        self.prototypes = prototypes.detach().clone()
         noise = torch.randn(samples, features, generator=generator) * 0.85
-        self.features = prototypes[labels] + noise
+        self.features = self.prototypes[labels] + noise
         self.targets = labels
 
     def __len__(self) -> int:
@@ -144,7 +157,7 @@ def validate_config(config: SimulationConfig) -> None:
 
 
 def client_config(config: SimulationConfig) -> dict:
-    """Build the subset of root configuration consumed by Client.train()."""
+    """Build the subset of root configuration consumed by ``Client.train``."""
     return {
         "federated": {
             "batch_size": config.batch_size,
@@ -189,7 +202,11 @@ def label_summary(
     dataset: SyntheticFederatedDataset,
     indices: np.ndarray,
 ) -> str:
-    labels, counts = np.unique(dataset.targets[indices].numpy(), return_counts=True)
+    index_tensor = torch.as_tensor(indices, dtype=torch.long)
+    labels, counts = np.unique(
+        dataset.targets[index_tensor].numpy(),
+        return_counts=True,
+    )
     return " ".join(
         f"c{int(label)}={int(count)}"
         for label, count in zip(labels, counts, strict=True)
@@ -228,19 +245,18 @@ def render_header(
         stream,
         "TO SERVER       model delta + sample count + training metadata (not raw data)",
     )
-    emit(
-        stream,
-        "AGGREGATION     Server.aggregate() -> global model update",
-    )
+    emit(stream, "AGGREGATION     Server.aggregate() -> global model update")
     emit(
         stream,
         f"RUN             {config.algorithm} | {config.partition} | "
         f"clients={config.clients} | rounds={config.rounds} | device={device}",
     )
-    emit(
-        stream,
-        f"PRIVACY         {'client-level clipping + central Gaussian noise' if config.dp_enabled else 'disabled'}",
+    privacy_text = (
+        "client-level clipping + central Gaussian noise"
+        if config.dp_enabled
+        else "disabled"
     )
+    emit(stream, f"PRIVACY         {privacy_text}")
     emit(stream, "=" * 78)
 
 
@@ -257,37 +273,44 @@ def run_simulation(
     torch.manual_seed(config.seed)
 
     device = resolve_device(config.device)
-    total_samples = config.clients * config.samples_per_client
-    dataset = SyntheticFederatedDataset(
-        samples=total_samples,
+    total_train_samples = config.clients * config.samples_per_client
+    train_dataset = SyntheticFederatedDataset(
+        samples=total_train_samples,
         features=config.features,
         classes=config.classes,
         seed=config.seed,
     )
+    evaluation_dataset = SyntheticFederatedDataset(
+        samples=max(config.classes * 8, total_train_samples // 4),
+        features=config.features,
+        classes=config.classes,
+        seed=config.seed + 1,
+        prototypes=train_dataset.prototypes,
+    )
 
     if config.partition == "iid":
         partitions = partition_iid(
-            dataset,
+            train_dataset,
             config.clients,
             seed=config.seed,
             min_partition_size=2,
         )
     else:
         partitions = partition_dirichlet(
-            dataset,
+            train_dataset,
             config.clients,
             alpha=config.alpha,
             seed=config.seed,
             min_partition_size=2,
         )
 
-    client_cfg = client_config(config)
+    root_client_config = client_config(config)
     clients = [
         Client(
             client_id,
-            dataset,
+            train_dataset,
             partitions[client_id],
-            client_cfg,
+            root_client_config,
             device,
         )
         for client_id in range(config.clients)
@@ -312,7 +335,11 @@ def run_simulation(
         privacy_noise_generator=noise_generator,
     )
     scratch_model = TinyClassifier(config.features, config.classes)
-    evaluation_loader = DataLoader(dataset, batch_size=128, shuffle=False)
+    evaluation_loader = DataLoader(
+        evaluation_dataset,
+        batch_size=128,
+        shuffle=False,
+    )
     accountant = None
     if config.dp_enabled:
         accountant = MomentsAccountant(
@@ -324,13 +351,13 @@ def run_simulation(
     sampler = random.Random(config.seed)
     maybe_clear(stream, config.clear_screen)
     render_header(stream, config=config, device=device)
-    emit(stream, "Client data partitions")
+    emit(stream, "Client training partitions")
     for client_id in range(config.clients):
         indices = partitions[client_id]
         emit(
             stream,
             f"  client-{client_id:<2} samples={len(indices):<4} "
-            f"labels=[{label_summary(dataset, indices)}]",
+            f"labels=[{label_summary(train_dataset, indices)}]",
         )
     emit(stream)
 
@@ -405,7 +432,7 @@ def run_simulation(
         emit(
             stream,
             f"  SERVER aggregate -> global model v{server.round_count} | "
-            f"accuracy={eval_accuracy * 100:.2f}% | loss={eval_loss:.4f}",
+            f"held-out accuracy={eval_accuracy * 100:.2f}% | loss={eval_loss:.4f}",
         )
         if config.dp_enabled:
             emit(
@@ -420,16 +447,17 @@ def run_simulation(
     emit(stream, "SIMULATION COMPLETE")
     emit(
         stream,
-        f"  final global accuracy={final['eval_accuracy'] * 100:.2f}% | "
+        f"  final held-out accuracy={final['eval_accuracy'] * 100:.2f}% | "
         f"rounds={config.rounds}",
     )
     emit(
         stream,
-        "  privacy boundary: raw client samples stayed inside each Client DataLoader; "
+        "  boundary: raw client samples stayed inside each Client DataLoader; "
         "only model updates were aggregated",
     )
     return {
-        "dataset_samples": len(dataset),
+        "train_samples": len(train_dataset),
+        "evaluation_samples": len(evaluation_dataset),
         "history": history,
         "final_accuracy": float(final["eval_accuracy"]),
         "server_rounds": server.round_count,
@@ -447,7 +475,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rounds", type=int, default=5)
     parser.add_argument("--samples-per-client", type=int, default=80)
     parser.add_argument("--sample-rate", type=float, default=0.67)
-    parser.add_argument("--partition", choices=["iid", "dirichlet"], default="dirichlet")
+    parser.add_argument(
+        "--partition",
+        choices=["iid", "dirichlet"],
+        default="dirichlet",
+    )
     parser.add_argument("--alpha", type=float, default=0.3)
     parser.add_argument(
         "--algorithm",
@@ -478,7 +510,9 @@ def config_from_args(args: argparse.Namespace) -> SimulationConfig:
             clients=3,
             rounds=1,
             samples_per_client=16,
-            sample_rate=0.67,
+            features=4,
+            classes=2,
+            sample_rate=1.0,
             partition="iid",
             local_epochs=1,
             batch_size=16,
