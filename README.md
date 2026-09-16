@@ -37,7 +37,8 @@ A capability is described as supported only when an executable implementation an
 - [8. Secure and robust aggregation](#8-secure-and-robust-aggregation)
 - [9. Client-level evaluation and fairness](#9-client-level-evaluation-and-fairness)
 - [10. Benchmark statistics](#10-benchmark-statistics)
-- [11. Architecture](#11-architecture)
+- [11. System architecture](#11-system-architecture)
+- [System workflow](#system-workflow)
 - [12. Installation](#12-installation)
 - [13. Running experiments](#13-running-experiments)
 - [14. Configuration](#14-configuration)
@@ -1031,76 +1032,321 @@ Configuration alone is not sufficient evidence.
 
 ---
 
-## 11. Architecture
+## 11. System architecture
 
-### 11.1 Root runtime
+The repository has two explicit execution identities: the single-machine **root research runtime** and the multi-service **distributed platform runtime**. They share federated-learning concepts, algorithms, privacy semantics, and experiment metadata, but they are separate execution paths. The diagrams below show where control, model updates, privacy/security checks, persistence, evaluation, and observability live.
 
-```text
-main.py
-  |
-  +--> configuration + runtime validation
-  |
-  +--> experiment_runtime.py
-  |      |
-  |      +--> data/partitioner.py
-  |      |      +--> MNIST / FashionMNIST / CIFAR-10 / CIFAR-100
-  |      |      +--> IID / Dirichlet / pathological / quantity skew
-  |      |
-  |      +--> federated/client.py
-  |      +--> federated/server.py
-  |      |      +--> FedAvg / FedProx / SCAFFOLD
-  |      |      +--> clipping / private aggregation path
-  |      |
-  |      +--> RDP accountant
-  |      +--> round metrics
-  |      +--> partition artifacts
-  |
-  +--> final global model checkpoint
-  |
-  +--> held-out client partition
-  |
-  +--> client accuracy / loss / fairness metrics
-  |
-  +--> summary.md + summary.json
+### 11.1 Platform architecture at a glance
+
+```mermaid
+flowchart TB
+    USER[Researcher / Operator]
+    ENTRY{Choose execution path}
+
+    USER --> ENTRY
+
+    subgraph ROOT[Root research runtime - root-simulator]
+        direction TB
+        RENTRY[Desktop UI / CLI / Benchmark runner]
+        RCFG[Configuration and runtime validation]
+        RDATA[torchvision datasets]
+        RPART[Deterministic client partitioner]
+        RTRAIN[In-process PyTorch client training]
+        RSERVER[Federated server and aggregation]
+        RDP[Client-level DP and RDP accountant]
+        REVAL[Global and held-out client evaluation]
+        RART[Checkpoints, partition manifests, metrics, summaries]
+
+        RENTRY --> RCFG
+        RCFG --> RDATA
+        RDATA --> RPART
+        RPART --> RTRAIN
+        RTRAIN --> RSERVER
+        RSERVER <--> RDP
+        RSERVER --> REVAL
+        REVAL --> RART
+    end
+
+    subgraph DIST[Distributed platform runtime - distributed-platform]
+        direction TB
+        DENTRY[Web / REST clients]
+        GO[Go API and execution control plane]
+        CPP[C++20 coordinator]
+        CMD[Python experiment command service]
+        WORKERS[Python ML workers]
+        DB[(PostgreSQL)]
+        REDIS[(Redis)]
+        OBJ[(MinIO object storage)]
+        MLFLOW[MLflow tracking]
+        OTEL[OpenTelemetry collector]
+        PROM[Prometheus]
+        GRAF[Grafana]
+
+        DENTRY --> GO
+        GO -->|execution lifecycle| CPP
+        GO --> CMD
+        GO --> DB
+        GO --> REDIS
+        CPP <-->|gRPC / protobuf| WORKERS
+        CPP --> OBJ
+        WORKERS --> OBJ
+        WORKERS --> MLFLOW
+        GO --> OTEL
+        CPP --> OTEL
+        WORKERS --> OTEL
+        OTEL --> PROM
+        PROM --> GRAF
+    end
+
+    SECURITY[mTLS identity / signed messages / replay protection]
+    EVIDENCE[Reproducible experiment and release evidence]
+
+    ENTRY --> RENTRY
+    ENTRY --> DENTRY
+    SECURITY -. protects .-> GO
+    SECURITY -. protects .-> CPP
+    SECURITY -. protects .-> WORKERS
+    RART --> EVIDENCE
+    DB --> EVIDENCE
+    OBJ --> EVIDENCE
+    MLFLOW --> EVIDENCE
 ```
 
-### 11.2 Distributed platform
+### 11.2 Root research runtime
 
-```text
-                         +-----------------------+
-                         |   Control / clients   |
-                         +-----------+-----------+
-                                     |
-                                REST / API
-                                     |
-                         +-----------v-----------+
-                         |   Go Control Plane    |
-                         | execution lifecycle   |
-                         +-----+-------------+---+
-                               |             |
-                            gRPC|             | persistence
-                               |             |
-                    +----------v---+     +---v------------------+
-                    | C++20        |     | PostgreSQL / Redis   |
-                    | Coordinator  |     | MinIO / MLflow       |
-                    +------+-------+     +----------------------+
-                           |
-                       gRPC / protobuf
-                           |
-                    +------v----------------+
-                    | Python ML Worker(s)   |
-                    | training / privacy    |
-                    +-----------------------+
+The root runtime executes a complete federated experiment inside one machine. Network boundaries are absent, but the logical FL stages are still explicit and independently auditable.
 
-Observability: Prometheus + Grafana + OpenTelemetry
-Security: mTLS identity + signed messages + replay protection
+```mermaid
+flowchart TD
+    START[python main.py or python main.py --cli]
+    CFG[Load config and apply CLI overrides]
+    VALIDATE[Validate runtime, algorithm, privacy, and sampling constraints]
+    DATA[Load MNIST / FashionMNIST / CIFAR-10 / CIFAR-100]
+    PART[Create deterministic IID / Dirichlet / pathological / quantity-skew partition]
+    MANIFEST[Write exact partition manifest and SHA-256 identity]
+    INIT[Initialize global model]
+    SAMPLE[Select clients for communication round]
+    BROADCAST[Copy current global model to selected clients]
+    LOCAL[Local PyTorch training]
+    UPDATE[Produce client model updates]
+    PRIVATE{Qualified client-level DP enabled?}
+    CLIP[Clip client updates]
+    NOISE[Apply Gaussian mechanism and update RDP accountant]
+    AGG[Aggregate updates: FedAvg / FedProx / non-private SCAFFOLD]
+    MODEL[Update global model]
+    ROUND[Record round metrics and checkpoint state]
+    MORE{More rounds?}
+    GLOBAL[Evaluate on official global test split]
+    HELDOUT[Build deterministic held-out client partition from test data]
+    FAIR[Compute per-client accuracy/loss, p10, worst-client, dispersion, Jain fairness]
+    ART[Write final model, CSV/plots, summary.md, summary.json and reproducibility artifacts]
+
+    START --> CFG --> VALIDATE --> DATA --> PART
+    PART --> MANIFEST
+    PART --> INIT --> SAMPLE --> BROADCAST --> LOCAL --> UPDATE --> PRIVATE
+    PRIVATE -- Yes --> CLIP --> NOISE --> AGG
+    PRIVATE -- No --> AGG
+    AGG --> MODEL --> ROUND --> MORE
+    MORE -- Yes --> SAMPLE
+    MORE -- No --> GLOBAL --> HELDOUT --> FAIR --> ART
 ```
 
-### 11.3 Execution lifecycle
+> Root client-level DP is release-qualified for the supported FedAvg/FedProx path under its documented sampling and weighting assumptions. DP-enabled SCAFFOLD fails closed.
 
-The Go control plane maintains durable execution records under `/api/v1/executions`. Reconciliation refreshes stable runtime state while avoiding races with active lifecycle transitions such as `STARTING`, `PAUSING`, `RESUMING`, and `CANCELING`.
+### 11.3 Distributed platform architecture
 
-Local-backend pause/resume is communication-round-boundary safe. Checkpoint SHA-256 sidecars detect changed or corrupted checkpoint bytes before restore. SHA-256 is an integrity check, not keyed authenticity against an actor able to replace both the checkpoint and expected digest.
+The distributed runtime separates API/control responsibilities from coordination and ML execution. Durable state, artifacts, experiment tracking, security controls, and telemetry are independent services rather than in-process helpers.
+
+```mermaid
+flowchart TB
+    subgraph ACCESS[Access layer]
+        WEB[Web dashboard / API consumer]
+    end
+
+    subgraph CONTROL[Control plane]
+        API[Go API]
+        LIFE[Execution lifecycle and reconciliation]
+        COMMAND[Python experiment command service]
+        PG[(PostgreSQL execution state)]
+        RDS[(Redis runtime state / coordination)]
+
+        API --> LIFE
+        API --> COMMAND
+        LIFE --> PG
+        LIFE --> RDS
+    end
+
+    subgraph FEDERATION[Federated execution plane]
+        COORD[C++20 coordinator]
+        SCHED[Round state / client scheduling / aggregation]
+        W1[Python worker 1]
+        W2[Python worker 2]
+        WN[Python worker N]
+
+        COORD --> SCHED
+        SCHED <-->|gRPC / protobuf| W1
+        SCHED <-->|gRPC / protobuf| W2
+        SCHED <-->|gRPC / protobuf| WN
+    end
+
+    subgraph ML[Worker ML capabilities]
+        TRAIN[Local training]
+        ALG[FedAvg / FedProx / SCAFFOLD / FedSAM / Ditto / Per-FedAvg capability surface]
+        PRIV[Privacy validation / accounting]
+        SECAGG[Secure-aggregation components]
+
+        TRAIN --> ALG
+        ALG --> PRIV
+        ALG --> SECAGG
+    end
+
+    subgraph DATA[Persistence and experiment evidence]
+        MINIO[(MinIO artifacts / checkpoints)]
+        TRACK[MLflow experiment tracking]
+    end
+
+    subgraph OBS[Observability]
+        OTEL[OpenTelemetry]
+        PROM[Prometheus]
+        GRAF[Grafana]
+        OTEL --> PROM --> GRAF
+    end
+
+    TRUST[mTLS service identity / signatures / replay protection]
+
+    WEB -->|REST| API
+    LIFE -->|start / pause / resume / cancel| COORD
+    W1 --> TRAIN
+    W2 --> TRAIN
+    WN --> TRAIN
+    COORD --> MINIO
+    TRAIN --> MINIO
+    TRAIN --> TRACK
+    API --> OTEL
+    COORD --> OTEL
+    W1 --> OTEL
+    W2 --> OTEL
+    WN --> OTEL
+    TRUST -. verifies and protects .-> API
+    TRUST -. verifies and protects .-> COORD
+    TRUST -. verifies and protects .-> W1
+    TRUST -. verifies and protects .-> W2
+    TRUST -. verifies and protects .-> WN
+```
+
+### 11.4 Runtime boundary
+
+The two runtimes must not be treated as interchangeable. A feature implemented or validated in `root-simulator` is not automatically a distributed-platform capability, and the reverse is also true. Every benchmark and research result should retain the runtime identity together with the exact commit, effective configuration, partition identity, seed, privacy parameters, and resulting artifacts. [`RUNTIME.md`](RUNTIME.md) remains the runtime source of truth.
+
+---
+
+## System workflow
+
+The following views trace an experiment from configuration to final evidence and then zoom into one communication round and the durable execution lifecycle.
+
+### End-to-end experiment workflow
+
+```mermaid
+flowchart TD
+    A[Define experiment: dataset, algorithm, Non-IID strategy, privacy, seed, rounds]
+    B{Runtime}
+    C[Validate capability combination and effective configuration]
+    D[Load official dataset split]
+    E[Create deterministic client partition]
+    F[Persist partition indices, statistics, and hash]
+    G[Initialize global model and execution state]
+    H[Select available clients]
+    I[Distribute current model / task]
+    J[Train locally on each client]
+    K[Return model update and metadata]
+    L[Validate identity, replay state, payload, and runtime constraints where applicable]
+    M{Configured protection / aggregation path}
+    N[Client-level clipping + Gaussian noise + privacy accounting]
+    O[Secure / robust aggregation on qualified platform paths]
+    P[Standard federated aggregation]
+    Q[Create next global model version]
+    R[Record round metrics, telemetry, audit data, and checkpoint evidence]
+    S{More communication rounds?}
+    T[Global test evaluation]
+    U[Held-out per-client evaluation]
+    V[Fairness and tail metrics]
+    W[Persist checkpoints, summaries, plots, manifests, logs, and experiment metadata]
+    X[Multi-seed statistics / benchmark comparison when requested]
+    Y[Reproducible research or release evidence]
+
+    A --> B
+    B -->|root-simulator| C
+    B -->|distributed-platform| C
+    C --> D --> E --> F --> G --> H --> I --> J --> K --> L --> M
+    M -->|Qualified client-level DP| N --> P
+    M -->|Qualified secure / robust path| O --> Q
+    M -->|Standard path| P
+    P --> Q
+    Q --> R --> S
+    S -- Yes --> H
+    S -- No --> T --> U --> V --> W --> X --> Y
+```
+
+### One federated communication round
+
+```mermaid
+sequenceDiagram
+    participant Control as Control plane / root server
+    participant Coord as Coordinator
+    participant W1 as Worker 1
+    participant W2 as Worker 2
+    participant WN as Worker N
+    participant Agg as Privacy / aggregation path
+    participant Store as Checkpoint / metrics / telemetry
+
+    Control->>Coord: Start next round with model version and round specification
+    Coord->>W1: Selected task + current global model
+    Coord->>W2: Selected task + current global model
+    Coord->>WN: Selected task + current global model
+    W1->>W1: Local training on private client data
+    W2->>W2: Local training on private client data
+    WN->>WN: Local training on private client data
+    W1-->>Coord: Update + metadata
+    W2-->>Coord: Update + metadata
+    WN-->>Coord: Update + metadata
+    Coord->>Coord: Validate identity / replay / payload / round state where applicable
+    Coord->>Agg: Accepted client updates
+    Agg->>Agg: Clip / noise / secure aggregate / robust aggregate as qualified
+    Agg-->>Coord: Aggregate update
+    Coord->>Coord: Produce next global model version
+    Coord->>Store: Metrics + checkpoint + audit / telemetry evidence
+    Coord-->>Control: Round state, model version, worker counts, metrics
+```
+
+In the root runtime, these are logical in-process stages. In the distributed runtime, the control plane, coordinator, and workers are separate services connected through the documented API and gRPC boundaries.
+
+### Pause, resume, reconciliation, and completion
+
+```mermaid
+stateDiagram-v2
+    [*] --> STARTING
+    STARTING --> RUNNING: backend started
+    STARTING --> FAILED: startup failure
+
+    RUNNING --> PAUSING: pause requested
+    PAUSING --> PAUSED: finish round + persist checkpoint
+    PAUSED --> RESUMING: resume requested
+    RESUMING --> RUNNING: checkpoint evidence valid
+    RESUMING --> FAILED: checkpoint validation / restart failure
+
+    RUNNING --> CANCELING: cancel requested
+    PAUSED --> CANCELING: cancel requested
+    CANCELING --> CANCELED: backend stopped
+
+    RUNNING --> COMPLETED: final round and outputs complete
+    RUNNING --> FAILED: unrecoverable execution failure
+
+    COMPLETED --> [*]
+    CANCELED --> [*]
+    FAILED --> [*]
+```
+
+The Go control plane keeps durable execution records and reconciles stable runtime state periodically. Active transitional states such as `STARTING`, `PAUSING`, `RESUMING`, and `CANCELING` are intentionally protected from normal periodic reconciliation races. For the local backend, pause occurs at a communication-round boundary; resume verifies checkpoint SHA-256 evidence before restoring the recorded round state. SHA-256 is used as an integrity check, not as keyed authentication.
 
 ---
 
