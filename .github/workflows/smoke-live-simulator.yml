@@ -1,0 +1,40 @@
+name: Smoke live FL simulator
+
+on:
+  push:
+    branches:
+      - document-training-dataflow-live-simulator
+    paths:
+      - .github/workflows/smoke-live-simulator.yml
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: document-training-dataflow-live-simulator
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install simulator dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy scipy torch torchvision pytest
+      - name: Run simulator smoke and test
+        run: |
+          python scripts/live_fl_simulator.py --smoke
+          python -m pytest -q tests/test_live_fl_simulator.py
+      - name: Remove temporary workflow
+        if: success()
+        run: |
+          git config user.name "Shahanur Islam Shagor"
+          git config user.email "smshagor.ru@gmail.com"
+          git rm .github/workflows/smoke-live-simulator.yml
+          git commit -m "Remove temporary live simulator smoke workflow"
+          git push origin HEAD:document-training-dataflow-live-simulator
