@@ -25,7 +25,7 @@ jobs:
       - name: Install simulator dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy scipy torch torchvision pytest
+          pip install numpy scipy matplotlib torch torchvision pytest
       - name: Run simulator smoke and test
         run: |
           python scripts/live_fl_simulator.py --smoke
