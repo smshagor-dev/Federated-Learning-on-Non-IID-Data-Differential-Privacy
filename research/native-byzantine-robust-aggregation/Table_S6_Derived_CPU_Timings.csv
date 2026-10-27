@@ -1,0 +1,7 @@
+Algorithm,Parameters,NumPy − native (ms),Calculated ratio,Time reduction
+Krum,"1,000",+0.100,2.409x,+58.5%
+Multi-Krum,"1,000",+0.085,2.214x,+54.8%
+Trimmed mean,"1,000",-0.035,0.698x,-43.2%
+Krum,"100,000",+1.902,3.090x,+67.6%
+Multi-Krum,"100,000",+1.519,2.066x,+51.6%
+Trimmed mean,"100,000",-0.277,0.962x,-3.9%

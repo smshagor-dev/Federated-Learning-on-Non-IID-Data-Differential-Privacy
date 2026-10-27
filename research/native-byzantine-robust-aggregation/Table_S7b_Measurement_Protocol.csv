@@ -1,0 +1,11 @@
+Item,Record,Interpretation
+Parameter counts,"1,000; 100,000",Reported
+Update dtype,float32,Reported
+Timing random seed,42,Reported for synthetic update generation
+Repetitions,2,Reported; insufficient for variability
+Warm-up / timed calls,Not reported,No documented protocol
+Measurement scope,Not reported,"Allocation, validation, conversion and wrapper scope unknown"
+Raw per-repetition times,Not supplied,Cannot compute IQR or intervals
+Coordinate median CPU times,Not reported,Missing algorithm coverage
+OpenMP/SIMD factorial ablations,Not reported,No causal optimization attribution
+End-to-end FL round timings,Not reported,No measured FL-round acceleration

@@ -1,0 +1,6 @@
+Rule,Round-25 categorical result,Exact ratio / trajectory
+Multi-Krum,Pass; final/initial error < 0.05,Not reported
+Trimmed mean,Pass; final/initial error < 0.05,Not reported
+Coordinate median,Pass; final/initial error < 0.05,Not reported
+Standalone Krum,Not reported,Not reported
+FedAvg / no-attack baseline,Not reported,Not reported

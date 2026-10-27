@@ -1,0 +1,5 @@
+Aggregator,Dominant operations,Idealized work,Required condition
+Krum,Pairwise distances + rank scores,O(n²d),n >= 2f + 3
+Multi-Krum,Krum scores + selected average,O(n²d + kd),n >= 2f + 3; 1 <= k <= n-f-2
+Trimmed mean,Sort values for each coordinate,O(d n log n),0 <= beta < 0.5
+Coordinate-wise median,Coordinate selection,O(d n) average selection,Finite vectors of equal shape

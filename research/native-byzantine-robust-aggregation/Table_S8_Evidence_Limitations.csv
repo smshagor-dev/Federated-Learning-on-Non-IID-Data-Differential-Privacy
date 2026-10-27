@@ -1,0 +1,9 @@
+Requested inference,Evidence in supplied record,Permitted conclusion
+Timing stability,Two summary repetitions; no raw records,Only exploratory medians
+Optimization contribution,No scalar/OMP/SIMD factorial timings,No isolated causal speedup attribution
+All-four-algorithm CPU results,Median CPU measurements absent,No median CPU performance claim
+Convergence trajectory,Three endpoint Pass flags only,Only endpoint error bounded below 0.05
+IID / non-IID real-world robustness,No real-dataset training runs,No real-data generalization
+Sophisticated poisoning,Only sign-flip and Gaussian attacks tested,No claim for adaptive/collusive attackers
+End-to-end training acceleration,No training/communication wall times,No measured whole-round speedup
+Reproducible native software,Versioned native source/link not supplied,No code-level reproduction claim

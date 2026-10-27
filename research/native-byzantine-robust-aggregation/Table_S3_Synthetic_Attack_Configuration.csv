@@ -1,0 +1,13 @@
+Quantity,Reported configuration
+Client population,n = 10; 8 honest; f = 2 Byzantine (20%)
+Vector dimension,d = 128
+Optimization horizon,25 rounds
+Honest perturbation,Gaussian noise with standard deviation 0.03
+Byzantine 1,-8 × current target direction + Gaussian noise (standard deviation 0.1)
+Byzantine 2,"Independent Gaussian update, standard deviation 20"
+Global update step size,0.25
+Multi-Krum,"f = 2, k = 3"
+Trimmed mean,beta = 0.2
+Coordinate median,No tunable robustness parameter
+Success condition,Final Euclidean target error / initial target error < 0.05
+Random seed / exact initial target,Not reported in supplied record

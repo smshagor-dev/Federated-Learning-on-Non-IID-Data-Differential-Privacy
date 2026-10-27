@@ -1,0 +1,11 @@
+Item,Record,Interpretation
+OS and architecture,x86-64 Linux,Reported; distribution and kernel unrecorded
+CPU model / core count,Not reported,Required to reproduce performance
+Python,3.12.3,Reported
+PyTorch,2.14.0 CPU,Version recorded in manuscript; independently unverified
+NumPy,Not reported,Required for fair reference comparison
+Compiler,GCC 13.3,Reported
+Optimization / link flags,Not reported,Required for ablation and reproduction
+OpenMP,Enabled,"Thread count, placement and affinity not reported"
+SIMD selection,AVX-512 selected,Dispatch reported; CPU identification unavailable
+Number of clients,7,Reported

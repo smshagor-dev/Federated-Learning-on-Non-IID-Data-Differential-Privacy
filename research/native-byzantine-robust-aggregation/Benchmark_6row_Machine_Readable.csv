@@ -1,0 +1,7 @@
+algorithm,parameters,native_latency_ms,numpy_latency_ms,reported_speedup,timing_repetitions,source
+Krum,1000,0.071,0.171,2.41,2,Original manuscript Table in Section 6.3
+Multi-Krum,1000,0.07,0.155,2.22,2,Original manuscript Table in Section 6.3
+Trimmed mean,1000,0.116,0.081,0.7,2,Original manuscript Table in Section 6.3
+Krum,100000,0.91,2.812,3.09,2,Original manuscript Table in Section 6.3
+Multi-Krum,100000,1.425,2.944,2.07,2,Original manuscript Table in Section 6.3
+Trimmed mean,100000,7.364,7.087,0.96,2,Original manuscript Table in Section 6.3

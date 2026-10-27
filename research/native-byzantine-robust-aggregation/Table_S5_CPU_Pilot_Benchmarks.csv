@@ -1,0 +1,9 @@
+Algorithm,Parameters,Native (ms),NumPy (ms),Speedup
+Krum,"1,000",0.071,0.171,2.41x
+Krum,"100,000",0.910,2.812,3.09x
+Multi-Krum,"1,000",0.070,0.155,2.22x
+Multi-Krum,"100,000",1.425,2.944,2.07x
+Trimmed mean,"1,000",0.116,0.081,0.70x
+Trimmed mean,"100,000",7.364,7.087,0.96x
+Coordinate-wise median,"1,000",Not reported,Not reported,Not reported
+Coordinate-wise median,"100,000",Not reported,Not reported,Not reported

@@ -1,0 +1,46 @@
+{
+  "origin": "Reported methodology in original supplied manuscript; incomplete for exact experiment reproduction",
+  "benchmark": {
+    "client_count": 7,
+    "parameter_counts": [
+      1000,
+      100000
+    ],
+    "numpy_seed": 42,
+    "environment": {
+      "architecture": "x86-64 Linux",
+      "python": "3.12.3",
+      "pytorch": "2.14.0 CPU as written in manuscript - verify release/version",
+      "gcc": "13.3",
+      "openmp": "enabled",
+      "simd": "AVX-512 selected",
+      "cpu_model": null,
+      "cpu_cores": null,
+      "OMP_NUM_THREADS": null,
+      "numpy_version": null,
+      "compiler_flags": null,
+      "warmup": null,
+      "calls_per_measurement": null,
+      "timed_scope": null
+    },
+    "timed_repetitions": 2
+  },
+  "optimization": {
+    "clients": 10,
+    "honest_clients": 8,
+    "byzantine_clients": 2,
+    "dimensions": 128,
+    "rounds": 25,
+    "honest_noise_sigma": 0.03,
+    "sign_flip_scale": -8,
+    "sign_flip_noise_sigma": 0.1,
+    "gaussian_attack_sigma": 20,
+    "step_size": 0.25,
+    "multi_krum_f": 2,
+    "multi_krum_k": 3,
+    "trimmed_mean_beta": 0.2,
+    "initial_target": null,
+    "random_seed": null
+  },
+  "warning": "These are configurations transcribed from the manuscript, not raw experimental records. Null fields cannot be guessed."
+}

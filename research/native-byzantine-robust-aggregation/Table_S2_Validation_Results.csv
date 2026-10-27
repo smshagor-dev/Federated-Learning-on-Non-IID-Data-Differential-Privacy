@@ -1,0 +1,8 @@
+Validation case,Test objective,Result
+Krum and Multi-Krum,Parity with independent squared-distance/score reference,Pass
+Trimmed mean,Parity with NumPy-sorted coordinate reference,Pass
+"Coordinate median, odd/even",Parity with independent median reference,Pass
+Mismatched shapes,Reject inputs prior to aggregation,Pass
+NaN / non-finite input,Reject inputs prior to aggregation,Pass
+Invalid n–f relation,"Reject n=6, f=2 for Krum",Pass
+Wrapper shape/device/dtype,Restore caller-visible output attributes,Pass
