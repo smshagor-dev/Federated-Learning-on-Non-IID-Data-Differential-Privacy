@@ -151,7 +151,6 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertAlmostEqual(by_metric["jain_accuracy_index"], 0.97)
         self.assertAlmostEqual(by_metric["worst_client_loss"], 0.9)
 
-
     def complete_summary(self) -> dict:
         return {
             "schema_version": 2,
@@ -162,27 +161,27 @@ class BenchmarkRunnerTests(unittest.TestCase):
                 "partition_hash": "test-sha",
                 "parameters": {"source_training_partition_hash": "train-sha"},
             },
-            "runs": [{
-                "algorithm": "fedavg",
-                "rounds_completed": 10,
-                "final_acc": 0.8,
-                "client_evaluation": {
-                    "client_count": 2,
-                    "mean_client_accuracy": 0.8,
-                    "weighted_client_accuracy": 0.8,
-                    "median_client_accuracy": 0.8,
-                    "p10_client_accuracy": 0.7,
-                    "worst_client_accuracy": 0.7,
-                    "client_accuracy_std": 0.1,
-                    "jain_accuracy_index": 0.98,
-                },
-            }],
+            "runs": [
+                {
+                    "algorithm": "fedavg",
+                    "rounds_completed": 10,
+                    "final_acc": 0.8,
+                    "client_evaluation": {
+                        "client_count": 2,
+                        "mean_client_accuracy": 0.8,
+                        "weighted_client_accuracy": 0.8,
+                        "median_client_accuracy": 0.8,
+                        "p10_client_accuracy": 0.7,
+                        "worst_client_accuracy": 0.7,
+                        "client_accuracy_std": 0.1,
+                        "jain_accuracy_index": 0.98,
+                    },
+                }
+            ],
         }
 
     def test_scientific_evidence_accepts_complete_heldout_metrics(self) -> None:
-        runner._validate_completed_scientific_cell(
-            self.cell(), self.complete_summary()
-        )
+        runner._validate_completed_scientific_cell(self.cell(), self.complete_summary())
 
     def test_scientific_evidence_rejects_missing_client_metrics(self) -> None:
         summary = self.complete_summary()
