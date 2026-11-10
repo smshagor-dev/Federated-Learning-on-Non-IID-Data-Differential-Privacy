@@ -32,16 +32,23 @@ def _run_direct(script: str, *args: str) -> subprocess.CompletedProcess[str]:
 def test_primary_launcher_direct_script_is_importable_without_pythonpath() -> None:
     outcome = _run_direct(
         "scripts/run_tai_1680.py",
-        "--shard-count", "1680",
-        "--shard-index", "0",
+        "--shard-count",
+        "1680",
+        "--shard-index",
+        "0",
     )
     data = json.loads(outcome.stdout)
     assert data["status"] == "PLANNED_NOT_EXECUTED"
     assert data["expected_full_matrix"] == 1680
     assert data["assigned_shard_cells"] == 1
     assert data["exact_expected_cells"] == [
-        {"dataset": "MNIST", "condition": "iid", "method": "fedavg",
-         "seed": 11, "rounds": 50}
+        {
+            "dataset": "MNIST",
+            "condition": "iid",
+            "method": "fedavg",
+            "seed": 11,
+            "rounds": 50,
+        }
     ]
 
 
