@@ -17,6 +17,12 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
+# Direct script entrypoints put scripts/ at sys.path[0], not the repository root.
+# Ensure the same audited package can be imported after completing real training.
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT)
+
 DATASETS=('MNIST','FASHIONMNIST','CIFAR10','CIFAR100')
 CONDITIONS=('iid','dirichlet:1.0','dirichlet:0.3','dirichlet:0.1','dirichlet:0.05','pathological:2','quantity_skew:1.0')
 METHODS=('fedavg','fedprox','scaffold','ditto','per_fedavg','fedsam')
@@ -96,6 +102,9 @@ def main(argv=None)->int:
     status_dir.mkdir(parents=True,exist_ok=True)
     status_file=status_dir/f'shard-{args.shard_index}-of-{args.shard_count}.jsonl'
     env=os.environ.copy()
+    # Keep nested -m study and the post-training verification on one import path.
+    existing_path = env.get('PYTHONPATH', '')
+    env['PYTHONPATH'] = str(PROJECT_ROOT) + (os.pathsep + existing_path if existing_path else '')
     if args.cuda_device is not None:env['CUDA_VISIBLE_DEVICES']=args.cuda_device
     env['PYTHONUNBUFFERED']='1'
     errors=0
