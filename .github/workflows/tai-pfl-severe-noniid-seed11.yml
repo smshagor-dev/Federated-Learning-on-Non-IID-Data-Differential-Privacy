@@ -1,0 +1,153 @@
+name: IEEE TAI severe non-IID confirmatory batch
+
+# This starts six genuine 50-round runs on prespecified CIFAR-10/100,
+# Dirichlet alpha=0.1, seed=11. Seed=11 alone is NOT statistical inference.
+# Artifacts remain excluded from the main result until per-cell verification.
+on:
+  push:
+    branches:
+      - research/tai-1680-primary-execution-20261110
+    paths:
+      - .github/workflows/tai-pfl-severe-noniid-seed11.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tai-confirmatory-severe-noniid-seed11
+  cancel-in-progress: false
+
+jobs:
+  severe-noniid-real-50-round:
+    name: ${{ matrix.dataset }}-dirichlet-0p1-${{ matrix.method }}-seed11-50round
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - dataset: CIFAR10
+            method: fedavg
+            shard: 1020
+          - dataset: CIFAR10
+            method: ditto
+            shard: 1050
+          - dataset: CIFAR10
+            method: per_fedavg
+            shard: 1060
+          - dataset: CIFAR100
+            method: fedavg
+            shard: 1440
+          - dataset: CIFAR100
+            method: ditto
+            shard: 1470
+          - dataset: CIFAR100
+            method: per_fedavg
+            shard: 1480
+    env:
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
+      TAI_DATASET: ${{ matrix.dataset }}
+      TAI_METHOD: ${{ matrix.method }}
+      SHARD_INDEX: ${{ matrix.shard }}
+    steps:
+      - name: Checkout immutable source from same workflow SHA
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install official torchvision training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision numpy matplotlib pyyaml pytest
+
+      - name: Record full-protocol evidence and source identity
+        run: |
+          mkdir -p experiment-evidence
+          {
+            echo "Original official torchvision training; 50 actual communication rounds"
+            echo "CIFAR severe Dirichlet alpha=0.1; matched seed 11; 20 clients"
+            echo "No synthetic replacement, no differential privacy, no claim of significance"
+            echo "Commit SHA: $(git rev-parse HEAD)"
+            echo "Dataset: $TAI_DATASET; method: $TAI_METHOD; shard: $SHARD_INDEX"
+          } > experiment-evidence/SCOPE.txt
+          python scripts/run_tai_1680.py \
+            --shard-count 1680 \
+            --shard-index "$SHARD_INDEX" \
+            --max-cells 1 > experiment-evidence/expected-cell.json
+          python - <<'PY'
+          import json, os
+          plan = json.load(open("experiment-evidence/expected-cell.json", encoding="utf-8"))
+          assert plan["expected_full_matrix"] == 1680
+          assert plan["assigned_shard_cells"] == 1
+          cell = plan["exact_expected_cells"][0]
+          assert cell == {
+              "dataset": os.environ["TAI_DATASET"],
+              "condition": "dirichlet:0.1",
+              "method": os.environ["TAI_METHOD"],
+              "seed": 11,
+              "rounds": 50,
+          }, cell
+          print("VALIDATED PRESPECIFIED 50-ROUND CELL", cell)
+          PY
+
+      - name: Train real paired-condition model (50 rounds)
+        run: |
+          timeout --signal=TERM --kill-after=20s 295m \
+            python scripts/run_tai_1680.py \
+              --shard-count 1680 \
+              --shard-index "$SHARD_INDEX" \
+              --max-cells 1 \
+              --execute --skip-complete --archive-incomplete \
+              --root experiment-evidence/results \
+              --data-root data_raw
+
+      - name: Independent evidence and protocol audit
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell, assert_primary_50round_protocol
+          results = list(Path("experiment-evidence/results").rglob("result.json"))
+          assert len(results) == 1, "one complete primary evidence cell is required"
+          value = _check_cell(results[0])
+          assert_primary_50round_protocol(value)
+          req = value["request"]
+          assert req["dataset"] == os.environ["TAI_DATASET"]
+          assert req["method"] == os.environ["TAI_METHOD"]
+          assert req["partition"] == "dirichlet:0.1"
+          assert req["seed"] == 11 and req["rounds"] == 50
+          assert req["source_commit_sha"] == os.environ["GITHUB_SHA"]
+          assert value["minimum_heldout_client_samples"] > 0
+          audit = {
+              "status": "VERIFIED_REAL_50_ROUND_CELL",
+              "scope": "one seed, one dataset, one algorithm, no significance",
+              "dataset": req["dataset"], "condition": req["partition"],
+              "seed": req["seed"], "method": req["method"],
+              "training_source_sha": req["source_commit_sha"],
+              "run_id": value["run_id"], "metrics": value["metrics"],
+              "primary_cells_expected": 1680,
+          }
+          Path("experiment-evidence/VERIFIED_CELL.json").write_text(
+              json.dumps(audit, indent=2)+"\n", encoding="utf-8"
+          )
+          print(json.dumps(audit, indent=2))
+          PY
+
+      - name: Preserve complete or interrupted raw experimental evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-severe-${{ matrix.dataset }}-${{ matrix.method }}-seed11
+          path: experiment-evidence/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 1
