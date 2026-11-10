@@ -21,7 +21,7 @@ from dataclasses import dataclass
 # Ensure the same audited package can be imported after completing real training.
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT)
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 DATASETS=('MNIST','FASHIONMNIST','CIFAR10','CIFAR100')
 CONDITIONS=('iid','dirichlet:1.0','dirichlet:0.3','dirichlet:0.1','dirichlet:0.05','pathological:2','quantity_skew:1.0')
