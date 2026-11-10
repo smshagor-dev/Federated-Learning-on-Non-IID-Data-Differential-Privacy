@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -242,23 +243,28 @@ class BenchmarkRunnerTests(unittest.TestCase):
                     "schema_version": 1,
                     "cell_id": cell.cell_id,
                     "request_hash": runner._config_hash(config),
+                    "source_commit_sha": "test-commit",
                     "training_partition_hash": "train-sha",
                     "heldout_partition_hash": "test-sha",
                 },
             )
-            observed, status = runner._run_cell(
-                cell=cell,
-                base_config=self.base_config(),
-                benchmark_root=root,
-                resume=True,
-                dry_run=False,
-            )
+            with mock.patch.object(runner, "_commit_sha", return_value="test-commit"):
+                observed, status = runner._run_cell(
+                    cell=cell,
+                    base_config=self.base_config(),
+                    benchmark_root=root,
+                    resume=True,
+                    dry_run=False,
+                )
             self.assertEqual(status, "resumed")
             self.assertEqual(observed, summary)
 
             changed = self.base_config()
             changed["federated"]["sample_rate"] = 0.5
-            with self.assertRaisesRegex(ValueError, "configuration changed"):
+            with (
+                mock.patch.object(runner, "_commit_sha", return_value="test-commit"),
+                self.assertRaisesRegex(ValueError, "configuration changed"),
+            ):
                 runner._run_cell(
                     cell=cell,
                     base_config=changed,
@@ -266,6 +272,43 @@ class BenchmarkRunnerTests(unittest.TestCase):
                     resume=True,
                     dry_run=False,
                 )
+
+    def test_resume_rejects_missing_or_changed_source_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cell = self.cell()
+            cell_root = root / "cells" / cell.cell_id
+            results = cell_root / "results"
+            results.mkdir(parents=True)
+            (results / "summary.json").write_text(
+                json.dumps(self.complete_summary()), encoding="utf-8"
+            )
+            config = runner._cell_config(self.base_config(), cell, results)
+            for saved_sha in (None, "different-commit"):
+                receipt = {
+                    "schema_version": 1,
+                    "cell_id": cell.cell_id,
+                    "request_hash": runner._config_hash(config),
+                    "training_partition_hash": "train-sha",
+                    "heldout_partition_hash": "test-sha",
+                }
+                if saved_sha is not None:
+                    receipt["source_commit_sha"] = saved_sha
+                runner._write_json(cell_root / "completion_receipt.json", receipt)
+                with (
+                    self.subTest(saved_sha=saved_sha),
+                    mock.patch.object(
+                        runner, "_commit_sha", return_value="expected-commit"
+                    ),
+                    self.assertRaisesRegex(ValueError, "source commit"),
+                ):
+                    runner._run_cell(
+                        cell=cell,
+                        base_config=self.base_config(),
+                        benchmark_root=root,
+                        resume=True,
+                        dry_run=False,
+                    )
 
 
 if __name__ == "__main__":

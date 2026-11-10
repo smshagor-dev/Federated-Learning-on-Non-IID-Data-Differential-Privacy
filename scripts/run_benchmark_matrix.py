@@ -303,6 +303,11 @@ def _run_cell(
 
     config = _cell_config(base_config, cell, results_dir)
     receipt_path = cell_root / "completion_receipt.json"
+    source_commit_sha = _commit_sha()
+    if not dry_run and source_commit_sha == "unknown":
+        raise ValueError(
+            "benchmark source Git revision unavailable; refusing unverifiable evidence"
+        )
     if resume and summary_path.is_file():
         if not receipt_path.is_file():
             raise ValueError(
@@ -316,6 +321,10 @@ def _run_cell(
         ):
             raise ValueError(
                 "benchmark resume configuration changed; refuse stale result"
+            )
+        if receipt.get("source_commit_sha") != source_commit_sha:
+            raise ValueError(
+                "benchmark source commit missing or changed; rerun without --resume"
             )
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         _validate_completed_scientific_cell(cell, summary)
@@ -366,6 +375,11 @@ def _run_cell(
             f"benchmark cell {cell.cell_id} failed with return code "
             f"{completed.returncode}; see {log_path}"
         )
+    if _commit_sha() != source_commit_sha:
+        raise RuntimeError(
+            "benchmark Git revision changed during execution; refusing "
+            "unverifiable completion receipt"
+        )
     if not summary_path.is_file():
         raise RuntimeError(
             f"benchmark cell {cell.cell_id} completed without {summary_path}"
@@ -378,6 +392,7 @@ def _run_cell(
             "schema_version": 1,
             "cell_id": cell.cell_id,
             "request_hash": _config_hash(config),
+            "source_commit_sha": source_commit_sha,
             "training_partition_hash": summary["partition"]["partition_hash"],
             "heldout_partition_hash": summary["evaluation_partition"][
                 "partition_hash"

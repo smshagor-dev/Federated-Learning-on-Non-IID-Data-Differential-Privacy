@@ -82,7 +82,7 @@ python scripts/run_benchmark_matrix.py \
   --resume
 ```
 
-This is a proposed run command. It is **not evidence that the experiments have run**. The changed runner requires a completion receipt matching the exact effective request and train/test partition hashes before `--resume` accepts an earlier result. Older results lacking a receipt must be examined separately, not silently inherited.
+This is a proposed run command. It is **not evidence that the experiments have run**. The changed runner requires a completion receipt matching the exact effective request, source Git commit, and train/test partition hashes before `--resume` accepts an earlier result. Older results lacking a receipt must be examined separately, not silently inherited.
 
 ## 7. Publication gate
 
