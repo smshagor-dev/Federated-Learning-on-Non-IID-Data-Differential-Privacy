@@ -234,9 +234,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
             results = cell_root / "results"
             results.mkdir(parents=True)
             summary = self.complete_summary()
-            (results / "summary.json").write_text(
-                json.dumps(summary), encoding="utf-8"
-            )
+            (results / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
             config = runner._cell_config(self.base_config(), cell, results)
             runner._write_json(
                 cell_root / "completion_receipt.json",
