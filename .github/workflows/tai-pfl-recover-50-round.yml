@@ -1,0 +1,109 @@
+name: IEEE TAI recover archived 50-round evidence
+# Recover finished primary evidence after the post-training script import failure.
+on:
+  push:
+    branches:
+      - research/tai-1680-primary-execution-20261110
+    paths:
+      - .github/workflows/tai-pfl-recover-50-round.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  independently-audit-primary-result:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install independent evidence verifier
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision numpy pyyaml pytest
+      - name: Download original 50-round training evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: tai-pfl-primary-50round-results
+          run-id: 42881667778
+          github-token: ${{ github.token }}
+          path: recovered
+      - name: Verify complete raw experiment and numerical outputs
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          from pathlib import Path
+          import numpy as np
+          from tai_pfl.analysis import _check_cell
+
+          root = Path("recovered/results/mnist/iid/11/fedavg")
+          result = _check_cell(root / "result.json")
+          req = result["request"]
+          assert req["source_commit_sha"] == "f244086da6b7454ada387af379a62f20f41021f9"
+          assert req["dataset"] == "MNIST"
+          assert req["partition"] == "iid"
+          assert req["method"] == "fedavg"
+          assert req["seed"] == 11
+          assert req["rounds"] == 50
+          assert req["training"]["local_epochs"] == 2
+          assert req["training"]["participation"] == 0.2
+          with np.load(root / "train_indices.npz", allow_pickle=False) as data:
+              train_parts = [data[k] for k in sorted(data.files)]
+          with np.load(root / "test_indices.npz", allow_pickle=False) as data:
+              test_parts = [data[k] for k in sorted(data.files)]
+          assert len(train_parts) == len(test_parts) == 20
+          assert np.array_equal(np.sort(np.concatenate(train_parts)),
+                                np.arange(60000))
+          assert np.array_equal(np.sort(np.concatenate(test_parts)),
+                                np.arange(10000))
+          with (root / "clients_deployed.csv").open(
+              newline="", encoding="utf-8"
+          ) as handle:
+              clients = list(csv.DictReader(handle))
+          assert sum(int(r["n_test"]) for r in clients) == 10000
+          assert sum(int(r["n_correct"]) for r in clients) == 9907
+          assert abs(float(result["metrics"]["micro_accuracy"]) - .9907) < 1e-12
+          with (root / "rounds.csv").open(
+              newline="", encoding="utf-8"
+          ) as handle:
+              rounds = list(csv.DictReader(handle))
+          assert [int(r["round"]) for r in rounds] == list(range(1, 51))
+          assert int(rounds[-1]["total_optimizer_steps"]) == 18800
+          report = {
+              "status": "VERIFIED_COMPLETE_PRIMARY_CELL",
+              "scope": "one of 1680 cells only",
+              "dataset": req["dataset"],
+              "condition": req["partition"],
+              "method": req["method"],
+              "seed": req["seed"],
+              "rounds": req["rounds"],
+              "source_commit_sha": req["source_commit_sha"],
+              "original_training_run": 42881667778,
+              "full_study_verified_cells": 1,
+              "full_study_required_cells": 1680,
+              "metrics": result["metrics"],
+              "evidence_id": result["run_id"],
+              "caution": "single cell, no statistical inference",
+          }
+          Path("recovered/VERIFIED_50ROUND_RESULT.json").write_text(
+              json.dumps(report, indent=2) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(report, indent=2))
+          PY
+      - name: Preserve independent audit and original raw evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-pfl-recovered-verified-50round
+          path: recovered/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 1
