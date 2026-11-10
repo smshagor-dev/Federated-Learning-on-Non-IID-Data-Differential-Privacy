@@ -18,6 +18,7 @@ from tai_pfl.engine import (
     METHODS, TrainSpec, _support_query, average_states, summarize_client_rows,
 )
 from tai_pfl.study import run_cell
+from tai_pfl.heterogeneity import realized_heterogeneity
 
 
 class RealDataStudyContractTests(unittest.TestCase):
@@ -67,6 +68,18 @@ class RealDataStudyContractTests(unittest.TestCase):
         left, right = _support_query(indices, 20)
         self.assertFalse(set(left) & set(right))
         self.assertEqual(set(np.concatenate([left, right])), set(indices))
+
+    def test_realized_heterogeneity_identifies_label_support_and_size_skew(self) -> None:
+        train, _test = self.fixture()
+        indices = {0: np.arange(4), 1: np.arange(4, 16)}
+        stats = realized_heterogeneity(train, indices)
+        self.assertEqual(stats["client_count"], 2)
+        self.assertEqual(stats["minimum_train_samples"], 4)
+        self.assertEqual(stats["maximum_train_samples"], 12)
+        self.assertGreater(stats["training_client_size_cv"], 0)
+        self.assertGreaterEqual(stats["mean_pairwise_js_divergence"], 0)
+        self.assertLessEqual(stats["mean_pairwise_js_divergence"], 1)
+        self.assertEqual(sum(row["sample_count"] for row in stats["clients"]), 16)
 
     def test_partition_validation_refuses_missing_heldout_data(self) -> None:
         train, test = self.fixture()
