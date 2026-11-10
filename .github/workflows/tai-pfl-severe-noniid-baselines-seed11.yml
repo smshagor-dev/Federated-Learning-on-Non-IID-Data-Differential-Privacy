@@ -1,0 +1,141 @@
+name: IEEE TAI severe non-IID matched baseline completion
+
+# Additional six real 50-round baseline cells (FedProx/SCAFFOLD/FedSAM).
+# Freeze the same research revision used by the first CIFAR method cohort.
+on:
+  push:
+    branches:
+      - research/tai-1680-primary-execution-20261110
+    paths:
+      - .github/workflows/tai-pfl-severe-noniid-baselines-seed11.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tai-cifar-severe-baselines-seed11
+  cancel-in-progress: false
+
+jobs:
+  matched-50-round-baselines:
+    name: ${{ matrix.dataset }}-${{ matrix.method }}-severe-50round
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - dataset: CIFAR10
+            method: fedprox
+            shard: 1030
+          - dataset: CIFAR10
+            method: scaffold
+            shard: 1040
+          - dataset: CIFAR10
+            method: fedsam
+            shard: 1070
+          - dataset: CIFAR100
+            method: fedprox
+            shard: 1450
+          - dataset: CIFAR100
+            method: scaffold
+            shard: 1460
+          - dataset: CIFAR100
+            method: fedsam
+            shard: 1490
+    env:
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
+      EXP_DATASET: ${{ matrix.dataset }}
+      EXP_METHOD: ${{ matrix.method }}
+      SHARD: ${{ matrix.shard }}
+      FROZEN_SOURCE: a6641509c2b8e6557101499db553177d70a6a3e2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a6641509c2b8e6557101499db553177d70a6a3e2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install real-data training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision numpy matplotlib pyyaml pytest
+      - name: Check matched research source and exact protocol
+        run: |
+          test "$(git rev-parse HEAD)" = "$FROZEN_SOURCE"
+          mkdir -p study-evidence
+          python scripts/run_tai_1680.py \
+            --shard-count 1680 \
+            --shard-index "$SHARD" \
+            --max-cells 1 > study-evidence/plan.json
+          python - <<'PY'
+          import json, os
+          plan = json.load(open("study-evidence/plan.json", encoding="utf-8"))
+          assert plan["expected_full_matrix"] == 1680
+          assert plan["exact_expected_cells"] == [{
+              "dataset": os.environ["EXP_DATASET"],
+              "condition": "dirichlet:0.1",
+              "method": os.environ["EXP_METHOD"],
+              "seed": 11, "rounds": 50,
+          }]
+          print(plan)
+          PY
+          echo "Official torchvision; 50 rounds; Dirichlet alpha 0.1; same frozen source; independent per-client held-out evaluation; seed11 only, not significance" > study-evidence/SCOPE.txt
+
+      - name: Execute actual 50-round official experiment
+        run: |
+          timeout --signal=TERM --kill-after=20s 295m \
+            python scripts/run_tai_1680.py \
+              --shard-count 1680 --shard-index "$SHARD" --max-cells 1 \
+              --execute --skip-complete --archive-incomplete \
+              --root study-evidence/results --data-root data_raw
+
+      - name: Verify raw source and complete 50-round training
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell, assert_primary_50round_protocol
+          paths = list(Path("study-evidence/results").rglob("result.json"))
+          assert len(paths) == 1
+          value = _check_cell(paths[0])
+          assert_primary_50round_protocol(value)
+          request = value["request"]
+          assert request["source_commit_sha"] == os.environ["FROZEN_SOURCE"]
+          assert request["dataset"] == os.environ["EXP_DATASET"]
+          assert request["method"] == os.environ["EXP_METHOD"]
+          assert request["partition"] == "dirichlet:0.1"
+          assert request["seed"] == 11
+          payload = {
+              "status": "VERIFIED_COMPLETE_PRIMARY_CELL",
+              "scope": "single prespecified 50-round seed; no statistical inference",
+              "dataset": request["dataset"],
+              "condition": request["partition"],
+              "method": request["method"],
+              "seed": request["seed"],
+              "source_commit": request["source_commit_sha"],
+              "run_id": value["run_id"],
+              "metrics": value["metrics"]
+          }
+          Path("study-evidence/VERIFIED_CELL.json").write_text(
+              json.dumps(payload, indent=2)+"\n", encoding="utf-8"
+          )
+          print(json.dumps(payload, indent=2))
+          PY
+
+      - name: Retain complete or incomplete machine-auditable evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-frozen-severe-${{ matrix.dataset }}-${{ matrix.method }}-seed11
+          path: study-evidence/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 1
