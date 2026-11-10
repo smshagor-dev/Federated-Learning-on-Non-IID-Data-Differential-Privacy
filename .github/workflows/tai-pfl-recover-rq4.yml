@@ -9,6 +9,7 @@ on:
       - research/tai-1680-primary-execution-20261110
     paths:
       - .github/workflows/tai-pfl-recover-rq4.yml
+      - scripts/run_tai_rq4_from_primary.py
   workflow_run:
     workflows:
       - IEEE TAI RQ4 50-round sensitivity
