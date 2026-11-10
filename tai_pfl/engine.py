@@ -39,11 +39,13 @@ class TrainSpec:
     def validate(self) -> None:
         if self.batch_size <= 0 or self.local_epochs <= 0:
             raise ValueError("batch size and local epochs must be positive")
-        if self.learning_rate <= 0 or self.meta_inner_lr <= 0 or self.meta_outer_lr <= 0:
+        if (not all(math.isfinite(v) and v > 0 for v in (
+            self.learning_rate, self.meta_inner_lr, self.meta_outer_lr
+        ))):
             raise ValueError("all learning rates must be positive")
         if self.adaptation_steps <= 0:
             raise ValueError("adaptation_steps must be positive")
-        if not 0 < self.participation <= 1:
+        if not math.isfinite(self.participation) or not 0 < self.participation <= 1:
             raise ValueError("participation must lie in (0, 1]")
         for value in (self.momentum, self.weight_decay, self.fedprox_mu,
                       self.ditto_lambda, self.sam_rho):
