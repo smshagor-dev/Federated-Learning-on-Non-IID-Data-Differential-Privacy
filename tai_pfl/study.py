@@ -14,6 +14,7 @@ import json
 import platform
 import random
 import subprocess
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
@@ -153,6 +154,7 @@ def run_cell(
         for cid in train_partitions
     }
     round_rows: list[dict] = []
+    training_started = time.perf_counter()
     for round_number in range(1, rounds + 1):
         selected = selected_clients(participants, spec.participation, seed, round_number)
         local_states: list[State] = []
@@ -205,11 +207,13 @@ def run_cell(
             "total_optimizer_steps": sum(step_counts.values()),
         })
 
+    training_wall_seconds = time.perf_counter() - training_started
     _write_csv(output_dir / "rounds.csv", round_rows)
     torch.save(global_state, output_dir / "global_model.pt")
     if method == "ditto":
         torch.save(personal_states, output_dir / "ditto_client_models.pt")
 
+    evaluation_started = time.perf_counter()
     deployed: list[dict] = []
     global_rows: list[dict] = []
     min_test_n = min(len(v) for v in test_partitions.values())
@@ -240,6 +244,7 @@ def run_cell(
                          "optimizer_steps": step_counts[cid], **p})
     if method == "per_fedavg":
         torch.save(personal_states, output_dir / "per_fedavg_adapted_models.pt")
+    evaluation_wall_seconds = time.perf_counter() - evaluation_started
     _write_csv(output_dir / "clients_deployed.csv", deployed)
     _write_csv(output_dir / "clients_global.csv", global_rows)
     primary = summarize_client_rows(deployed)
@@ -265,6 +270,22 @@ def run_cell(
         },
         "personalized_models_aggregated": False,
         "model_architecture": type(prototype).__name__,
+        "compute_observation": {
+            "training_wall_seconds": training_wall_seconds,
+            "evaluation_wall_seconds": evaluation_wall_seconds,
+            "optimizer_steps_from_training": sum(step_counts.values()),
+            "estimated_training_backward_passes": sum(step_counts.values()) * (
+                2 if method in ("fedsam", "per_fedavg") else 1
+            ),
+            "adaptation_steps_from_training_only": (
+                spec.adaptation_steps * participants if method == "per_fedavg" else 0
+            ),
+            "compute_accounting_note": (
+                "Per-FedAvg local counts meta outer steps, plus one inner support "
+                "step per update; FedSAM performs two backward passes per SGD step. "
+                "Costs must not be equated solely by communication rounds."
+            ),
+        },
         "environment": {
             "python": platform.python_version(), "torch": torch.__version__,
             "numpy": np.__version__, "device": str(device),
