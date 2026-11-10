@@ -152,5 +152,124 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertAlmostEqual(by_metric["worst_client_loss"], 0.9)
 
 
+    def complete_summary(self) -> dict:
+        return {
+            "schema_version": 2,
+            "dataset": "MNIST",
+            "seed": 23,
+            "partition": {"partition_hash": "train-sha"},
+            "evaluation_partition": {
+                "partition_hash": "test-sha",
+                "parameters": {"source_training_partition_hash": "train-sha"},
+            },
+            "runs": [{
+                "algorithm": "fedavg",
+                "rounds_completed": 10,
+                "final_acc": 0.8,
+                "client_evaluation": {
+                    "client_count": 2,
+                    "mean_client_accuracy": 0.8,
+                    "weighted_client_accuracy": 0.8,
+                    "median_client_accuracy": 0.8,
+                    "p10_client_accuracy": 0.7,
+                    "worst_client_accuracy": 0.7,
+                    "client_accuracy_std": 0.1,
+                    "jain_accuracy_index": 0.98,
+                },
+            }],
+        }
+
+    def test_scientific_evidence_accepts_complete_heldout_metrics(self) -> None:
+        runner._validate_completed_scientific_cell(
+            self.cell(), self.complete_summary()
+        )
+
+    def test_scientific_evidence_rejects_missing_client_metrics(self) -> None:
+        summary = self.complete_summary()
+        del summary["runs"][0]["client_evaluation"]["p10_client_accuracy"]
+        with self.assertRaisesRegex(ValueError, "p10_client_accuracy"):
+            runner._validate_completed_scientific_cell(self.cell(), summary)
+
+    def test_scientific_evidence_rejects_mismatched_partition(self) -> None:
+        summary = self.complete_summary()
+        summary["evaluation_partition"]["parameters"][
+            "source_training_partition_hash"
+        ] = "different-train-sha"
+        with self.assertRaisesRegex(ValueError, "provenance"):
+            runner._validate_completed_scientific_cell(self.cell(), summary)
+
+    def test_scientific_evidence_rejects_incomplete_rounds(self) -> None:
+        summary = self.complete_summary()
+        summary["runs"][0]["rounds_completed"] = 2
+        with self.assertRaisesRegex(ValueError, "rounds"):
+            runner._validate_completed_scientific_cell(self.cell(), summary)
+
+    def test_scientific_evidence_rejects_global_client_disagreement(self) -> None:
+        summary = self.complete_summary()
+        summary["runs"][0]["final_acc"] = 0.9
+        with self.assertRaisesRegex(ValueError, "disagrees"):
+            runner._validate_completed_scientific_cell(self.cell(), summary)
+
+    def test_resume_rejects_old_summary_without_completion_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            results = root / "cells" / self.cell().cell_id / "results"
+            results.mkdir(parents=True)
+            (results / "summary.json").write_text(
+                json.dumps(self.complete_summary()), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "completion receipt"):
+                runner._run_cell(
+                    cell=self.cell(),
+                    base_config=self.base_config(),
+                    benchmark_root=root,
+                    resume=True,
+                    dry_run=False,
+                )
+
+    def test_resume_uses_matching_receipt_without_running(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cell = self.cell()
+            cell_root = root / "cells" / cell.cell_id
+            results = cell_root / "results"
+            results.mkdir(parents=True)
+            summary = self.complete_summary()
+            (results / "summary.json").write_text(
+                json.dumps(summary), encoding="utf-8"
+            )
+            config = runner._cell_config(self.base_config(), cell, results)
+            runner._write_json(
+                cell_root / "completion_receipt.json",
+                {
+                    "schema_version": 1,
+                    "cell_id": cell.cell_id,
+                    "request_hash": runner._config_hash(config),
+                    "training_partition_hash": "train-sha",
+                    "heldout_partition_hash": "test-sha",
+                },
+            )
+            observed, status = runner._run_cell(
+                cell=cell,
+                base_config=self.base_config(),
+                benchmark_root=root,
+                resume=True,
+                dry_run=False,
+            )
+            self.assertEqual(status, "resumed")
+            self.assertEqual(observed, summary)
+
+            changed = self.base_config()
+            changed["federated"]["sample_rate"] = 0.5
+            with self.assertRaisesRegex(ValueError, "configuration changed"):
+                runner._run_cell(
+                    cell=cell,
+                    base_config=changed,
+                    benchmark_root=root,
+                    resume=True,
+                    dry_run=False,
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
