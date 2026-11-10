@@ -56,7 +56,8 @@ def _check_cell(path: Path) -> dict:
         raise ValueError(f"invalid official holdout identity: {path}")
     root = path.parent
     for name in ("request.json", "train_indices.npz", "test_indices.npz",
-                 "clients_deployed.csv", "clients_global.csv", "global_model.pt"):
+                 "clients_deployed.csv", "clients_global.csv", "global_model.pt",
+                 "realized_heterogeneity.json"):
         if not (root / name).is_file():
             raise ValueError(f"required evidence artifact missing: {root / name}")
     if json.loads((root / "request.json").read_text(encoding="utf-8")) != request:
@@ -69,6 +70,10 @@ def _check_cell(path: Path) -> dict:
                        for k in archive.files}
         if _partition_digest(indices) != request[manifest_key]:
             raise ValueError(f"{split} indices do not match persisted partition hash: {path}")
+    recorded = json.loads((root / "realized_heterogeneity.json").read_text(encoding="utf-8"))
+    recorded_summary = {k: v for k, v in recorded.items() if k != "clients"}
+    if item.get("realized_heterogeneity") != recorded_summary:
+        raise ValueError(f"realized heterogeneity summary does not match: {path}")
     rows = _read_rows(root / "clients_deployed.csv")
     ids = [r["client_id"] for r in rows]
     if ids != list(range(len(ids))):
