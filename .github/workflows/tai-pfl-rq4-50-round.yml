@@ -1,0 +1,127 @@
+name: IEEE TAI RQ4 50-round sensitivity
+
+# Bounded launch: one genuine Per-FedAvg primary cell and 3/5-step
+# adaptation from exactly the same 50-round trained checkpoint.
+# The first branch push runs MNIST / IID / seed 11 only.
+on:
+  push:
+    branches:
+      - research/tai-1680-primary-execution-20261110
+    paths:
+      - .github/workflows/tai-pfl-rq4-50-round.yml
+  workflow_dispatch:
+    inputs:
+      shard_index:
+        description: "Zero-based primary shard index for a Per-FedAvg cell"
+        default: "40"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rq4-primary-and-evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install official research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision numpy matplotlib pyyaml pytest
+
+      - name: Verify requested shard is 50-round Per-FedAvg
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          from scripts.run_tai_1680 import required_cells
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as f:
+              event = json.load(f)
+          index = int(event.get("inputs", {}).get("shard_index", "40"))
+          cells = required_cells()
+          if not (0 <= index < len(cells)):
+              raise ValueError("invalid primary shard index")
+          cell = cells[index]
+          if cell.method != "per_fedavg":
+              raise ValueError("RQ4 requires a Per-FedAvg primary cell")
+          root = pathlib.Path("rq4-artifacts")
+          root.mkdir(exist_ok=True)
+          (root / "SCOPE.txt").write_text(
+              "Actual 50-round Per-FedAvg primary plus derived 3/5-step "
+              "evaluation-only sensitivity; one seed is not statistical proof.\n",
+              encoding="utf-8",
+          )
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+              f.write(f"SHARD_INDEX={index}\n")
+              f.write(f"PRIMARY_CELL={root / 'primary' / cell.path(pathlib.Path('.'))}\n")
+          print(cell)
+          PY
+
+      - name: Train primary 50-round Per-FedAvg cell
+        run: |
+          timeout --signal=TERM --kill-after=20s 275m \
+            python scripts/run_tai_1680.py \
+              --shard-count 1680 \
+              --shard-index "$SHARD_INDEX" \
+              --max-cells 1 \
+              --execute \
+              --skip-complete \
+              --archive-incomplete \
+              --root rq4-artifacts/primary \
+              --data-root data_raw
+
+      - name: Recompute original adaptation-1 and evaluate RQ4 budgets 3/5
+        run: |
+          timeout --signal=TERM --kill-after=20s 35m \
+            python scripts/run_tai_rq4_from_primary.py \
+              --primary-cell "$PRIMARY_CELL" \
+              --output-root rq4-artifacts/adaptation \
+              --data-root data_raw \
+              --steps 3 5
+
+      - name: Verify RQ4 sensitivity output lineage and full 50-round protocol
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell
+          original = _check_cell(Path(os.environ["PRIMARY_CELL"]) / "result.json")
+          base = original["request"]
+          assert base["rounds"] == 50
+          assert base["method"] == "per_fedavg"
+          derived = list(Path("rq4-artifacts/adaptation").rglob("result.json"))
+          assert len(derived) == 2
+          assert {
+              _check_cell(path)["request"]["training"]["adaptation_steps"]
+              for path in derived
+          } == {3, 5}
+          for path in derived:
+              item = _check_cell(path)
+              assert item["source_primary_run_id"] == original["run_id"]
+              assert item["training_reused_from_primary"] is True
+              assert item["request"]["train_partition_hash"] == base["train_partition_hash"]
+              assert item["request"]["test_partition_hash"] == base["test_partition_hash"]
+          print("VERIFIED RQ4 ONE-SEED REAL-DATA SENSITIVITY; no inferential claim")
+          PY
+
+      - name: Preserve evidence even on unsuccessful experiment
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-pfl-rq4-50round-real-evidence
+          path: rq4-artifacts/
+          retention-days: 90
+          if-no-files-found: warn
+          compression-level: 1
