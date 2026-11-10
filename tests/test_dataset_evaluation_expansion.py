@@ -185,15 +185,17 @@ class ScientificCheckpointValidationTests(unittest.TestCase):
     def test_missing_model_checkpoint_cannot_be_reconstructed(self) -> None:
         from utils.client_evaluation import _build_final_model
 
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(FileNotFoundError, "no final model"):
-                _build_final_model(
-                    checkpoint_path=os.path.join(directory, "missing.pt"),
-                    algorithm="fedavg",
-                    config={"federated": {"rounds": 3}},
-                    num_classes=10,
-                    in_channels=1,
-                )
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            self.assertRaisesRegex(FileNotFoundError, "no final model"),
+        ):
+            _build_final_model(
+                checkpoint_path=os.path.join(directory, "missing.pt"),
+                algorithm="fedavg",
+                config={"federated": {"rounds": 3}},
+                num_classes=10,
+                in_channels=1,
+            )
 
     def test_checkpoint_algorithm_and_rounds_must_match(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
