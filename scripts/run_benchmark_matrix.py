@@ -13,6 +13,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import subprocess
 import sys
 from dataclasses import asdict
@@ -231,6 +232,62 @@ def _write_json(path: Path, payload: object) -> None:
     )
 
 
+_REQUIRED_CLIENT_METRICS = (
+    "mean_client_accuracy",
+    "weighted_client_accuracy",
+    "median_client_accuracy",
+    "p10_client_accuracy",
+    "worst_client_accuracy",
+    "client_accuracy_std",
+    "jain_accuracy_index",
+)
+
+
+def _validate_completed_scientific_cell(
+    cell: BenchmarkCell, summary: dict[str, Any]
+) -> None:
+    """Reject incomplete, mismatched, or non-held-out empirical evidence."""
+    if int(summary.get("schema_version", 0)) < 2:
+        raise ValueError("benchmark summary lacks post-run held-out evaluation")
+    if str(summary.get("dataset", "")).lower() != cell.dataset_id.lower():
+        raise ValueError("benchmark summary dataset does not match cell")
+    if summary.get("seed") != cell.seed:
+        raise ValueError("benchmark summary seed does not match cell")
+
+    train_partition = summary.get("partition") or {}
+    heldout = summary.get("evaluation_partition") or {}
+    train_hash = train_partition.get("partition_hash")
+    heldout_hash = heldout.get("partition_hash")
+    if not train_hash or not heldout_hash:
+        raise ValueError("missing train or independent held-out partition hash")
+    if (heldout.get("parameters") or {}).get(
+        "source_training_partition_hash"
+    ) != train_hash:
+        raise ValueError("held-out partition provenance does not match training")
+
+    runs = summary.get("runs") or []
+    if len(runs) != 1 or runs[0].get("algorithm") != cell.algorithm_id:
+        raise ValueError("benchmark cell contains a missing or mismatched algorithm")
+    run = runs[0]
+    if run.get("rounds_completed") != cell.rounds:
+        raise ValueError("benchmark training rounds are incomplete")
+    metrics = run.get("client_evaluation") or {}
+    for key in _REQUIRED_CLIENT_METRICS:
+        value = metrics.get(key)
+        if value is None or not math.isfinite(float(value)):
+            raise ValueError(f"missing or invalid held-out client metric: {key}")
+        if not 0.0 <= float(value) <= 1.0:
+            raise ValueError(f"held-out client metric outside [0, 1]: {key}")
+    if not math.isfinite(float(run.get("final_acc", float("nan")))):
+        raise ValueError("benchmark global test accuracy is missing")
+    if abs(
+        float(run["final_acc"]) - float(metrics["weighted_client_accuracy"])
+    ) > 1e-10:
+        raise ValueError("held-out weighted client accuracy disagrees with global")
+    if int(metrics.get("client_count", 0)) <= 0:
+        raise ValueError("held-out client count is missing")
+
+
 def _run_cell(
     *,
     cell: BenchmarkCell,
@@ -245,13 +302,46 @@ def _run_cell(
     cell_root.mkdir(parents=True, exist_ok=True)
 
     config = _cell_config(base_config, cell, results_dir)
+    receipt_path = cell_root / "completion_receipt.json"
+    source_commit_sha = _commit_sha()
+    if not dry_run and source_commit_sha == "unknown":
+        raise ValueError(
+            "benchmark source Git revision unavailable; refusing unverifiable evidence"
+        )
+    if resume and summary_path.is_file():
+        if not receipt_path.is_file():
+            raise ValueError(
+                "existing benchmark has no verified completion receipt; "
+                "rerun without --resume to regenerate scientific evidence"
+            )
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        if (
+            receipt.get("cell_id") != cell.cell_id
+            or receipt.get("request_hash") != _config_hash(config)
+        ):
+            raise ValueError(
+                "benchmark resume configuration changed; refuse stale result"
+            )
+        if receipt.get("source_commit_sha") != source_commit_sha:
+            raise ValueError(
+                "benchmark source commit missing or changed; rerun without --resume"
+            )
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        _validate_completed_scientific_cell(cell, summary)
+        if (
+            receipt.get("training_partition_hash")
+            != summary["partition"]["partition_hash"]
+            or receipt.get("heldout_partition_hash")
+            != summary["evaluation_partition"]["partition_hash"]
+        ):
+            raise ValueError("benchmark resume partition hashes do not match")
+        return summary, "resumed"
+
     config_path = cell_root / "config.yaml"
     with config_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, sort_keys=False)
     _write_json(cell_root / "cell.json", cell.canonical_payload())
 
-    if resume and summary_path.is_file():
-        return json.loads(summary_path.read_text(encoding="utf-8")), "resumed"
     if dry_run:
         return None, "planned"
 
@@ -285,11 +375,31 @@ def _run_cell(
             f"benchmark cell {cell.cell_id} failed with return code "
             f"{completed.returncode}; see {log_path}"
         )
+    if _commit_sha() != source_commit_sha:
+        raise RuntimeError(
+            "benchmark Git revision changed during execution; refusing "
+            "unverifiable completion receipt"
+        )
     if not summary_path.is_file():
         raise RuntimeError(
             f"benchmark cell {cell.cell_id} completed without {summary_path}"
         )
-    return json.loads(summary_path.read_text(encoding="utf-8")), "completed"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    _validate_completed_scientific_cell(cell, summary)
+    _write_json(
+        receipt_path,
+        {
+            "schema_version": 1,
+            "cell_id": cell.cell_id,
+            "request_hash": _config_hash(config),
+            "source_commit_sha": source_commit_sha,
+            "training_partition_hash": summary["partition"]["partition_hash"],
+            "heldout_partition_hash": summary["evaluation_partition"][
+                "partition_hash"
+            ],
+        },
+    )
+    return summary, "completed"
 
 
 def _observations_from_summary(
