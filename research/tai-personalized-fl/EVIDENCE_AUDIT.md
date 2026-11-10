@@ -21,7 +21,7 @@ This is an **evidence inventory and experimental research plan**, not a claim of
 | Research registry runtime `tmp/research-registry-runtime/summary.json` | Registry smoke/permissions/health checks | Not a federated model experiment |
 | CI matrix manifest | `.github/workflows/v3-benchmark.yml` | Explicitly requires `evidence_complete == false` for generated plan; not empirical results |
 
-Audit of the `main` tree plus relevant `benchmark-*`, `dataset-evaluation-expansion`, `federated-algorithm-suite` and `research/privacy-fairness-validation` branches **did not locate an archived complete, matched six-algorithm, four-dataset PFL accuracy/fairness matrix**. Older/untracked local runs or expired GitHub Actions artifacts may exist elsewhere; absence from tracked trees is not proof no training ever occurred.
+A repository branch inventory returned **65 accessible branches** on 2026-11-10. Git trees were scanned for tracked CSV/TSV/JSONL/Parquet/NumPy/checkpoint and results/artifacts paths, including the research and benchmark branches. **No tracked complete, matched six-algorithm, four-dataset PFL accuracy/fairness matrix was found.** Git-ignored local runs and workflow artifacts were not fully accessible through this branch-tree inspection; absence from tracked trees is not proof no training ever occurred.
 
 ## 2. What is still missing for the manuscript
 
