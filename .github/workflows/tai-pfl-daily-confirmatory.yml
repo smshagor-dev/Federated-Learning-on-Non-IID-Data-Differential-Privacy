@@ -32,7 +32,7 @@ jobs:
       - name: Checkout immutable research model implementation
         uses: actions/checkout@v4
         with:
-          ref: 14c1cf57e426c6e2f9a33e3e917585ce90ab7d64
+          ref: a6641509c2b8e6557101499db553177d70a6a3e2
           persist-credentials: false
       - name: Setup minimal Python
         uses: actions/setup-python@v5
@@ -116,7 +116,7 @@ jobs:
       METHOD: ${{ matrix.method }}
       SEED: ${{ matrix.seed }}
       SHARD: ${{ matrix.shard }}
-      FROZEN_SHA: 14c1cf57e426c6e2f9a33e3e917585ce90ab7d64
+      FROZEN_SHA: a6641509c2b8e6557101499db553177d70a6a3e2
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
       OPENBLAS_NUM_THREADS: "2"
@@ -124,7 +124,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 14c1cf57e426c6e2f9a33e3e917585ce90ab7d64
+          ref: a6641509c2b8e6557101499db553177d70a6a3e2
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
