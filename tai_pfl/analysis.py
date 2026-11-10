@@ -62,6 +62,33 @@ def _check_cell(path: Path) -> dict:
             raise ValueError(f"required evidence artifact missing: {root / name}")
     if json.loads((root / "request.json").read_text(encoding="utf-8")) != request:
         raise ValueError(f"request manifest changed after run: {path}")
+    # The request's claimed number of rounds is not sufficient evidence.
+    # Verify the actual round journal has a complete, sequential trajectory.
+    rounds_path = root / "rounds.csv"
+    if not rounds_path.is_file():
+        raise ValueError(f"missing round-level execution evidence: {path}")
+    with rounds_path.open(newline="", encoding="utf-8") as handle:
+        round_rows = list(csv.DictReader(handle))
+    expected_rounds = int(request.get("rounds", 0))
+    expected_clients = int(item["metrics"]["client_count"])
+    if expected_rounds <= 0 or len(round_rows) != expected_rounds:
+        raise ValueError(f"incomplete actual training round trace: {path}")
+    previous_steps = 0
+    for number, row in enumerate(round_rows, start=1):
+        cohort = int(row["selected_client_count"])
+        observed_steps = int(row["total_optimizer_steps"])
+        if (
+            int(row["round"]) != number
+            or not 1 <= cohort <= expected_clients
+            or observed_steps <= previous_steps
+        ):
+            raise ValueError(f"invalid or incomplete round evidence: {path}")
+        previous_steps = observed_steps
+    if (
+        int(item["compute_observation"]["optimizer_steps_from_training"])
+        != previous_steps
+    ):
+        raise ValueError(f"final optimizer step count contradicts journal: {path}")
     for split, manifest_key in (
         ("train", "train_partition_hash"), ("test", "test_partition_hash")
     ):
