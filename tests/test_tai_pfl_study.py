@@ -1,4 +1,5 @@
 """Synthetic unit-test fixtures; NEVER journal-result evidence."""
+
 from __future__ import annotations
 
 import json
@@ -12,13 +13,20 @@ from torch import nn
 from torch.utils.data import TensorDataset
 
 from tai_pfl.analysis import (
-    _check_cell, analyze, exact_paired_sign_flip, holm_adjust,
+    _check_cell,
+    analyze,
+    exact_paired_sign_flip,
+    holm_adjust,
 )
 from tai_pfl.engine import (
-    METHODS, TrainSpec, _support_query, average_states, summarize_client_rows,
+    METHODS,
+    TrainSpec,
+    _support_query,
+    average_states,
+    summarize_client_rows,
 )
-from tai_pfl.study import run_cell
 from tai_pfl.heterogeneity import realized_heterogeneity
+from tai_pfl.study import run_cell
 
 
 class RealDataStudyContractTests(unittest.TestCase):
@@ -40,24 +48,41 @@ class RealDataStudyContractTests(unittest.TestCase):
         train, test = self.fixture()
         train_p = {0: np.arange(0, 8), 1: np.arange(8, 16)}
         test_p = {0: np.arange(0, 4), 1: np.arange(4, 8)}
-        spec = TrainSpec(batch_size=4, local_epochs=1, participation=1.0,
-                         learning_rate=0.03, adaptation_steps=2)
+        spec = TrainSpec(
+            batch_size=4,
+            local_epochs=1,
+            participation=1.0,
+            learning_rate=0.03,
+            adaptation_steps=2,
+        )
         with tempfile.TemporaryDirectory() as tmp:
             for method in METHODS:
                 result = run_cell(
-                    train_dataset=train, test_dataset=test,
-                    train_partitions=train_p, test_partitions=test_p,
-                    model_factory=self.factory, method=method, spec=spec,
-                    rounds=1, seed=11, output_dir=Path(tmp) / method,
-                    dataset_id="synthetic-fixture", partition_id="iid",
-                    source_sha="synthetic-test-only", official_torchvision=False,
+                    train_dataset=train,
+                    test_dataset=test,
+                    train_partitions=train_p,
+                    test_partitions=test_p,
+                    model_factory=self.factory,
+                    method=method,
+                    spec=spec,
+                    rounds=1,
+                    seed=11,
+                    output_dir=Path(tmp) / method,
+                    dataset_id="synthetic-fixture",
+                    partition_id="iid",
+                    source_sha="synthetic-test-only",
+                    official_torchvision=False,
                 )
                 self.assertEqual(result["status"], "completed")
                 self.assertEqual(result["metrics"]["client_count"], 2)
-                self.assertEqual(result["evidence_class"], "synthetic_unit_test_not_publishable")
+                self.assertEqual(
+                    result["evidence_class"], "synthetic_unit_test_not_publishable"
+                )
                 self.assertTrue((Path(tmp) / method / "global_model.pt").exists())
                 if method in ("ditto", "per_fedavg"):
-                    self.assertEqual(result["primary_evaluation"], "personalized_deployed")
+                    self.assertEqual(
+                        result["primary_evaluation"], "personalized_deployed"
+                    )
             with self.assertRaisesRegex(ValueError, "not publishable"):
                 _check_cell(Path(tmp) / "fedavg" / "result.json")
             with self.assertRaisesRegex(ValueError, "submission evidence gate"):
@@ -83,29 +108,43 @@ class RealDataStudyContractTests(unittest.TestCase):
 
     def test_partition_validation_refuses_missing_heldout_data(self) -> None:
         train, test = self.fixture()
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(ValueError, "exactly once"):
-                run_cell(
-                    train_dataset=train, test_dataset=test,
-                    train_partitions={0: np.arange(8), 1: np.arange(8, 16)},
-                    test_partitions={0: np.arange(4), 1: np.arange(4, 7)},
-                    model_factory=self.factory, method="fedavg",
-                    spec=TrainSpec(), rounds=1, seed=11,
-                    output_dir=Path(tmp) / "bad", dataset_id="fixture",
-                    partition_id="iid", source_sha="test", official_torchvision=False,
-                )
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            self.assertRaisesRegex(ValueError, "exactly once"),
+        ):
+            run_cell(
+                train_dataset=train,
+                test_dataset=test,
+                train_partitions={0: np.arange(8), 1: np.arange(8, 16)},
+                test_partitions={0: np.arange(4), 1: np.arange(4, 7)},
+                model_factory=self.factory,
+                method="fedavg",
+                spec=TrainSpec(),
+                rounds=1,
+                seed=11,
+                output_dir=Path(tmp) / "bad",
+                dataset_id="fixture",
+                partition_id="iid",
+                source_sha="test",
+                official_torchvision=False,
+            )
 
     def test_aggregation_mean_and_fairness(self) -> None:
         base = {"w": torch.tensor([0.0, 2.0])}
         result = average_states(
-            base, [{"w": torch.tensor([2.0, 4.0])},
-                   {"w": torch.tensor([4.0, 6.0])}]
+            base,
+            [
+                {"w": torch.tensor([2.0, 4.0])},
+                {"w": torch.tensor([4.0, 6.0])},
+            ],
         )
         self.assertTrue(torch.allclose(result["w"], torch.tensor([3.0, 5.0])))
-        summary = summarize_client_rows([
-            {"accuracy": 0.5, "n_test": 10},
-            {"accuracy": 1.0, "n_test": 20},
-        ])
+        summary = summarize_client_rows(
+            [
+                {"accuracy": 0.5, "n_test": 10},
+                {"accuracy": 1.0, "n_test": 20},
+            ]
+        )
         self.assertAlmostEqual(summary["micro_accuracy"], 25 / 30)
         self.assertAlmostEqual(summary["worst_client_accuracy"], 0.5)
         self.assertLess(summary["jain_accuracy_index"], 1.0)
@@ -121,16 +160,22 @@ class RealDataStudyContractTests(unittest.TestCase):
     def test_no_reuse_of_incomplete_or_unaudited_runs(self) -> None:
         train, test = self.fixture()
         with tempfile.TemporaryDirectory() as tmp:
-            kwargs = dict(
-                train_dataset=train, test_dataset=test,
-                train_partitions={0: np.arange(8), 1: np.arange(8, 16)},
-                test_partitions={0: np.arange(4), 1: np.arange(4, 8)},
-                model_factory=self.factory, method="fedavg",
-                spec=TrainSpec(local_epochs=1, participation=1.0),
-                rounds=1, seed=11, output_dir=Path(tmp) / "fedavg",
-                dataset_id="fixture", partition_id="iid",
-                source_sha="test", official_torchvision=False,
-            )
+            kwargs = {
+                "train_dataset": train,
+                "test_dataset": test,
+                "train_partitions": {0: np.arange(8), 1: np.arange(8, 16)},
+                "test_partitions": {0: np.arange(4), 1: np.arange(4, 8)},
+                "model_factory": self.factory,
+                "method": "fedavg",
+                "spec": TrainSpec(local_epochs=1, participation=1.0),
+                "rounds": 1,
+                "seed": 11,
+                "output_dir": Path(tmp) / "fedavg",
+                "dataset_id": "fixture",
+                "partition_id": "iid",
+                "source_sha": "test",
+                "official_torchvision": False,
+            }
             first = run_cell(**kwargs)
             second = run_cell(**kwargs)
             self.assertEqual(first["run_id"], second["run_id"])
