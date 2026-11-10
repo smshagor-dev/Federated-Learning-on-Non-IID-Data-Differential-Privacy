@@ -181,7 +181,6 @@ class RootCheckpointTests(unittest.TestCase):
                 os.environ["FL_ROOT_CHECKPOINT_ROUNDS"] = previous_rounds
 
 
-
 class ScientificCheckpointValidationTests(unittest.TestCase):
     def test_missing_model_checkpoint_cannot_be_reconstructed(self) -> None:
         from utils.client_evaluation import _build_final_model
@@ -209,13 +208,9 @@ class ScientificCheckpointValidationTests(unittest.TestCase):
                 path,
             )
             with self.assertRaisesRegex(ValueError, "algorithm mismatch"):
-                _load_checkpoint(
-                    path, expected_algorithm="fedprox", expected_rounds=3
-                )
+                _load_checkpoint(path, expected_algorithm="fedprox", expected_rounds=3)
             with self.assertRaisesRegex(ValueError, "round count mismatch"):
-                _load_checkpoint(
-                    path, expected_algorithm="fedavg", expected_rounds=4
-                )
+                _load_checkpoint(path, expected_algorithm="fedavg", expected_rounds=4)
             state = _load_checkpoint(
                 path, expected_algorithm="fedavg", expected_rounds=3
             )
