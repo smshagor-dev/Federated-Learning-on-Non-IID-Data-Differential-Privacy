@@ -247,7 +247,28 @@ def analyze(root: Path, *, complete_required: bool = True,
             strict=True,
         ):
             row["holm_adjusted_p_within_metric_family"] = p
-    return comparisons, coverage, interactions
+    # A small, declared confirmatory family preserves attainable test power
+    # with 10 seeds; the much larger matrix is otherwise exploratory.
+    primary_tests = [
+        row.copy()
+        for row in comparisons
+        if row["dataset"] in ("CIFAR10", "CIFAR100")
+        and row["condition"] == "dirichlet:0.1"
+        and row["baseline"] == "fedavg"
+        and row["method"] in PERSONALIZED
+        and row["metric"] == "p10_client_accuracy"
+    ]
+    for row, p in zip(
+        primary_tests,
+        holm_adjust([r["two_sided_exact_p"] for r in primary_tests]),
+        strict=True,
+    ):
+        row["holm_adjusted_p_primary_family"] = p
+    coverage["predeclared_primary_hypothesis_count"] = 4
+    coverage["measured_primary_hypothesis_count"] = len(primary_tests)
+    if complete_required and len(primary_tests) != 4:
+        raise ValueError("primary severe non-IID p10 hypothesis family is incomplete")
+    return comparisons, coverage, interactions, primary_tests
 
 
 def main() -> int:
@@ -257,7 +278,7 @@ def main() -> int:
     parser.add_argument("--allow-partial-exploratory", action="store_true")
     args = parser.parse_args()
     root = Path(args.results_root)
-    comparisons, coverage, interactions = analyze(
+    comparisons, coverage, interactions, primary_tests = analyze(
         root, complete_required=not args.allow_partial_exploratory
     )
     destination = Path(args.output_dir)
@@ -270,6 +291,9 @@ def main() -> int:
     )
     (destination / "rq3_interactions.json").write_text(
         json.dumps(interactions, indent=2) + "\n", encoding="utf-8"
+    )
+    (destination / "primary_tests.json").write_text(
+        json.dumps(primary_tests, indent=2) + "\n", encoding="utf-8"
     )
     if comparisons:
         with (destination / "paired_comparisons.csv").open(
