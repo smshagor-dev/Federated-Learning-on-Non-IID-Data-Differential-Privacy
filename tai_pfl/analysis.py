@@ -78,6 +78,20 @@ def _check_cell(path: Path) -> dict:
     ids = [r["client_id"] for r in rows]
     if ids != list(range(len(ids))):
         raise ValueError(f"missing/duplicated client IDs: {path}")
+    with np.load(root / "test_indices.npz", allow_pickle=False) as archive:
+        test_counts = {
+            int(key.removeprefix("client_")): len(archive[key])
+            for key in archive.files
+        }
+    if set(test_counts) != set(ids) or any(
+        row["n_test"] != test_counts[row["client_id"]] for row in rows
+    ):
+        raise ValueError(f"reported test counts do not match partition indices: {path}")
+    if item.get("primary_evaluation") != (
+        "personalized_deployed"
+        if request["method"] in PERSONALIZED else "shared_global"
+    ):
+        raise ValueError(f"incorrect deployed model identity: {path}")
     if any(r["n_correct"] > r["n_test"] or r["n_correct"] < 0 or
            not math.isfinite(r["accuracy"]) or
            abs(r["accuracy"] - r["n_correct"] / r["n_test"]) > 1e-10 for r in rows):
