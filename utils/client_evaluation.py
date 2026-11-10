@@ -38,13 +38,24 @@ def _load_training_partition(path: str) -> dict[int, np.ndarray]:
     return dict(sorted(result.items()))
 
 
-def _load_checkpoint(path: str) -> Mapping[str, torch.Tensor]:
+def _load_checkpoint(
+    path: str, *, expected_algorithm: str, expected_rounds: int
+) -> Mapping[str, torch.Tensor]:
     try:
         checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     except TypeError:
         checkpoint = torch.load(path, map_location="cpu")
     if not isinstance(checkpoint, dict) or "state_dict" not in checkpoint:
         raise ValueError(f"invalid global model checkpoint: {path}")
+    if checkpoint.get("algorithm") != expected_algorithm:
+        raise ValueError(
+            f"checkpoint algorithm mismatch: expected {expected_algorithm!r}"
+        )
+    if checkpoint.get("rounds_completed") != expected_rounds:
+        raise ValueError(
+            "checkpoint round count mismatch: "
+            f"expected {expected_rounds}, got {checkpoint.get('rounds_completed')}"
+        )
     state_dict = checkpoint["state_dict"]
     if not isinstance(state_dict, dict):
         raise ValueError(f"checkpoint state_dict is invalid: {path}")
@@ -84,21 +95,15 @@ def _append_client_table(summary_path: str, algorithm_rows: list[dict[str, objec
 def _build_final_model(
     *,
     checkpoint_path: str,
+    algorithm: str,
     config: dict,
     num_classes: int,
     in_channels: int,
 ):
     if not os.path.isfile(checkpoint_path):
-        # A missing checkpoint is valid only when every Poisson cohort was empty;
-        # in that case the final model is exactly the seeded initial model.
-        from experiment_runtime import set_seed
-
-        set_seed(int(config["system"]["seed"]))
-        return build_model(
-            str(config["model"]["name"]),
-            num_classes=num_classes,
-            in_channels=in_channels,
-            group_norm_groups=int(config["model"]["group_norm_groups"]),
+        raise FileNotFoundError(
+            "completed experiment has no final model checkpoint; "
+            f"refusing to reconstruct or fabricate model evidence: {checkpoint_path}"
         )
 
     model = build_model(
@@ -107,7 +112,14 @@ def _build_final_model(
         in_channels=in_channels,
         group_norm_groups=int(config["model"]["group_norm_groups"]),
     )
-    model.load_state_dict(_load_checkpoint(checkpoint_path), strict=True)
+    model.load_state_dict(
+        _load_checkpoint(
+            checkpoint_path,
+            expected_algorithm=algorithm,
+            expected_rounds=int(config["federated"]["rounds"]),
+        ),
+        strict=True,
+    )
     return model
 
 
@@ -169,6 +181,7 @@ def evaluate_completed_run(config: dict) -> dict[str, object]:
         )
         model = _build_final_model(
             checkpoint_path=checkpoint_path,
+            algorithm=algorithm,
             config=config,
             num_classes=num_classes,
             in_channels=in_channels,
