@@ -14,6 +14,7 @@ from data.partitioner import (
     partition_evaluation_by_train_distribution,
 )
 from federated.server import Server
+from utils.client_evaluation import _load_checkpoint
 from utils.metrics import evaluate_client_partitions
 from utils.runtime_args import parse_args
 
@@ -178,6 +179,47 @@ class RootCheckpointTests(unittest.TestCase):
                 os.environ.pop("FL_ROOT_CHECKPOINT_ROUNDS", None)
             else:
                 os.environ["FL_ROOT_CHECKPOINT_ROUNDS"] = previous_rounds
+
+
+
+class ScientificCheckpointValidationTests(unittest.TestCase):
+    def test_missing_model_checkpoint_cannot_be_reconstructed(self) -> None:
+        from utils.client_evaluation import _build_final_model
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(FileNotFoundError, "no final model"):
+                _build_final_model(
+                    checkpoint_path=os.path.join(directory, "missing.pt"),
+                    algorithm="fedavg",
+                    config={"federated": {"rounds": 3}},
+                    num_classes=10,
+                    in_channels=1,
+                )
+
+    def test_checkpoint_algorithm_and_rounds_must_match(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "final.pt")
+            torch.save(
+                {
+                    "schema_version": 1,
+                    "algorithm": "fedavg",
+                    "rounds_completed": 3,
+                    "state_dict": {"weight": torch.ones(1, 1)},
+                },
+                path,
+            )
+            with self.assertRaisesRegex(ValueError, "algorithm mismatch"):
+                _load_checkpoint(
+                    path, expected_algorithm="fedprox", expected_rounds=3
+                )
+            with self.assertRaisesRegex(ValueError, "round count mismatch"):
+                _load_checkpoint(
+                    path, expected_algorithm="fedavg", expected_rounds=4
+                )
+            state = _load_checkpoint(
+                path, expected_algorithm="fedavg", expected_rounds=3
+            )
+            self.assertTrue(torch.equal(state["weight"], torch.ones(1, 1)))
 
 
 if __name__ == "__main__":
