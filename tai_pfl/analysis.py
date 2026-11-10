@@ -133,6 +133,36 @@ def _check_cell(path: Path) -> dict:
     return item
 
 
+def assert_primary_50round_protocol(item: dict) -> None:
+    """Reject official one-round pilots or mismatched budgets as primary data."""
+    request = item["request"]
+    spec = request["training"]
+    expected = {
+        "rounds": 50,
+        "batch_size": 64,
+        "local_epochs": 2,
+        "participation": 0.2,
+        "adaptation_steps": 1,
+    }
+    observed = {
+        "rounds": request["rounds"],
+        "batch_size": spec["batch_size"],
+        "local_epochs": spec["local_epochs"],
+        "participation": spec["participation"],
+        "adaptation_steps": spec["adaptation_steps"],
+    }
+    if observed != expected:
+        raise ValueError(
+            f"non-primary protocol (pilots/RQ4 budgets excluded): {observed}"
+        )
+    if item["metrics"]["client_count"] != 20:
+        raise ValueError("primary study requires exactly twenty clients")
+    if request["dataset"] not in DATASETS or request["partition"] not in CONDITIONS:
+        raise ValueError("dataset or heterogeneity condition outside primary matrix")
+    if request["method"] not in METHODS or request["seed"] not in SEEDS:
+        raise ValueError("method or seed outside preregistered primary matrix")
+
+
 def exact_paired_sign_flip(differences: np.ndarray) -> float:
     """Two-sided exhaustive randomization test on independent paired seeds."""
     d = np.asarray(differences, dtype=float)
@@ -178,6 +208,7 @@ def analyze(root: Path, *, complete_required: bool = True,
     evidence = {}
     for path in sorted(root.rglob("result.json")):
         item = _check_cell(path)
+        assert_primary_50round_protocol(item)
         req = item["request"]
         key = (req["dataset"], req["partition"], int(req["seed"]), req["method"])
         if key in evidence:
