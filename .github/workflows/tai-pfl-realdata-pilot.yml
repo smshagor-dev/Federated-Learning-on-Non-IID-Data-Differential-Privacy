@@ -1,0 +1,110 @@
+name: TAI PFL official-dataset pilot
+# Genuinely trains official torchvision data; this is a small engineering pilot,
+# NOT the prespecified 1680-cell journal experiment or evidence of RQ1-RQ4.
+on:
+  pull_request:
+    paths:
+      - 'tai_pfl/**'
+      - 'tests/test_tai_pfl_study.py'
+      - '.github/workflows/tai-pfl-realdata-pilot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tai-pfl-pilot-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  official-dataset-pilot:
+    name: official-${{ matrix.dataset }}-seed11-1round
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        dataset: [MNIST, FASHIONMNIST, CIFAR10, CIFAR100]
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Checkout tested research revision
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install real-dataset dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision numpy matplotlib pyyaml pytest
+
+      - name: Record exact dataset and research scope
+        run: |
+          mkdir -p "pilot-artifacts/${{ matrix.dataset }}"
+          {
+            echo "Evidence class: REAL_TORCHVISION_PILOT_ONLY"
+            echo "Cannot establish RQ1-RQ4 or 1680-cell full matrix."
+            echo "Dataset: ${{ matrix.dataset }}"
+            echo "Study seed: 11"
+            echo "Rounds: 1"
+            echo "Partition: IID"
+            echo "Clients: 20"
+            echo "Client participation: 0.05"
+            echo "Local epochs: 1"
+            echo "Revision: $(git rev-parse HEAD)"
+          } > "pilot-artifacts/${{ matrix.dataset }}/SCOPE.txt"
+
+      - name: Train all six methods with official held-out test set
+        run: |
+          python -m tai_pfl.study \
+            --dataset "${{ matrix.dataset }}" \
+            --condition iid \
+            --seed 11 \
+            --rounds 1 \
+            --clients 20 \
+            --minimum-train 10 \
+            --methods fedavg,fedprox,scaffold,ditto,per_fedavg,fedsam \
+            --local-epochs 1 \
+            --batch-size 128 \
+            --participation 0.05 \
+            --output-dir "pilot-artifacts/${{ matrix.dataset }}/runs"
+
+      - name: Verify six completed official pilot cells
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell
+          from tai_pfl.engine import METHODS
+          root = Path("pilot-artifacts") / "${{ matrix.dataset }}" / "runs"
+          paths = list(root.rglob("result.json"))
+          assert len(paths) == len(METHODS), (
+              f"expected {len(METHODS)} actual cells, found {len(paths)}"
+          )
+          seen = set()
+          for path in paths:
+              item = _check_cell(path)
+              request = item["request"]
+              assert request["dataset"] == "${{ matrix.dataset }}"
+              assert request["rounds"] == 1
+              assert request["seed"] == 11
+              assert request["partition"] == "iid"
+              seen.add(request["method"])
+          assert seen == set(METHODS)
+          print("VERIFIED PILOT: all six true official dataset cells; NOT main study")
+          PY
+
+      - name: Preserve actual artifacts and failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-pfl-official-pilot-${{ matrix.dataset }}
+          path: pilot-artifacts/${{ matrix.dataset }}/
+          if-no-files-found: error
+          retention-days: 30
