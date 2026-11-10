@@ -22,6 +22,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from tai_pfl.heterogeneity import realized_heterogeneity
 from tai_pfl.engine import (
     METHODS, PERSONALIZED, State, TrainSpec, adapt_from_training,
     average_states, evaluate_client, load_snapshot, selected_clients,
@@ -124,6 +125,10 @@ def run_cell(
     )
     _persist_indices(output_dir / "train_indices.npz", train_partitions)
     _persist_indices(output_dir / "test_indices.npz", test_partitions)
+    heterogeneity = realized_heterogeneity(train_dataset, train_partitions)
+    (output_dir / "realized_heterogeneity.json").write_text(
+        json.dumps(heterogeneity, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -255,6 +260,9 @@ def run_cell(
         "global_reference_metrics": global_metrics,
         "minimum_heldout_client_samples": min_test_n,
         "training_uses_test_split": False,
+        "realized_heterogeneity": {
+            key: value for key, value in heterogeneity.items() if key != "clients"
+        },
         "personalized_models_aggregated": False,
         "model_architecture": type(prototype).__name__,
         "environment": {
@@ -264,7 +272,7 @@ def run_cell(
         "artifact_names": [
             "request.json", "train_indices.npz", "test_indices.npz",
             "rounds.csv", "clients_deployed.csv", "clients_global.csv",
-            "global_model.pt",
+            "global_model.pt", "realized_heterogeneity.json",
         ],
     }
     (output_dir / "result.json").write_text(
@@ -314,6 +322,13 @@ def main() -> int:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--local-epochs", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=0.01)
+    parser.add_argument("--momentum", type=float, default=0.0)
+    parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--fedprox-mu", type=float, default=0.01)
+    parser.add_argument("--ditto-lambda", type=float, default=0.1)
+    parser.add_argument("--sam-rho", type=float, default=0.05)
+    parser.add_argument("--meta-inner-lr", type=float, default=0.01)
+    parser.add_argument("--meta-outer-lr", type=float, default=0.01)
     parser.add_argument("--participation", type=float, default=0.2)
     parser.add_argument("--adaptation-steps", type=int, default=1)
     parser.add_argument("--plan-only", action="store_true")
@@ -322,7 +337,12 @@ def main() -> int:
     if not methods or len(set(methods)) != len(methods) or any(x not in METHODS for x in methods):
         parser.error("methods must be distinct and among " + ", ".join(METHODS))
     spec = TrainSpec(batch_size=args.batch_size, local_epochs=args.local_epochs,
-                     learning_rate=args.learning_rate, participation=args.participation,
+                     learning_rate=args.learning_rate, momentum=args.momentum,
+                     weight_decay=args.weight_decay, fedprox_mu=args.fedprox_mu,
+                     ditto_lambda=args.ditto_lambda, sam_rho=args.sam_rho,
+                     meta_inner_lr=args.meta_inner_lr,
+                     meta_outer_lr=args.meta_outer_lr,
+                     participation=args.participation,
                      adaptation_steps=args.adaptation_steps)
     spec.validate()
     if args.clients < 2 or args.rounds < 1:
