@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
@@ -36,10 +35,10 @@ def _official_split_coverage(directory: Path, dataset: str) -> None:
     expected_test = 10000
     for name, size in (("train", expected_train), ("test", expected_test)):
         with np.load(directory / f"{name}_indices.npz", allow_pickle=False) as data:
-            ids = sorted(data.files)
-            if ids != [f"client_{i}" for i in range(20)]:
+            ids = list(data.files)
+            if set(ids) != {f"client_{i}" for i in range(20)}:
                 raise ValueError(f"client index keys mismatch at {directory}: {ids}")
-            values = [data[key] for key in ids]
+            values = [data[f"client_{i}"] for i in range(20)]
         if sum(len(part) for part in values) != size:
             raise ValueError(f"official {name} size mismatch: {directory}")
         all_indices = np.concatenate(values)
