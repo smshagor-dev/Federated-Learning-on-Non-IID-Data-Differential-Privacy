@@ -94,7 +94,9 @@ class RealDataStudyContractTests(unittest.TestCase):
         self.assertFalse(set(left) & set(right))
         self.assertEqual(set(np.concatenate([left, right])), set(indices))
 
-    def test_realized_heterogeneity_identifies_label_support_and_size_skew(self) -> None:
+    def test_realized_heterogeneity_identifies_label_support_and_size_skew(
+        self,
+    ) -> None:
         train, _test = self.fixture()
         indices = {0: np.arange(4), 1: np.arange(4, 16)}
         stats = realized_heterogeneity(train, indices)
