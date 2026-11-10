@@ -1,4 +1,5 @@
 """A one-round pilot must NEVER be counted as a 50-round research cell."""
+
 from __future__ import annotations
 
 import copy
