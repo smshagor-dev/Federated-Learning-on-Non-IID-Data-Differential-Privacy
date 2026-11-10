@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tai_pfl.engine import METHODS, summarize_client_rows
+from tai_pfl.engine import METHODS, PERSONALIZED, summarize_client_rows
 from tai_pfl.study import _digest, _partition_digest
 
 DATASETS = ("MNIST", "FASHIONMNIST", "CIFAR10", "CIFAR100")
@@ -168,40 +168,86 @@ def analyze(root: Path, *, complete_required: bool = True,
     comparisons = []
     for dataset in DATASETS:
         for condition in CONDITIONS:
-            for method in METHODS:
-                if method == "fedavg":
-                    continue
-                seeds = [
-                    seed for seed in SEEDS
-                    if (dataset, condition, seed, method) in evidence
-                    and (dataset, condition, seed, "fedavg") in evidence
-                ]
-                if len(seeds) < minimum_seeds:
-                    if complete_required:
-                        raise ValueError(f"insufficient paired seeds: {dataset}/{condition}/{method}")
-                    continue
-                for metric in METRICS:
-                    diffs = np.array([
-                        evidence[(dataset, condition, seed, method)]["metrics"][metric]
-                        - evidence[(dataset, condition, seed, "fedavg")]["metrics"][metric]
-                        for seed in seeds
-                    ], dtype=float)
-                    lo, hi = paired_ci(diffs, seed=2026)
-                    comparisons.append({
-                        "dataset": dataset, "condition": condition,
-                        "method": method, "baseline": "fedavg",
-                        "metric": metric, "n_paired_seeds": len(seeds),
-                        "mean_paired_difference": float(diffs.mean()),
-                        "bootstrap_95ci_low": lo, "bootstrap_95ci_high": hi,
-                        "two_sided_exact_p": exact_paired_sign_flip(diffs),
-                    })
+            for baseline in ("fedavg", "fedprox", "scaffold"):
+                methods = tuple(m for m in METHODS if m != "fedavg") if baseline == "fedavg" else PERSONALIZED
+                for method in methods:
+                    seeds = [
+                        seed for seed in SEEDS
+                        if (dataset, condition, seed, method) in evidence
+                        and (dataset, condition, seed, baseline) in evidence
+                    ]
+                    if len(seeds) < minimum_seeds:
+                        if complete_required:
+                            raise ValueError(f"insufficient paired seeds: {dataset}/{condition}/{method}/{baseline}")
+                        continue
+                    for metric in METRICS:
+                        diffs = np.array([
+                            evidence[(dataset, condition, seed, method)]["metrics"][metric]
+                            - evidence[(dataset, condition, seed, baseline)]["metrics"][metric]
+                            for seed in seeds
+                        ], dtype=float)
+                        lo, hi = paired_ci(diffs, seed=2026)
+                        comparisons.append({
+                            "dataset": dataset, "condition": condition,
+                            "method": method, "baseline": baseline,
+                            "metric": metric, "n_paired_seeds": len(seeds),
+                            "mean_paired_difference": float(diffs.mean()),
+                            "bootstrap_95ci_low": lo, "bootstrap_95ci_high": hi,
+                            "two_sided_exact_p": exact_paired_sign_flip(diffs),
+                        })
     # Holm within predeclared metric families across datasets, conditions, methods.
     for metric in METRICS:
         selected = [row for row in comparisons if row["metric"] == metric]
         adjusted = holm_adjust([row["two_sided_exact_p"] for row in selected])
         for row, p in zip(selected, adjusted, strict=True):
             row["holm_adjusted_p_within_metric_family"] = p
-    return comparisons, coverage
+    # RQ3: paired difference-in-differences versus the IID condition.
+    interactions = []
+    for dataset in DATASETS:
+        for condition in CONDITIONS:
+            if condition == "iid":
+                continue
+            for method in PERSONALIZED:
+                needed = lambda seed: all(
+                    (dataset, cond, seed, alg) in evidence
+                    for cond in (condition, "iid")
+                    for alg in (method, "fedavg")
+                )
+                seeds = [seed for seed in SEEDS if needed(seed)]
+                if len(seeds) < minimum_seeds:
+                    if complete_required:
+                        raise ValueError(f"RQ3 interaction missing paired seeds: {dataset}/{condition}/{method}")
+                    continue
+                for metric in ("mean_client_accuracy", "p10_client_accuracy", "jain_accuracy_index"):
+                    deltas = np.array([
+                        (
+                            evidence[(dataset, condition, seed, method)]["metrics"][metric]
+                            - evidence[(dataset, condition, seed, "fedavg")]["metrics"][metric]
+                        ) - (
+                            evidence[(dataset, "iid", seed, method)]["metrics"][metric]
+                            - evidence[(dataset, "iid", seed, "fedavg")]["metrics"][metric]
+                        )
+                        for seed in seeds
+                    ], dtype=float)
+                    lo, hi = paired_ci(deltas)
+                    interactions.append({
+                        "dataset": dataset, "condition_minus": condition,
+                        "reference_condition": "iid", "method": method,
+                        "baseline": "fedavg", "metric": metric,
+                        "paired_seeds": len(seeds),
+                        "difference_in_differences": float(deltas.mean()),
+                        "bootstrap_95ci_low": lo, "bootstrap_95ci_high": hi,
+                        "two_sided_exact_p": exact_paired_sign_flip(deltas),
+                    })
+    for metric in ("mean_client_accuracy", "p10_client_accuracy", "jain_accuracy_index"):
+        group = [row for row in interactions if row["metric"] == metric]
+        for row, p in zip(
+            group,
+            holm_adjust([r["two_sided_exact_p"] for r in group]),
+            strict=True,
+        ):
+            row["holm_adjusted_p_within_metric_family"] = p
+    return comparisons, coverage, interactions
 
 
 def main() -> int:
@@ -211,7 +257,7 @@ def main() -> int:
     parser.add_argument("--allow-partial-exploratory", action="store_true")
     args = parser.parse_args()
     root = Path(args.results_root)
-    comparisons, coverage = analyze(
+    comparisons, coverage, interactions = analyze(
         root, complete_required=not args.allow_partial_exploratory
     )
     destination = Path(args.output_dir)
@@ -221,6 +267,9 @@ def main() -> int:
     )
     (destination / "paired_comparisons.json").write_text(
         json.dumps(comparisons, indent=2) + "\n", encoding="utf-8"
+    )
+    (destination / "rq3_interactions.json").write_text(
+        json.dumps(interactions, indent=2) + "\n", encoding="utf-8"
     )
     if comparisons:
         with (destination / "paired_comparisons.csv").open(
