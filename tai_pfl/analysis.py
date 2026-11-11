@@ -62,6 +62,33 @@ def _check_cell(path: Path) -> dict:
             raise ValueError(f"required evidence artifact missing: {root / name}")
     if json.loads((root / "request.json").read_text(encoding="utf-8")) != request:
         raise ValueError(f"request manifest changed after run: {path}")
+    # The request's claimed number of rounds is not sufficient evidence.
+    # Verify the actual round journal has a complete, sequential trajectory.
+    rounds_path = root / "rounds.csv"
+    if not rounds_path.is_file():
+        raise ValueError(f"missing round-level execution evidence: {path}")
+    with rounds_path.open(newline="", encoding="utf-8") as handle:
+        round_rows = list(csv.DictReader(handle))
+    expected_rounds = int(request.get("rounds", 0))
+    expected_clients = int(item["metrics"]["client_count"])
+    if expected_rounds <= 0 or len(round_rows) != expected_rounds:
+        raise ValueError(f"incomplete actual training round trace: {path}")
+    previous_steps = 0
+    for number, row in enumerate(round_rows, start=1):
+        cohort = int(row["selected_client_count"])
+        observed_steps = int(row["total_optimizer_steps"])
+        if (
+            int(row["round"]) != number
+            or not 1 <= cohort <= expected_clients
+            or observed_steps <= previous_steps
+        ):
+            raise ValueError(f"invalid or incomplete round evidence: {path}")
+        previous_steps = observed_steps
+    if (
+        int(item["compute_observation"]["optimizer_steps_from_training"])
+        != previous_steps
+    ):
+        raise ValueError(f"final optimizer step count contradicts journal: {path}")
     for split, manifest_key in (
         ("train", "train_partition_hash"), ("test", "test_partition_hash")
     ):
@@ -104,6 +131,36 @@ def _check_cell(path: Path) -> dict:
     if item.get("minimum_heldout_client_samples") != min(r["n_test"] for r in rows):
         raise ValueError(f"held-out client minimum sample count mismatch: {path}")
     return item
+
+
+def assert_primary_50round_protocol(item: dict) -> None:
+    """Reject official one-round pilots or mismatched budgets as primary data."""
+    request = item["request"]
+    spec = request["training"]
+    expected = {
+        "rounds": 50,
+        "batch_size": 64,
+        "local_epochs": 2,
+        "participation": 0.2,
+        "adaptation_steps": 1,
+    }
+    observed = {
+        "rounds": request["rounds"],
+        "batch_size": spec["batch_size"],
+        "local_epochs": spec["local_epochs"],
+        "participation": spec["participation"],
+        "adaptation_steps": spec["adaptation_steps"],
+    }
+    if observed != expected:
+        raise ValueError(
+            f"non-primary protocol (pilots/RQ4 budgets excluded): {observed}"
+        )
+    if item["metrics"]["client_count"] != 20:
+        raise ValueError("primary study requires exactly twenty clients")
+    if request["dataset"] not in DATASETS or request["partition"] not in CONDITIONS:
+        raise ValueError("dataset or heterogeneity condition outside primary matrix")
+    if request["method"] not in METHODS or request["seed"] not in SEEDS:
+        raise ValueError("method or seed outside preregistered primary matrix")
 
 
 def exact_paired_sign_flip(differences: np.ndarray) -> float:
@@ -151,6 +208,7 @@ def analyze(root: Path, *, complete_required: bool = True,
     evidence = {}
     for path in sorted(root.rglob("result.json")):
         item = _check_cell(path)
+        assert_primary_50round_protocol(item)
         req = item["request"]
         key = (req["dataset"], req["partition"], int(req["seed"]), req["method"])
         if key in evidence:

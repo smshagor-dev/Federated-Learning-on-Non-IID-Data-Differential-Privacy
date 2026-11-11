@@ -1,0 +1,149 @@
+name: IEEE TAI primary 50-round execution
+
+# Push starts one genuine 50-round cell. Manual dispatch selects any shard.
+# Nothing here represents completion of the full 1680-cell experiment.
+on:
+  push:
+    branches:
+      - research/tai-1680-primary-execution-20261110
+    paths:
+      - .github/workflows/tai-pfl-primary-50-round.yml
+  workflow_dispatch:
+    inputs:
+      shard_index:
+        description: Zero-based shard index
+        type: string
+        default: "0"
+        required: true
+      shard_count:
+        description: Shards; 1680 means one primary cell per shard
+        type: string
+        default: "1680"
+        required: true
+      max_cells:
+        description: Maximum cells in this run
+        type: string
+        default: "1"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  primary-50round:
+    name: Train a primary 50-round official-data cell
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout exact source SHA
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install real-data dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision numpy matplotlib pyyaml pytest
+
+      - name: Resolve bounded shard request
+        run: |
+          python - <<'PY'
+          import json, os
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as f:
+              event = json.load(f)
+          inputs = event.get("inputs", {})
+          shard = int(inputs.get("shard_index", "0"))
+          count = int(inputs.get("shard_count", "1680"))
+          maximum = int(inputs.get("max_cells", "1"))
+          if count <= 0 or not (0 <= shard < count) or not (1 <= maximum <= 8):
+              raise ValueError("invalid or unbounded shard request")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+              f.write(f"SHARD_INDEX={shard}\nSHARD_COUNT={count}\nMAX_CELLS={maximum}\n")
+          print(f"Requested {maximum} primary cells from shard {shard} of {count}")
+          PY
+
+      - name: Validate exact 1680-cell matrix
+        run: |
+          python scripts/run_tai_1680.py \
+            --shard-count "$SHARD_COUNT" \
+            --shard-index "$SHARD_INDEX" \
+            --max-cells "$MAX_CELLS" > primary-plan.json
+          python - <<'PY'
+          import json
+          with open("primary-plan.json", encoding="utf-8") as f:
+              plan = json.load(f)
+          assert plan["expected_full_matrix"] == 1680
+          assert plan["assigned_shard_cells"] > 0
+          assert all(c["rounds"] == 50 for c in plan["exact_expected_cells"])
+          print(plan)
+          PY
+
+      - name: Record evidence scope
+        run: |
+          mkdir -p primary-artifacts
+          {
+            echo "Real official 50-round experiment; not the complete 1680-cell study"
+            echo "Source commit: $(git rev-parse HEAD)"
+            echo "Shard: $SHARD_INDEX of $SHARD_COUNT, maximum cells: $MAX_CELLS"
+            echo "DP is disabled"
+          } > primary-artifacts/SCOPE.txt
+          cp primary-plan.json primary-artifacts/plan.json
+
+      - name: Execute actual 50-round training
+        run: |
+          # Leave enough time to upload partial data if an individual cell runs long.
+          timeout --signal=TERM --kill-after=20s 290m \
+            python scripts/run_tai_1680.py \
+              --shard-count "$SHARD_COUNT" \
+              --shard-index "$SHARD_INDEX" \
+              --max-cells "$MAX_CELLS" \
+              --execute \
+              --skip-complete \
+              --archive-incomplete \
+              --root primary-artifacts/results \
+              --data-root data_raw
+
+      - name: Verify completed scientific outputs
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell
+          root = Path("primary-artifacts/results")
+          with open("primary-plan.json", encoding="utf-8") as f:
+              plan = json.load(f)
+          paths = list(root.rglob("result.json"))
+          assert len(paths) == plan["assigned_shard_cells"], "incomplete shard"
+          for path in paths:
+              item = _check_cell(path)
+              config = item["request"]
+              assert config["rounds"] == 50
+              assert config["training"]["local_epochs"] == 2
+              assert config["training"]["batch_size"] == 64
+              assert config["training"]["participation"] == 0.2
+              assert item["metrics"]["client_count"] == 20
+              assert item["evidence_class"] == "official_torchvision_heldout"
+              print("Verified", config["dataset"], config["partition"],
+                    config["method"], config["seed"], item["metrics"])
+          PY
+
+      - name: Archive complete or partial evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-pfl-primary-50round-results
+          path: primary-artifacts/
+          retention-days: 90
+          if-no-files-found: warn
+          compression-level: 1

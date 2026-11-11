@@ -1,0 +1,292 @@
+name: IEEE TAI daily scoped confirmatory study
+
+# Prespecified manageable sub-study: two official CIFAR datasets, IID vs
+# severe Dirichlet 0.1, six methods, ten seeds = 240 independent 50-round
+# training cells, plus 80 held-out 3/5-step RQ4 adaptation evaluations.
+# This is NOT the complete 1680-cell, seven-condition/four-dataset matrix.
+# GitHub cron works only after this workflow exists on the default branch.
+on:
+  schedule:
+    - cron: "13 3 * * *"
+  workflow_dispatch:
+    inputs:
+      cohort_index:
+        description: "Explicit 0..39 cohort index for controlled replay"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ieee-tai-daily-confirmatory-frozen-source
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.choose.outputs.matrix }}
+      has_work: ${{ steps.choose.outputs.has_work }}
+    steps:
+      - name: Checkout immutable research model implementation
+        uses: actions/checkout@v4
+        with:
+          ref: a6641509c2b8e6557101499db553177d70a6a3e2
+          persist-credentials: false
+      - name: Setup minimal Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Select one original 50-round matched cohort
+        id: choose
+        env:
+          RUN_NO: ${{ github.run_number }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from scripts.run_tai_1680 import METHODS, SEEDS, required_cells
+
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as f:
+              event = json.load(f)
+          override = (event.get("inputs") or {}).get("cohort_index")
+          index = (int(override) if override not in ("", None)
+                   else int(os.environ["RUN_NO"]) - 1)
+          conditions = ("dirichlet:0.1", "iid")
+          datasets = ("CIFAR10", "CIFAR100")
+          cohorts = [
+              (dataset, condition, seed)
+              for condition in conditions for dataset in datasets
+              for seed in SEEDS
+          ]
+          all_cells = required_cells()
+          assert len(all_cells) == 1680
+          lookup = {
+              (cell.dataset, cell.condition, cell.method, cell.seed): i
+              for i, cell in enumerate(all_cells)
+          }
+          if not (0 <= index < len(cohorts)):
+              print(
+                  "NO NEW COHORT: scoped 240-cell campaign exhausted "
+                  "or invalid index; NOT proof of complete 1680-cell study."
+              )
+              matrix = {
+                  "include": [
+                      {"dataset": "NONE", "condition": "NONE",
+                       "method": "NONE", "seed": 0, "shard": 0}
+                  ]
+              }
+              has_work = "false"
+          else:
+              dataset, condition, seed = cohorts[index]
+              matrix = {
+                  "include": [
+                      {
+                          "dataset": dataset,
+                          "condition": condition,
+                          "method": method,
+                          "seed": seed,
+                          "shard": lookup[(dataset, condition, method, seed)],
+                      }
+                      for method in METHODS
+                  ]
+              }
+              has_work = "true"
+              print(f"Scoped cohort {index+1}/{len(cohorts)}: "
+                    f"{dataset}, {condition}, seed {seed}, six methods")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write("matrix="+json.dumps(matrix, separators=(",", ":"))+"\n")
+              f.write("has_work="+has_work+"\n")
+          PY
+
+  verify-and-train:
+    needs: plan
+    if: ${{ needs.plan.outputs.has_work == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      DATASET: ${{ matrix.dataset }}
+      CONDITION: ${{ matrix.condition }}
+      METHOD: ${{ matrix.method }}
+      SEED: ${{ matrix.seed }}
+      SHARD: ${{ matrix.shard }}
+      FROZEN_SHA: a6641509c2b8e6557101499db553177d70a6a3e2
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a6641509c2b8e6557101499db553177d70a6a3e2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install official dataset training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision numpy matplotlib pyyaml pytest
+
+      - name: Verify immutable tested research algorithms
+        run: |
+          test "$(git rev-parse HEAD)" = "$FROZEN_SHA"
+          git hash-object tai_pfl/engine.py tai_pfl/study.py data/partitioner.py models/networks.py
+          mkdir -p research-evidence
+          python scripts/run_tai_1680.py \
+            --shard-count 1680 --shard-index "$SHARD" \
+            --max-cells 1 > research-evidence/planned.json
+          python - <<'PY'
+          import json, os
+          obj = json.load(open("research-evidence/planned.json", encoding="utf-8"))
+          assert obj["expected_full_matrix"] == 1680
+          assert obj["assigned_shard_cells"] == 1
+          assert obj["exact_expected_cells"] == [{
+              "dataset": os.environ["DATASET"],
+              "condition": os.environ["CONDITION"],
+              "method": os.environ["METHOD"],
+              "seed": int(os.environ["SEED"]), "rounds": 50,
+          }]
+          PY
+
+      - name: Perform true 50-round primary training
+        run: |
+          timeout --signal=TERM --kill-after=20s 285m \
+            python scripts/run_tai_1680.py \
+              --shard-count 1680 --shard-index "$SHARD" --max-cells 1 \
+              --execute --skip-complete --archive-incomplete \
+              --root research-evidence/results --data-root data_raw
+
+      - name: Verify actual held-out predictions and 50-round trace
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell, assert_primary_50round_protocol
+          found = list(Path("research-evidence/results").rglob("result.json"))
+          assert len(found) == 1
+          value = _check_cell(found[0])
+          assert_primary_50round_protocol(value)
+          req = value["request"]
+          assert req["dataset"] == os.environ["DATASET"]
+          assert req["partition"] == os.environ["CONDITION"]
+          assert req["method"] == os.environ["METHOD"]
+          assert req["seed"] == int(os.environ["SEED"])
+          assert req["source_commit_sha"] == os.environ["FROZEN_SHA"]
+          out = {"status": "VERIFIED_50ROUND_PRIMARY_CELL",
+                 "dataset": req["dataset"], "condition": req["partition"],
+                 "method": req["method"], "seed": req["seed"],
+                 "run_id": value["run_id"], "metrics": value["metrics"],
+                 "source_sha": req["source_commit_sha"],
+                 "scope": "one of 240 prespecified scoped cells; not a p-value"}
+          Path("research-evidence/VERIFIED_CELL.json").write_text(
+              json.dumps(out, indent=2)+"\n", encoding="utf-8"
+          )
+          print(json.dumps(out, indent=2))
+          PY
+
+      - name: RQ4 1/3/5-step sensitivity on same trained Per-FedAvg weights
+        if: ${{ matrix.method == 'per_fedavg' }}
+        run: |
+          timeout --signal=TERM --kill-after=20s 45m \
+            python -m scripts.run_tai_rq4_from_primary \
+              --primary-cell "research-evidence/results/$(echo "$DATASET" | tr '[:upper:]' '[:lower:]')/$(echo "$CONDITION" | tr ':' '-')/$SEED/per_fedavg" \
+              --output-root research-evidence/rq4 \
+              --data-root data_raw --steps 3 5
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell
+          origin = _check_cell(next(
+              Path("research-evidence/results").rglob("result.json")
+          ))
+          derived = [
+              _check_cell(p) for p in
+              Path("research-evidence/rq4").rglob("result.json")
+          ]
+          assert len(derived) == 2
+          assert {x["request"]["training"]["adaptation_steps"]
+                  for x in derived} == {3, 5}
+          for item in derived:
+              assert item["source_primary_run_id"] == origin["run_id"]
+              assert item["training_reused_from_primary"] is True
+              assert item["request"]["train_partition_hash"] == \
+                  origin["request"]["train_partition_hash"]
+              assert item["request"]["test_partition_hash"] == \
+                  origin["request"]["test_partition_hash"]
+          summary = {
+              "status": "VERIFIED_SCOPED_RQ4_SINGLE_SEED_NOT_SIGNIFICANCE",
+              "dataset": os.environ["DATASET"],
+              "condition": os.environ["CONDITION"],
+              "seed": int(os.environ["SEED"]),
+              "primary_run_id": origin["run_id"],
+              "step_1": origin["metrics"],
+              "step_3": next(x["metrics"] for x in derived
+                             if x["request"]["training"]["adaptation_steps"] == 3),
+              "step_5": next(x["metrics"] for x in derived
+                             if x["request"]["training"]["adaptation_steps"] == 5),
+          }
+          Path("research-evidence/VERIFIED_RQ4.json").write_text(
+              json.dumps(summary, indent=2)+"\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2))
+          PY
+
+      - name: Hash full final model artifacts for scientific provenance
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path("research-evidence")
+          report = {}
+          for file in sorted(root.rglob("*.pt")):
+              h = hashlib.sha256()
+              with file.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(1 << 20), b""):
+                      h.update(chunk)
+              report[file.relative_to(root).as_posix()] = {
+                  "sha256": h.hexdigest(), "bytes": file.stat().st_size
+              }
+          (root/"MODEL_CHECKSUMS.json").write_text(
+              json.dumps(report, indent=2)+"\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Archive compact verified evidence; avoid 170MB client checkpoints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-scoped-${{ matrix.dataset }}-${{ matrix.method }}-seed${{ matrix.seed }}-${{ matrix.shard }}
+          path: |
+            research-evidence/VERIFIED_CELL.json
+            research-evidence/VERIFIED_RQ4.json
+            research-evidence/MODEL_CHECKSUMS.json
+            research-evidence/planned.json
+            research-evidence/results/**/request.json
+            research-evidence/results/**/result.json
+            research-evidence/results/**/rounds.csv
+            research-evidence/results/**/clients_deployed.csv
+            research-evidence/results/**/clients_global.csv
+            research-evidence/results/**/train_indices.npz
+            research-evidence/results/**/test_indices.npz
+            research-evidence/results/**/global_model.pt
+            research-evidence/results/**/realized_heterogeneity.json
+            research-evidence/rq4/**/request.json
+            research-evidence/rq4/**/result.json
+            research-evidence/rq4/**/clients_deployed.csv
+            research-evidence/rq4/**/clients_global.csv
+            research-evidence/rq4/**/train_indices.npz
+            research-evidence/rq4/**/test_indices.npz
+            research-evidence/rq4/**/rounds.csv
+            research-evidence/rq4/**/realized_heterogeneity.json
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 1
