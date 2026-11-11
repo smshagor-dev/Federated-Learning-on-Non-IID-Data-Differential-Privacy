@@ -13,21 +13,44 @@ def test_holm_familywise_monotonicity():
         "a": .004, "c": .045, "b": .045, "d": .2}
 
 def test_one_seed_never_reports_inferential_claim():
-    rows = {(d, 11, m): (.3+i*.01, "a"*40, "b"*64)
+    rows = {(d, 11, m): (.3+i*.01, "a"*40, "b"*64, "c"*64, "d"*64)
             for d in DATASETS for i, m in enumerate(METHODS)}
     result = analyze(rows, draws=1000)
     assert result["status"] == "INSUFFICIENT_PAIRED_SEEDS_NO_PVALUES"
     assert all("exact_two_sided_signflip_p" not in t for t in result["tests"].values())
 
 def test_complete_four_test_family_and_adjustment():
-    rows = {(d, seed, m): (.3+i*.1, "a"*40, "b"*64)
+    rows = {(d, seed, m): (.3+i*.1, "a"*40, "b"*64, "c"*64, "d"*64)
             for d in DATASETS for seed in SEEDS for i,m in enumerate(METHODS)}
     result = analyze(rows, draws=1000)
     assert result["status"] == "FOUR_CONFIRMATORY_TESTS_COMPLETE_NOT_FULL_STUDY"
     assert all(t["holm_adjusted_p"] == 8/1024 for t in result["tests"].values())
 
 def test_unmatched_source_rejected():
-    rows = {("CIFAR10", 11, "fedavg"): (.3, "a"*40, "b"*64),
-            ("CIFAR10", 11, "ditto"): (.5, "c"*40, "d"*64)}
+    rows = {("CIFAR10", 11, "fedavg"): (.3, "a"*40, "b"*64, "e"*64, "f"*64),
+            ("CIFAR10", 11, "ditto"): (.5, "c"*40, "d"*64, "e"*64, "f"*64)}
     with pytest.raises(ValueError, match="unmatched source"):
         analyze(rows)
+
+
+def test_unmatched_train_partition_rejected():
+    rows = {("CIFAR10", 11, "fedavg"): (.3, "a"*40, "b"*64, "c"*64, "d"*64),
+            ("CIFAR10", 11, "ditto"): (.5, "a"*40, "e"*64, "f"*64, "d"*64)}
+    with pytest.raises(ValueError, match="partition hashes"):
+        analyze(rows)
+
+
+def test_unmatched_test_partition_rejected():
+    rows = {("CIFAR100", 11, "fedavg"): (.3, "a"*40, "b"*64, "c"*64, "d"*64),
+            ("CIFAR100", 11, "per_fedavg"): (.5, "a"*40, "e"*64, "c"*64, "f"*64)}
+    with pytest.raises(ValueError, match="partition hashes"):
+        analyze(rows)
+
+
+def test_legacy_csv_without_hashes_cannot_support_inference(tmp_path):
+    from scripts.tai_confirmatory_inference import load_rows
+    p = tmp_path / "legacy.csv"
+    p.write_text("evidence_type,dataset,condition,method,seed,adaptation_steps,p10_client_accuracy,source_commit_sha,run_id\\n"
+                 + "50-round-primary,CIFAR10,dirichlet:0.1,fedavg,11,1,0.3," + "a"*40 + "," + "b"*64 + "\\n")
+    with pytest.raises(ValueError, match="partition hashes"):
+        load_rows([p])
