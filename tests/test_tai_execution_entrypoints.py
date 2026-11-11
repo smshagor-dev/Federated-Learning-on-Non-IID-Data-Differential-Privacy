@@ -4,6 +4,7 @@ A full 50-round real-data run previously finished successfully, but its
 orchestrator failed while importing tai_pfl.analysis from scripts/ rather
 than repository root. These tests must fail if that regression reappears.
 """
+
 from __future__ import annotations
 
 import json
