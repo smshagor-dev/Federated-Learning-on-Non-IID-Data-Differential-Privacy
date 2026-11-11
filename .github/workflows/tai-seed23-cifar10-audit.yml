@@ -1,4 +1,4 @@
-name: IEEE TAI independent CIFAR10 seed23 raw archive audit
+name: IEEE TAI independent CIFAR10+CIFAR100 seed23 raw archive audit
 on:
   push:
     branches: [research/tai-seed23-confirmatory-20261111]
@@ -20,31 +20,35 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Download the three completed original-run metrics archives
+      - name: Download the six completed original-run metrics archives
         run: |
-          gh run download 43036134413 --repo "$GITHUB_REPOSITORY" --pattern 'tai-seed23-metrics-CIFAR10-*' --dir recovered
-          test "$(find recovered -name result.json | wc -l)" -eq 3
+          gh run download 43036134413 --repo "$GITHUB_REPOSITORY" --pattern 'tai-seed23-metrics-*' --dir recovered
+          test "$(find recovered -name result.json | wc -l)" -eq 6
           find recovered -name result.json -print
       - name: Recover and SHA256-verify the original checkpoint archives
         run: |
-          gh run download 43036134413 --repo "$GITHUB_REPOSITORY" --pattern 'tai-seed23-models-CIFAR10-*' --dir recovered-models
+          gh run download 43036134413 --repo "$GITHUB_REPOSITORY" --pattern 'tai-seed23-models-*' --dir recovered-models
           python - <<'PY'
           from pathlib import Path
           import hashlib,json,shutil
-          for method in ('fedavg','ditto','per_fedavg'):
-              metrics=Path(f'recovered/tai-seed23-metrics-CIFAR10-{method}')
-              manifest=json.loads((metrics/'model-sha256.json').read_text())
-              assert len(manifest)==1,manifest
-              rel,digest=next(iter(manifest.items()))
-              assert rel==f'cifar10/dirichlet-0.1/23/{method}/global_model.pt',rel
-              candidates=list(Path(f'recovered-models/tai-seed23-models-CIFAR10-{method}').rglob('global_model.pt'))
-              assert len(candidates)==1,candidates
-              model=candidates[0]
-              assert hashlib.sha256(model.read_bytes()).hexdigest()==digest,(method,'checkpoint hash mismatch')
-              destination=metrics/'results'/rel
-              destination.parent.mkdir(parents=True,exist_ok=True)
-              shutil.copy2(model,destination)
-              assert hashlib.sha256(destination.read_bytes()).hexdigest()==digest
+          for dataset in ('CIFAR10','CIFAR100'):
+              for method in ('fedavg','ditto','per_fedavg'):
+                  metrics=Path(f'recovered/tai-seed23-metrics-{dataset}-{method}')
+                  manifest=json.loads((metrics/'model-sha256.json').read_text())
+                  assert manifest and all(len(v)==64 for v in manifest.values()),(dataset,method,manifest)
+                  expected=f'{dataset.lower()}/dirichlet-0.1/23/{method}/'
+                  assert all(rel.startswith(expected) and rel.endswith('.pt') for rel in manifest),manifest
+                  archive=Path(f'recovered-models/tai-seed23-models-{dataset}-{method}')
+                  for rel,digest in manifest.items():
+                      filename=Path(rel).name
+                      candidates=list(archive.rglob(filename))
+                      assert len(candidates)==1,(dataset,method,filename,candidates)
+                      model=candidates[0]
+                      assert hashlib.sha256(model.read_bytes()).hexdigest()==digest,(dataset,method,filename,'checkpoint hash mismatch')
+                      destination=metrics/'results'/rel
+                      destination.parent.mkdir(parents=True,exist_ok=True)
+                      shutil.copy2(model,destination)
+                      assert hashlib.sha256(destination.read_bytes()).hexdigest()==digest
           PY
       - name: Install exact analysis dependencies
         run: |
@@ -57,17 +61,17 @@ jobs:
           import csv,json
           from pathlib import Path
           rows=list(csv.DictReader(open('audit/verified_primary_and_rq4.csv',newline='')))
-          assert len(rows)==3,rows
-          assert {r['dataset'] for r in rows}=={'CIFAR10'}
+          assert len(rows)==6,rows
+          assert {r['dataset'] for r in rows}=={'CIFAR10','CIFAR100'}
           assert {r['method'] for r in rows}=={'fedavg','ditto','per_fedavg'}
           assert {int(r['seed']) for r in rows}=={23}
           assert {r['condition'] for r in rows}=={'dirichlet:0.1'}
           assert len({r['source_commit_sha'] for r in rows})==1
-          assert len({r['train_partition_hash'] for r in rows})==1
-          assert len({r['test_partition_hash'] for r in rows})==1
+          assert all(len({r['train_partition_hash'] for r in rows if r['dataset']==d})==1 for d in ('CIFAR10','CIFAR100'))
+          assert all(len({r['test_partition_hash'] for r in rows if r['dataset']==d})==1 for d in ('CIFAR10','CIFAR100'))
           assert all(len(r['train_partition_hash'])==64 and len(r['test_partition_hash'])==64 for r in rows)
           report=json.loads(Path('audit/coverage.json').read_text())
-          assert report['primary']['verified']==3
+          assert report['primary']['verified']==6
           assert report['statistical_tests_executed'] is False
           gate=json.loads(Path('audit/seed23_inference_gate.json').read_text())
           assert gate['status']=='INSUFFICIENT_PAIRED_SEEDS_NO_PVALUES'
@@ -77,7 +81,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tai-seed23-cifar10-independent-audit
+          name: tai-seed23-sixcell-independent-audit
           path: audit/
           retention-days: 90
           if-no-files-found: warn
