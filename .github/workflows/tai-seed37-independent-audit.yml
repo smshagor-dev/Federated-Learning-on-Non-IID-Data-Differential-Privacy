@@ -1,0 +1,91 @@
+name: IEEE TAI independent seed37 six-cell raw evidence audit
+on:
+  push:
+    branches: [research/tai-seed23-confirmatory-20261111]
+    paths: [.github/workflows/tai-seed37-independent-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require both original runs completed successfully
+        run: |
+          for run in 43081575727 43090685269; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" --jq '.status + " " + (.conclusion // "pending")' | grep -Fx 'completed success'
+          done
+      - name: Recover exactly six original official-dataset metrics archives
+        run: |
+          gh run download 43081575727 --repo "$GITHUB_REPOSITORY" --pattern 'tai-seed37-metrics-*' --dir recovered
+          gh run download 43090685269 --repo "$GITHUB_REPOSITORY" --pattern 'tai-seed37-metrics-*' --dir recovered
+          test "$(find recovered -name result.json | wc -l)" -eq 6
+      - name: Recover all checkpoint archives and verify original SHA256 digests
+        run: |
+          gh run download 43081575727 --repo "$GITHUB_REPOSITORY" --pattern 'tai-seed37-models-*' --dir recovered-models
+          gh run download 43090685269 --repo "$GITHUB_REPOSITORY" --pattern 'tai-seed37-models-*' --dir recovered-models
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,shutil
+          for dataset in ('CIFAR10','CIFAR100'):
+              for method in ('fedavg','ditto','per_fedavg'):
+                  prefix=f'tai-seed37-'
+                  metrics=Path('recovered')/(prefix+'metrics-'+dataset+'-'+method)
+                  manifest=json.loads((metrics/'model-sha256.json').read_text())
+                  expected=f'{dataset.lower()}/dirichlet-0.1/37/{method}/'
+                  assert manifest and all(rel.startswith(expected) and rel.endswith('.pt') and len(digest)==64 for rel,digest in manifest.items()),manifest
+                  archive=Path('recovered-models')/(prefix+'models-'+dataset+'-'+method)
+                  for rel,digest in manifest.items():
+                      matches=list(archive.rglob(Path(rel).name))
+                      assert len(matches)==1,(rel,matches)
+                      assert hashlib.sha256(matches[0].read_bytes()).hexdigest()==digest,rel
+                      destination=metrics/'results'/rel
+                      destination.parent.mkdir(parents=True,exist_ok=True)
+                      shutil.copy2(matches[0],destination)
+          PY
+      - name: Install matching verification dependencies
+        run: |
+          python -m pip install 'torch==2.15.0' 'torchvision==0.29.2' 'numpy==2.4.6' 'matplotlib==3.11.2' 'pyyaml==6.0.3'
+      - name: Independently validate 50-round traces, official splits, client metrics and source hashes
+        run: |
+          python scripts/audit_tai_primary_collection.py recovered --output-dir audit
+          python scripts/tai_confirmatory_inference.py audit/verified_primary_and_rq4.csv --output audit/seed37_inference_gate.json
+          python - <<'PY'
+          import csv,json
+          from pathlib import Path
+          rows=list(csv.DictReader((Path('audit')/'verified_primary_and_rq4.csv').open(newline='')))
+          assert len(rows)==6,rows
+          assert {(r['dataset'],r['method']) for r in rows}=={(d,m) for d in ('CIFAR10','CIFAR100') for m in ('fedavg','ditto','per_fedavg')}
+          assert {r['condition'] for r in rows}=={'dirichlet:0.1'}
+          assert {int(r['seed']) for r in rows}=={37}
+          assert {r['source_commit_sha'] for r in rows}=={'a6641509c2b8e6557101499db553177d70a6a3e2'}
+          for dataset in ('CIFAR10','CIFAR100'):
+              group=[r for r in rows if r['dataset']==dataset]
+              for key in ('train_partition_hash','test_partition_hash'):
+                  assert len({r[key] for r in group})==1
+                  assert all(len(r[key])==64 for r in group)
+          report=json.loads((Path('audit')/'coverage.json').read_text())
+          assert report['primary']['verified']==6
+          assert report['statistical_tests_executed'] is False
+          gate=json.loads((Path('audit')/'seed37_inference_gate.json').read_text())
+          assert gate['status']=='INSUFFICIENT_PAIRED_SEEDS_NO_PVALUES'
+          assert all('exact_two_sided_signflip_p' not in v for v in gate['tests'].values())
+          PY
+      - name: Archive independent seed37 evidence ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-seed37-sixcell-independent-audit
+          path: audit/
+          retention-days: 90
+          if-no-files-found: warn
