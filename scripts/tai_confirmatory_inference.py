@@ -30,10 +30,11 @@ def load_rows(paths):
                 if not math.isfinite(value) or not 0 <= value <= 1:
                     raise ValueError("invalid held-out p10 accuracy")
                 sha, run = row["source_commit_sha"], row["run_id"]
-                if len(sha) != 40 or len(run) != 64:
-                    raise ValueError("missing source SHA or run ID")
+                train_hash, test_hash = row.get("train_partition_hash", ""), row.get("test_partition_hash", "")
+                if len(sha) != 40 or len(run) != 64 or len(train_hash) != 64 or len(test_hash) != 64:
+                    raise ValueError("missing source SHA, run ID or audited partition hashes")
                 key = (dataset, seed, method)
-                item = (value, sha, run)
+                item = (value, sha, run, train_hash, test_hash)
                 if key in records and records[key] != item:
                     raise ValueError(f"conflicting duplicate result: {key}")
                 records[key] = item
@@ -73,6 +74,8 @@ def analyze(records, draws=20000):
                     continue
                 if a[1] != b[1]:
                     raise ValueError(f"unmatched source SHA: {dataset}/{seed}/{method}")
+                if len(a) < 5 or len(b) < 5 or a[3:5] != b[3:5] or not all(len(h) == 64 for h in a[3:5] + b[3:5]):
+                    raise ValueError(f"unmatched or missing train/test partition hashes: {dataset}/{seed}/{method}")
                 pairs.append((seed, a[0]-b[0]))
             entry = {"paired_seed_count": len(pairs),
                      "paired_seeds": [s for s, _ in pairs],
