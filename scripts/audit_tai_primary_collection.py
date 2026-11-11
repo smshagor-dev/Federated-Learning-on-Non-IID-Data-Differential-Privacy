@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
@@ -64,6 +65,7 @@ def collect(roots: list[Path]) -> tuple[list[dict], dict]:
     derived: dict[tuple[str, str, int, int], tuple[dict, Path]] = {}
     duplicate_archives = 0
     files_seen = 0
+    seen_digests: dict[tuple[str, tuple], str] = {}
     for root in roots:
         if not root.is_dir():
             raise ValueError(f"evidence root not found: {root}")
@@ -104,13 +106,26 @@ def collect(roots: list[Path]) -> tuple[list[dict], dict]:
                     steps,
                 )
                 group = derived
+            # A repeated run_id is not proof that the archived metrics agree.
+            # Check the complete machine-readable record, including per-client
+            # predictions and held-out counts, before deduplicating archives.
+            evidence_kind = "primary" if steps == 1 else "rq4"
+            digest = hashlib.sha256(
+                json.dumps(result, sort_keys=True, separators=(",", ":"),
+                           allow_nan=False).encode("utf-8")
+            ).hexdigest()
+            digest_key = (evidence_kind, key)
             if key in group:
                 previous, _ = group[key]
-                if previous["run_id"] != result["run_id"]:
-                    raise ValueError(f"conflicting experiments for {key}")
+                if (previous["run_id"] != result["run_id"]
+                        or seen_digests[digest_key] != digest):
+                    raise ValueError(
+                        f"conflicting duplicate experiment evidence for {key}: {path}"
+                    )
                 duplicate_archives += 1
                 continue
             group[key] = (result, path)
+            seen_digests[digest_key] = digest
 
     # The independent replicate is the paired training seed. All six methods
     # in a dataset/partition/seed must share both actual data and implementation.
