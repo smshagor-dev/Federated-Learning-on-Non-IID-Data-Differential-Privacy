@@ -6,15 +6,19 @@ import itertools
 import json
 import math
 import random
+import re
 from pathlib import Path
 
 SEEDS = (11, 23, 37, 53, 71, 83, 97, 109, 127, 149)
 DATASETS = ("CIFAR10", "CIFAR100")
 METHODS = ("fedavg", "ditto", "per_fedavg")
 METRIC = "p10_client_accuracy"
+FROZEN_SOURCE_SHA = "a6641509c2b8e6557101499db553177d70a6a3e2"
+HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 
 def load_rows(paths):
     records = {}
+    run_owners = {}
     for path in paths:
         with open(path, newline="", encoding="utf-8") as stream:
             for row in csv.DictReader(stream):
@@ -31,9 +35,14 @@ def load_rows(paths):
                     raise ValueError("invalid held-out p10 accuracy")
                 sha, run = row["source_commit_sha"], row["run_id"]
                 train_hash, test_hash = row.get("train_partition_hash", ""), row.get("test_partition_hash", "")
-                if len(sha) != 40 or len(run) != 64 or len(train_hash) != 64 or len(test_hash) != 64:
-                    raise ValueError("missing source SHA, run ID or audited partition hashes")
+                if sha != FROZEN_SOURCE_SHA:
+                    raise ValueError("unmatched immutable training source SHA")
+                if not all(HEX_64.fullmatch(x) for x in (run, train_hash, test_hash)):
+                    raise ValueError("missing or malformed run ID or audited partition hashes")
                 key = (dataset, seed, method)
+                owner = run_owners.setdefault(run, key)
+                if owner != key:
+                    raise ValueError(f"run ID reused across distinct experimental cells: {owner} and {key}")
                 item = (value, sha, run, train_hash, test_hash)
                 if key in records and records[key] != item:
                     raise ValueError(f"conflicting duplicate result: {key}")
