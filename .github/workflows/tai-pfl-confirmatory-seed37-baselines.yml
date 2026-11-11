@@ -1,8 +1,8 @@
 name: IEEE TAI seed37 bounded FedAvg baseline replication
 on:
   push:
-    branches: [research/tai-seed37-confirmatory-20261111]
-    paths: [.github/workflows/tai-pfl-confirmatory-seed37.yml]
+    branches: [research/tai-seed23-confirmatory-20261111]
+    paths: [.github/workflows/tai-pfl-confirmatory-seed37-baselines.yml]
   workflow_dispatch:
 permissions:
   contents: read
