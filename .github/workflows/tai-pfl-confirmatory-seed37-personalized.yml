@@ -1,0 +1,112 @@
+name: IEEE TAI seed37 bounded personalized-method replication
+on:
+  push:
+    branches: [research/tai-seed23-confirmatory-20261111]
+    paths: [.github/workflows/tai-pfl-confirmatory-seed37-personalized.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tai-confirmatory-seed37-personalized
+  cancel-in-progress: false
+jobs:
+  real-frozen-replication:
+    name: ${{ matrix.dataset }}-${{ matrix.method }}-seed37-50round
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {dataset: CIFAR10, method: ditto, shard: 1052}
+          - {dataset: CIFAR10, method: per_fedavg, shard: 1062}
+          - {dataset: CIFAR100, method: ditto, shard: 1472}
+          - {dataset: CIFAR100, method: per_fedavg, shard: 1482}
+    env:
+      DATASET: ${{ matrix.dataset }}
+      METHOD: ${{ matrix.method }}
+      SHARD: ${{ matrix.shard }}
+      FROZEN_SHA: a6641509c2b8e6557101499db553177d70a6a3e2
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Check out immutable verified training source
+        uses: actions/checkout@v4
+        with:
+          ref: a6641509c2b8e6557101499db553177d70a6a3e2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install pinned original training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'torch==2.15.0' 'torchvision==0.29.2' 'numpy==2.4.6' 'matplotlib==3.11.2' 'pyyaml==6.0.3' 'pytest==9.2.0'
+          python -m pip freeze > pinned_environment.txt
+      - name: Prove exact prespecified single-cell identity before executing
+        run: |
+          test "$(git rev-parse HEAD)" = "$FROZEN_SHA"
+          python scripts/run_tai_1680.py --shard-count 1680 --shard-index "$SHARD" --max-cells 1 > expected-cell.json
+          python - <<'PY'
+          import json,os
+          obj=json.load(open('expected-cell.json'))
+          assert obj['assigned_shard_cells']==1
+          assert obj['exact_expected_cells']==[dict(dataset=os.environ['DATASET'],condition='dirichlet:0.1',method=os.environ['METHOD'],seed=37,rounds=50)],obj
+          PY
+      - name: Execute actual 50-round official-dataset training
+        run: |
+          timeout --signal=TERM --kill-after=20s 310m python scripts/run_tai_1680.py --shard-count 1680 --shard-index "$SHARD" --max-cells 1 --execute --skip-complete --archive-incomplete --root evidence/results --data-root data_raw
+      - name: Verify training and held-out metrics
+        run: |
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell,assert_primary_50round_protocol
+          paths=list(Path('evidence/results').rglob('result.json'))
+          assert len(paths)==1,paths
+          obj=_check_cell(paths[0]);assert_primary_50round_protocol(obj)
+          r=obj['request']
+          assert (r['dataset'],r['partition'],r['method'],r['seed'],r['rounds'])==(os.environ['DATASET'],'dirichlet:0.1',os.environ['METHOD'],37,50)
+          assert r['source_commit_sha']==os.environ['FROZEN_SHA']
+          assert obj['minimum_heldout_client_samples']>0
+          Path('evidence/VERIFIED_CELL.json').write_text(json.dumps({'status':'TRAINING_COMPLETE_AWAITING_INDEPENDENT_AUDIT','run_id':obj['run_id'],'request':r,'metrics':obj['metrics']},indent=2)+'\n')
+          PY
+      - name: Create compact independently auditable evidence
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib,json,shutil
+          from pathlib import Path
+          root=Path('evidence/results');dst=Path('evidence-compact');dst.mkdir(exist_ok=True)
+          for f in ('expected-cell.json','pinned_environment.txt'):
+              if Path(f).exists():shutil.copy2(f,dst/f)
+          hashes={}
+          for p in root.rglob('*') if root.exists() else []:
+              if not p.is_file():continue
+              rel=p.relative_to(root)
+              if p.suffix=='.pt':hashes[str(rel)]=hashlib.sha256(p.read_bytes()).hexdigest()
+              else:
+                  q=dst/'results'/rel;q.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,q)
+          (dst/'model-sha256.json').write_text(json.dumps(hashes,indent=2)+'\n')
+          PY
+      - name: Retain raw metrics and partition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-seed37-metrics-${{ matrix.dataset }}-${{ matrix.method }}
+          path: evidence-compact/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Retain original checkpoints for independent hash audit
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-seed37-models-${{ matrix.dataset }}-${{ matrix.method }}
+          path: evidence/results/**/*.pt
+          retention-days: 7
+          compression-level: 1
+          if-no-files-found: error
