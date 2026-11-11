@@ -110,10 +110,24 @@ def collect(roots: list[Path]) -> tuple[list[dict], dict]:
             # Check the complete machine-readable record, including per-client
             # predictions and held-out counts, before deduplicating archives.
             evidence_kind = "primary" if steps == 1 else "rq4"
-            digest = hashlib.sha256(
+            # The result manifest alone is insufficient: a second archive can
+            # reuse its run_id and metrics while replacing checkpoint weights,
+            # per-client CSV evidence, round journals or partition files.
+            # Bind the duplicate identity to every archived evidence sidecar.
+            hasher = hashlib.sha256(
                 json.dumps(result, sort_keys=True, separators=(",", ":"),
                            allow_nan=False).encode("utf-8")
-            ).hexdigest()
+            )
+            for sidecar in sorted(path.parent.rglob("*")):
+                if not sidecar.is_file() or sidecar == path:
+                    continue
+                relative = sidecar.relative_to(path.parent).as_posix()
+                hasher.update(relative.encode("utf-8"))
+                hasher.update(b"\0")
+                with sidecar.open("rb") as stream:
+                    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                        hasher.update(chunk)
+            digest = hasher.hexdigest()
             digest_key = (evidence_kind, key)
             if key in group:
                 previous, _ = group[key]
