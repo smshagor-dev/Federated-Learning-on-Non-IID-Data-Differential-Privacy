@@ -56,3 +56,38 @@ def test_exact_repeated_archive_is_counted_once(tmp_path, monkeypatch):
     assert len(rows) == 1
     assert report["primary"]["verified"] == 1
     assert report["duplicate_identical_archives_ignored"] == 1
+
+
+def test_same_run_id_with_modified_checkpoint_bytes_is_rejected(tmp_path, monkeypatch):
+    """The model is part of the scientific evidence even if metrics match."""
+    root = tmp_path / "archives"
+    first = root / "a" / "result.json"
+    second = root / "b" / "result.json"
+    for file in (first, second):
+        file.parent.mkdir(parents=True)
+        file.write_text("{}")
+        (file.parent / "global_model.pt").write_bytes(b"original-checkpoint")
+    (second.parent / "global_model.pt").write_bytes(b"tampered-checkpoint")
+    original = _result()
+    monkeypatch.setattr(audit, "_check_cell", lambda path: original)
+    monkeypatch.setattr(audit, "assert_primary_50round_protocol", lambda result: None)
+    monkeypatch.setattr(audit, "_official_split_coverage", lambda *args: None)
+    with pytest.raises(ValueError, match="conflicting duplicate experiment evidence"):
+        audit.collect([root])
+
+
+def test_same_run_id_with_modified_round_journal_is_rejected(tmp_path, monkeypatch):
+    root = tmp_path / "archives"
+    first = root / "a" / "result.json"
+    second = root / "b" / "result.json"
+    for file in (first, second):
+        file.parent.mkdir(parents=True)
+        file.write_text("{}")
+        (file.parent / "rounds.csv").write_text("round,steps\\n1,2\\n")
+    (second.parent / "rounds.csv").write_text("round,steps\\n1,3\\n")
+    original = _result()
+    monkeypatch.setattr(audit, "_check_cell", lambda path: original)
+    monkeypatch.setattr(audit, "assert_primary_50round_protocol", lambda result: None)
+    monkeypatch.setattr(audit, "_official_split_coverage", lambda *args: None)
+    with pytest.raises(ValueError, match="conflicting duplicate experiment evidence"):
+        audit.collect([root])
