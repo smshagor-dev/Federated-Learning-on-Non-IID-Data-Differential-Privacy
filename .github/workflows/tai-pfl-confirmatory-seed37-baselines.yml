@@ -1,0 +1,110 @@
+name: IEEE TAI seed37 bounded FedAvg baseline replication
+on:
+  push:
+    branches: [research/tai-seed23-confirmatory-20261111]
+    paths: [.github/workflows/tai-pfl-confirmatory-seed37-baselines.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tai-confirmatory-seed37
+  cancel-in-progress: false
+jobs:
+  real-frozen-replication:
+    name: ${{ matrix.dataset }}-${{ matrix.method }}-seed37-50round
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {dataset: CIFAR10, method: fedavg, shard: 1022}
+          - {dataset: CIFAR100, method: fedavg, shard: 1442}
+    env:
+      DATASET: ${{ matrix.dataset }}
+      METHOD: ${{ matrix.method }}
+      SHARD: ${{ matrix.shard }}
+      FROZEN_SHA: a6641509c2b8e6557101499db553177d70a6a3e2
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Check out same training source as verified seed 11
+        uses: actions/checkout@v4
+        with:
+          ref: a6641509c2b8e6557101499db553177d70a6a3e2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install original exact dataset/runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'torch==2.15.0' 'torchvision==0.29.2' 'numpy==2.4.6' 'matplotlib==3.11.2' 'pyyaml==6.0.3' 'pytest==9.2.0'
+          python -m pip freeze > pinned_environment.txt
+      - name: Train original 50-round real data and reject incomplete runs
+        run: |
+          test "$(git rev-parse HEAD)" = "$FROZEN_SHA"
+          python scripts/run_tai_1680.py --shard-count 1680 --shard-index "$SHARD" --max-cells 1 > expected-cell.json
+          python - <<'PY'
+          import json, os
+          plan=json.load(open('expected-cell.json',encoding='utf-8'))
+          assert plan['assigned_shard_cells']==1
+          assert plan['exact_expected_cells']==[{'dataset':os.environ['DATASET'],'condition':'dirichlet:0.1','method':os.environ['METHOD'],'seed':37,'rounds':50}],plan
+          PY
+          timeout --signal=TERM --kill-after=20s 310m python scripts/run_tai_1680.py --shard-count 1680 --shard-index "$SHARD" --max-cells 1 --execute --skip-complete --archive-incomplete --root evidence/results --data-root data_raw
+      - name: Strictly verify official held-out metrics and 50 sequential rounds
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from tai_pfl.analysis import _check_cell,assert_primary_50round_protocol
+          found=list(Path('evidence/results').rglob('result.json'))
+          assert len(found)==1,found
+          obj=_check_cell(found[0]); assert_primary_50round_protocol(obj)
+          req=obj['request']
+          assert req['dataset']==os.environ['DATASET'] and req['method']==os.environ['METHOD']
+          assert req['partition']=='dirichlet:0.1' and req['seed']==37 and req['rounds']==50
+          assert req['source_commit_sha']==os.environ['FROZEN_SHA']
+          assert obj['minimum_heldout_client_samples']>0
+          Path('evidence/VERIFIED_CELL.json').write_text(json.dumps({'status':'VERIFIED_ONE_SEED_NOT_STATISTICAL_SIGNIFICANCE','run_id':obj['run_id'],'request':req,'metrics':obj['metrics']},indent=2)+'\n',encoding='utf-8')
+          PY
+      - name: Archive reproducible per-client evidence and model hashes
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,shutil,json
+          root=Path('evidence/results'); lite=Path('evidence-compact')
+          lite.mkdir(exist_ok=True)
+          if Path('expected-cell.json').exists(): shutil.copy('expected-cell.json',lite)
+          if Path('pinned_environment.txt').exists(): shutil.copy('pinned_environment.txt',lite)
+          hashes={}
+          for p in root.rglob('*') if root.exists() else []:
+            if not p.is_file(): continue
+            rel=p.relative_to(root)
+            if p.suffix=='.pt': hashes[str(rel)]=hashlib.sha256(p.read_bytes()).hexdigest()
+            else:
+              dest=lite/'results'/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,dest)
+          (lite/'model-sha256.json').write_text(json.dumps(hashes,indent=2)+'\n')
+          PY
+      - name: Upload compact evidence for scientific analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-seed37-metrics-${{ matrix.dataset }}-${{ matrix.method }}
+          path: evidence-compact/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Archive model states temporarily for re-evaluation
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-seed37-models-${{ matrix.dataset }}-${{ matrix.method }}
+          path: evidence/results/**/*.pt
+          retention-days: 7
+          compression-level: 1
+          if-no-files-found: error

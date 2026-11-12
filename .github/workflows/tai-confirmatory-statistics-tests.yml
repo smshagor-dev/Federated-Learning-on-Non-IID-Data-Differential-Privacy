@@ -1,0 +1,32 @@
+name: IEEE TAI confirmatory statistical-method unit tests
+on:
+  push:
+    branches: [research/tai-seed23-confirmatory-20261111]
+    paths:
+      - scripts/tai_confirmatory_inference.py
+      - tests/test_tai_confirmatory_inference.py
+      - .github/workflows/tai-confirmatory-statistics-tests.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  paired-inference-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_tai_confirmatory_inference.py
+      - name: Prove empty ledger cannot produce p-values
+        run: |
+          printf 'evidence_type,dataset,condition,seed,method,adaptation_steps,source_commit_sha,run_id,p10_client_accuracy\n' > /tmp/empty-ledger.csv
+          python scripts/tai_confirmatory_inference.py /tmp/empty-ledger.csv --output /tmp/empty-result.json
+          python - <<'PY'
+          import json
+          obj=json.load(open('/tmp/empty-result.json'))
+          assert obj['status']=='INSUFFICIENT_PAIRED_SEEDS_NO_PVALUES'
+          assert all('holm_adjusted_p' not in x for x in obj['tests'].values())
+          PY
