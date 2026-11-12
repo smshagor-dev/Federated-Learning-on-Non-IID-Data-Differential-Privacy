@@ -48,10 +48,10 @@ def test_unmatched_test_partition_rejected():
 
 
 def test_legacy_csv_without_hashes_cannot_support_inference(tmp_path):
-    from scripts.tai_confirmatory_inference import load_rows
+    from scripts.tai_confirmatory_inference import load_rows, FROZEN_SOURCE_SHA
     p = tmp_path / "legacy.csv"
     p.write_text("evidence_type,dataset,condition,method,seed,adaptation_steps,p10_client_accuracy,source_commit_sha,run_id\n"
-                 + "50-round-primary,CIFAR10,dirichlet:0.1,fedavg,11,1,0.3," + "a"*40 + "," + "b"*64 + "\n")
+                 + "50-round-primary,CIFAR10,dirichlet:0.1,fedavg,11,1,0.3," + FROZEN_SOURCE_SHA + "," + "b"*64 + "\n")
     with pytest.raises(ValueError, match="partition hashes"):
         load_rows([p])
 
