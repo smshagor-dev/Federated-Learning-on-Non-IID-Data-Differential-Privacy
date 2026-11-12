@@ -4,6 +4,9 @@ on:
     branches: [research/tai-seed23-confirmatory-20261111]
     paths: [.github/workflows/tai-seed37-independent-audit.yml]
   workflow_dispatch:
+concurrency:
+  group: tai-seed37-independent-evidence-audit
+  cancel-in-progress: false
 permissions:
   contents: read
   actions: read
@@ -43,7 +46,7 @@ jobs:
                   metrics=Path('recovered')/(prefix+'metrics-'+dataset+'-'+method)
                   manifest=json.loads((metrics/'model-sha256.json').read_text())
                   expected=f'{dataset.lower()}/dirichlet-0.1/37/{method}/'
-                  assert manifest and all(rel.startswith(expected) and rel.endswith('.pt') and len(digest)==64 for rel,digest in manifest.items()),manifest
+                  assert manifest and all(rel.startswith(expected) and rel.endswith('.pt') and len(digest)==64 and all(ch in '0123456789abcdef' for ch in digest.lower()) for rel,digest in manifest.items()),manifest
                   archive=Path('recovered-models')/(prefix+'models-'+dataset+'-'+method)
                   for rel,digest in manifest.items():
                       matches=list(archive.rglob(Path(rel).name))
