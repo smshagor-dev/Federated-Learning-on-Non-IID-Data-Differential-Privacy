@@ -1,0 +1,121 @@
+name: IEEE TAI independent CIFAR seed53/71 archive audit
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - IEEE TAI focused CIFAR seeds 53 and 71 research replication
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  independent-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [53, 71]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SEED: ${{ matrix.seed }}
+      FROZEN_SHA: a6641509c2b8e6557101499db553177d70a6a3e2
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fail closed unless all original training runs succeeded
+        run: |
+          status=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/43477454181" \
+            --jq '.status + " " + (.conclusion // "pending")')
+          test "$status" = "completed success" || {
+            echo "::error::Seed53/71 training incomplete: $status"
+            exit 1
+          }
+          if [ "$SEED" = "53" ]; then
+            status=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/43144949475" \
+              --jq '.status + " " + (.conclusion // "pending")')
+            test "$status" = "completed success" || {
+              echo "::error::Original seed53 baseline incomplete: $status"
+              exit 1
+            }
+          fi
+      - name: Download six original numeric and checkpoint archives
+        run: |
+          mkdir -p recovered recovered-models
+          gh run download 43477454181 --repo "$GITHUB_REPOSITORY" \
+            --pattern "ieee-tai-focus-evidence-*-seed$SEED" --dir recovered
+          gh run download 43477454181 --repo "$GITHUB_REPOSITORY" \
+            --pattern "ieee-tai-focus-models-*-seed$SEED" --dir recovered-models
+          if [ "$SEED" = "53" ]; then
+            gh run download 43144949475 --repo "$GITHUB_REPOSITORY" \
+              --pattern 'tai-seed53-metrics-*' --dir recovered
+            gh run download 43144949475 --repo "$GITHUB_REPOSITORY" \
+              --pattern 'tai-seed53-models-*' --dir recovered-models
+          fi
+          test "$(find recovered -name result.json | wc -l)" -eq 6
+      - name: Verify original SHA256 checkpoint digests before independent audit
+        run: |
+          python scripts/recover_tai_focused_archives.py \
+            recovered recovered-models --seed "$SEED" \
+            --output audit/checkpoint_provenance.json
+      - name: Install original scientific verification dependencies
+        run: |
+          python -m pip install 'torch==2.15.0' 'torchvision==0.29.2' \
+            'numpy==2.4.6' 'matplotlib==3.11.2' 'pyyaml==6.0.3'
+      - name: Verify 50-round traces, 20 clients, exact partitions, source hashes
+        run: |
+          python scripts/audit_tai_primary_collection.py recovered --output-dir audit
+          python scripts/tai_confirmatory_inference.py \
+            audit/verified_primary_and_rq4.csv --output audit/seed-gate.json
+          python - <<'PY'
+          import csv
+          import json
+          import os
+          from pathlib import Path
+
+          seed = int(os.environ["SEED"])
+          root = Path("audit")
+          rows = list(csv.DictReader(
+              (root / "verified_primary_and_rq4.csv").open(
+                  newline="", encoding="utf-8"
+              )
+          ))
+          assert len(rows) == 6, rows
+          required = {
+              (dataset, method)
+              for dataset in ("CIFAR10", "CIFAR100")
+              for method in ("fedavg", "ditto", "per_fedavg")
+          }
+          assert {(r["dataset"], r["method"]) for r in rows} == required
+          assert {int(r["seed"]) for r in rows} == {seed}
+          assert {r["condition"] for r in rows} == {"dirichlet:0.1"}
+          assert {r["source_commit_sha"] for r in rows} == {
+              os.environ["FROZEN_SHA"]
+          }
+          for dataset in ("CIFAR10", "CIFAR100"):
+              subset = [r for r in rows if r["dataset"] == dataset]
+              for key in ("train_partition_hash", "test_partition_hash"):
+                  assert len({r[key] for r in subset}) == 1
+          coverage = json.loads((root / "coverage.json").read_text())
+          assert coverage["primary"]["verified"] == 6
+          assert coverage["statistical_tests_executed"] is False
+          gate = json.loads((root / "seed-gate.json").read_text())
+          assert gate["status"] == "INSUFFICIENT_PAIRED_SEEDS_NO_PVALUES"
+          assert all(
+              "exact_two_sided_signflip_p" not in test
+              for test in gate["tests"].values()
+          )
+          print("Six original cells audited; ten-seed statistics remain gated.")
+          PY
+      - name: Retain independent audit ledger and provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tai-focused-seed${{ matrix.seed }}-independent-audit
+          path: audit/
+          retention-days: 90
+          if-no-files-found: warn
