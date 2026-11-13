@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path, PurePosixPath
 
 DATASETS = ("CIFAR10", "CIFAR100")
@@ -28,7 +29,7 @@ REQUIRED_FILES = (
 
 def artifact_names(seed: int, dataset: str, method: str) -> tuple[str, str, str]:
     if seed == 53 and method == "fedavg":
-        prefix = f"tai-seed53-"
+        prefix = "tai-seed53-"
         return (
             f"{prefix}metrics-{dataset}-{method}",
             f"{prefix}models-{dataset}-{method}",
@@ -117,7 +118,9 @@ def recover(metrics_root: Path, models_root: Path, seed: int) -> list[dict]:
                     if sha256_file(destination) != expected_sha:
                         raise ValueError(f"conflicting existing checkpoint: {destination}")
                 else:
-                    destination.write_bytes(source.read_bytes())
+                    shutil.copyfile(source, destination)
+                    if sha256_file(destination) != expected_sha:
+                        raise ValueError(f"checkpoint changed during copy: {rel}")
                 verified_models.append({"path": rel, "sha256": expected_sha})
             records.append(
                 {
