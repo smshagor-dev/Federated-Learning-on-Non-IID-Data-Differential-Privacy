@@ -1,6 +1,18 @@
 """Statistical-method tests use constructed numbers, never research observations."""
+import csv
+
 import pytest
-from scripts.tai_confirmatory_inference import SEEDS, DATASETS, METHODS, analyze, exact_signflip, holm
+
+from scripts.tai_confirmatory_inference import (
+    DATASETS,
+    FROZEN_SOURCE_SHA,
+    METHODS,
+    SEEDS,
+    analyze,
+    exact_signflip,
+    holm,
+    load_rows,
+)
 
 def test_exact_two_sided_signflip_ten_positive():
     assert exact_signflip([0.1]*10) == 2/1024
@@ -48,17 +60,21 @@ def test_unmatched_test_partition_rejected():
 
 
 def test_legacy_csv_without_hashes_cannot_support_inference(tmp_path):
-    from scripts.tai_confirmatory_inference import load_rows, FROZEN_SOURCE_SHA
     p = tmp_path / "legacy.csv"
-    p.write_text("evidence_type,dataset,condition,method,seed,adaptation_steps,p10_client_accuracy,source_commit_sha,run_id\n"
-                 + "50-round-primary,CIFAR10,dirichlet:0.1,fedavg,11,1,0.3," + FROZEN_SOURCE_SHA + "," + "b"*64 + "\n")
+    p.write_text(
+        "evidence_type,dataset,condition,method,seed,adaptation_steps,"
+        "p10_client_accuracy,source_commit_sha,run_id\n"
+        "50-round-primary,CIFAR10,dirichlet:0.1,fedavg,11,1,0.3,"
+        + FROZEN_SOURCE_SHA
+        + ","
+        + "b" * 64
+        + "\n"
+    )
     with pytest.raises(ValueError, match="partition hashes"):
         load_rows([p])
 
 
 def test_inference_csv_rejects_reused_run_id_across_seeds(tmp_path):
-    import csv
-    from scripts.tai_confirmatory_inference import load_rows, FROZEN_SOURCE_SHA
     path = tmp_path / "reused.csv"
     fields = ("evidence_type", "dataset", "condition", "method", "seed",
               "adaptation_steps", "p10_client_accuracy", "source_commit_sha",
@@ -67,28 +83,41 @@ def test_inference_csv_rejects_reused_run_id_across_seeds(tmp_path):
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for seed in (11, 23):
-            writer.writerow(dict(evidence_type="50-round-primary", dataset="CIFAR10",
-                                 condition="dirichlet:0.1", method="fedavg", seed=seed,
-                                 adaptation_steps=1, p10_client_accuracy=.25,
-                                 source_commit_sha=FROZEN_SOURCE_SHA,
-                                 run_id="a"*64, train_partition_hash="b"*64,
-                                 test_partition_hash="c"*64))
+            writer.writerow({
+                "evidence_type": "50-round-primary",
+                "dataset": "CIFAR10",
+                "condition": "dirichlet:0.1",
+                "method": "fedavg",
+                "seed": seed,
+                "adaptation_steps": 1,
+                "p10_client_accuracy": .25,
+                "source_commit_sha": FROZEN_SOURCE_SHA,
+                "run_id": "a" * 64,
+                "train_partition_hash": "b" * 64,
+                "test_partition_hash": "c" * 64,
+            })
     with pytest.raises(ValueError, match="run ID reused"):
         load_rows([path])
 
 
 def test_inference_csv_rejects_nonfrozen_source_and_nonhex_hash(tmp_path):
-    import csv
-    from scripts.tai_confirmatory_inference import load_rows, FROZEN_SOURCE_SHA
     path = tmp_path / "source.csv"
     fields = ("evidence_type", "dataset", "condition", "method", "seed",
               "adaptation_steps", "p10_client_accuracy", "source_commit_sha",
               "run_id", "train_partition_hash", "test_partition_hash")
-    row = dict(evidence_type="50-round-primary", dataset="CIFAR10",
-               condition="dirichlet:0.1", method="fedavg", seed=11,
-               adaptation_steps=1, p10_client_accuracy=.25,
-               source_commit_sha="a"*40, run_id="b"*64,
-               train_partition_hash="c"*64, test_partition_hash="d"*64)
+    row = {
+        "evidence_type": "50-round-primary",
+        "dataset": "CIFAR10",
+        "condition": "dirichlet:0.1",
+        "method": "fedavg",
+        "seed": 11,
+        "adaptation_steps": 1,
+        "p10_client_accuracy": .25,
+        "source_commit_sha": "a" * 40,
+        "run_id": "b" * 64,
+        "train_partition_hash": "c" * 64,
+        "test_partition_hash": "d" * 64,
+    }
     def write():
         with path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=fields)
