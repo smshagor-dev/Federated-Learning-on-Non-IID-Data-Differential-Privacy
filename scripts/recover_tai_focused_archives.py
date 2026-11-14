@@ -53,8 +53,8 @@ def sha256_file(path: Path) -> str:
 
 def recover(metrics_root: Path, models_root: Path, seed: int) -> list[dict]:
     """Audit six checkpoint manifests, restore their byte-identical models."""
-    if seed not in (53, 71):
-        raise ValueError("only the separately planned seed-53/71 batches are supported")
+    if seed not in (53, 71, 83):
+        raise ValueError("only the separately planned seed-53/71/83 batches are supported")
     records = []
     for dataset in DATASETS:
         for method in METHODS:
@@ -151,7 +151,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("metrics_root", type=Path)
     parser.add_argument("models_root", type=Path)
-    parser.add_argument("--seed", type=int, required=True, choices=(53, 71))
+    parser.add_argument("--seed", type=int, required=True, choices=(53, 71, 83))
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     records = recover(args.metrics_root, args.models_root, args.seed)
