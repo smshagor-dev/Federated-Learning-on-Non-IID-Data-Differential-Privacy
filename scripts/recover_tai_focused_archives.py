@@ -65,21 +65,31 @@ def recover(metrics_root: Path, models_root: Path, seed: int) -> list[dict]:
             models = models_root / models_name
             if not metrics.is_dir() or not models.is_dir():
                 raise FileNotFoundError(
-                    f"required original archives missing: {metrics_name} / {models_name}"
+                    f"required original archives missing: "
+                    f"{metrics_name} / {models_name}"
                 )
             manifest_path = metrics / checksum_name
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if not isinstance(manifest, dict) or not manifest:
-                raise ValueError(f"invalid or empty model checksum list: {manifest_path}")
+                raise ValueError(
+                    f"invalid or empty model checksum list: {manifest_path}"
+                )
 
             prefix = f"{dataset.lower()}/dirichlet-0.1/{seed}/{method}/"
             cell = metrics / "results" / prefix
             for filename in REQUIRED_FILES:
                 if not (cell / filename).is_file():
-                    raise FileNotFoundError(f"required raw evidence missing: {cell / filename}")
+                    raise FileNotFoundError(
+                        f"required raw evidence missing: {cell / filename}"
+                    )
             original_results = list(metrics.rglob("result.json"))
-            if len(original_results) != 1 or original_results[0] != cell / "result.json":
-                raise ValueError(f"unexpected or duplicate result.json in {metrics_name}")
+            if (
+                len(original_results) != 1
+                or original_results[0] != cell / "result.json"
+            ):
+                raise ValueError(
+                    f"unexpected or duplicate result.json in {metrics_name}"
+                )
 
             verified_models = []
             for rel, supplied in sorted(manifest.items()):
@@ -116,7 +126,9 @@ def recover(metrics_root: Path, models_root: Path, seed: int) -> list[dict]:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 if destination.exists():
                     if sha256_file(destination) != expected_sha:
-                        raise ValueError(f"conflicting existing checkpoint: {destination}")
+                        raise ValueError(
+                            f"conflicting existing checkpoint: {destination}"
+                        )
                 else:
                     shutil.copyfile(source, destination)
                     if sha256_file(destination) != expected_sha:
