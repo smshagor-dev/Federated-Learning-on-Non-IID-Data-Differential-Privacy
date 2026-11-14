@@ -1,0 +1,72 @@
+name: IEEE TAI independent seed83 raw checkpoint audit
+on:
+  push:
+    branches: [research/ieee-cifar-raw-archive-recovery]
+    paths: [.github/workflows/tai-seed83-independent-raw-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tai-seed83-raw-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install numerical audit dependencies
+        run: python -m pip install 'numpy==2.4.6' 'torch==2.15.0' 'torchvision==0.29.2' 'pyyaml==6.0.3'
+      - name: Fetch original completed seed83 artifacts, never retrain
+        run: |
+          set -euo pipefail
+          mkdir -p audit/input/metrics audit/input/models
+          for dataset in CIFAR10 CIFAR100; do
+            for method in fedavg ditto per_fedavg; do
+              suffix="${dataset}-${method}-seed83"
+              metrics="ieee-tai-focus-evidence-${suffix}"
+              models="ieee-tai-focus-models-${suffix}"
+              mkdir -p "audit/input/metrics/${metrics}" "audit/input/models/${models}"
+              gh run download 43485370265 --repo "${GITHUB_REPOSITORY}" --name "${metrics}" --dir "audit/input/metrics/${metrics}"
+              gh run download 43485370265 --repo "${GITHUB_REPOSITORY}" --name "${models}" --dir "audit/input/models/${models}"
+            done
+          done
+      - name: Independently verify original checkpoint SHA256 and recover raw cells
+        run: |
+          python scripts/recover_tai_focused_archives.py audit/input/metrics audit/input/models --seed 83 --output audit/recovered-seed83.json
+      - name: Independently validate exact 50 rounds, 20 clients, original held-out correct/total, partitions and source
+        run: |
+          python scripts/audit_tai_primary_collection.py --help
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.audit_tai_primary_collection import collect
+          rows, report = collect([Path("audit/input/metrics")])
+          assert report["primary"]["verified"] == 6, report
+          assert report["rq4_derived"]["verified"] == 0, report
+          expected = {(d, m, 83) for d in ("CIFAR10", "CIFAR100") for m in ("fedavg", "ditto", "per_fedavg")}
+          actual = {(row["dataset"], row["method"], int(row["seed"])) for row in rows if row["evidence_type"] == "50-round-primary"}
+          assert actual == expected, (actual, expected)
+          Path("audit/coverage-seed83.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          Path("audit/verified-seed83.json").write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n")
+          print("SEED83_INDEPENDENT_RAW_AUDIT_SUCCESS: 6 verified cells, no inference")
+          PY
+      - name: Archive audit receipts without claiming inference
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ieee-tai-seed83-independent-raw-audit
+          path: |
+            audit/recovered-seed83.json
+            audit/coverage-seed83.json
+            audit/verified-seed83.json
+          if-no-files-found: warn
+          retention-days: 90
