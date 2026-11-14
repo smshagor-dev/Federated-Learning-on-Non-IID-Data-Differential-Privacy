@@ -5,7 +5,7 @@ name: IEEE TAI focused CIFAR seed97 bounded FedAvg baselines
 on:
   push:
     branches:
-      - research/ieee-cifar-seed97-replication
+      - research/ieee-cifar-seed97-baselines
     paths:
       - .github/workflows/tai-pfl-focused-seed97.yml
   workflow_dispatch:
