@@ -1,5 +1,8 @@
 name: IEEE TAI independent CIFAR seed53/71 archive audit
 on:
+  push:
+    branches: [research/ieee-cifar-raw-archive-recovery]
+    paths: [.github/workflows/tai-focused-independent-archive-audit.yml]
   workflow_dispatch:
   workflow_run:
     workflows:
