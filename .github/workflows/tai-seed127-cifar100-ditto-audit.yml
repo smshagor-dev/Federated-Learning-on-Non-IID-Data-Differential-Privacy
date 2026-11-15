@@ -1,0 +1,91 @@
+name: IEEE TAI independent seed127 CIFAR100 two-method audit
+on:
+  push:
+    branches: [research/ieee-seed127-cifar100-twocell-audit]
+    paths:
+      - .github/workflows/tai-seed127-cifar100-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tai-seed127-cifar100-evidence
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify original job-level success (not whole unfinished workflow)
+        run: |
+          set -euo pipefail
+          for spec in '43686685591:CIFAR100:fedavg' '43696290114:CIFAR100:ditto' ; do
+            IFS=: read -r run dataset method <<< "$spec"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" --jq '.jobs[] | select(.name | contains("CIFAR100") and contains("'"${method}"'")) | .conclusion' | grep -Fx success
+          done
+      - name: Download original two CIFAR100 metrics and checkpoint archives
+        run: |
+          set -euo pipefail
+          for method in fedavg ditto; do
+            run=43696290114
+            if [ "$method" = fedavg ]; then run=43686685591; fi
+            suffix="CIFAR100-${method}-seed127"
+            for kind in evidence models; do
+              artifact="ieee-tai-focus-${kind}-${suffix}"
+              root="audit/input/metrics"
+              if [ "$kind" = models ]; then root="audit/input/models"; fi
+              mkdir -p "$root/$artifact"
+              gh run download "$run" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir "$root/$artifact"
+            done
+          done
+      - name: Verify original checkpoint digests and reconstruct evidence
+        run: |
+          python scripts/recover_tai_focused_archives.py audit/input/metrics audit/input/models --seed 127 --datasets CIFAR100 --methods fedavg ditto --output audit/recovered-seed127-cifar100.json
+      - name: Install pinned audit dependencies
+        run: |
+          python -m pip install 'numpy==2.4.6' 'torch==2.15.0' 'torchvision==0.29.2' 'pyyaml==6.0.3'
+      - name: Independently audit rounds, client outcomes and partition hashes
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.audit_tai_primary_collection import collect
+          rows, report = collect([Path("audit/input/metrics")])
+          assert report["primary"]["verified"] == 2, report
+          assert report["rq4_derived"]["verified"] == 0, report
+          primary = [r for r in rows if r["evidence_type"] == "50-round-primary"]
+          assert {(r["dataset"], r["method"], int(r["seed"])) for r in primary} == {
+              ("CIFAR100", "fedavg", 127),
+              ("CIFAR100", "ditto", 127),
+              
+          }, primary
+          assert {r["condition"] for r in primary} == {"dirichlet:0.1"}
+          assert {r["source_commit_sha"] for r in primary} == {
+              "a6641509c2b8e6557101499db553177d70a6a3e2"
+          }
+          for key in ("train_partition_hash", "test_partition_hash"):
+              assert len({r[key] for r in primary}) == 1, key
+              assert all(len(r[key]) == 64 for r in primary), key
+          Path("audit/coverage.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          Path("audit/verified-primary.json").write_text(json.dumps(primary, indent=2, sort_keys=True) + "\n")
+          print("SEED127_CIFAR100_TWOCELL_AUDIT_SUCCESS")
+          PY
+      - name: Archive independent evidence receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ieee-tai-seed127-cifar100-twocell-audit
+          path: |
+            audit/recovered-seed127-cifar100.json
+            audit/coverage.json
+            audit/verified-primary.json
+          retention-days: 90
+          if-no-files-found: warn
