@@ -56,18 +56,23 @@ def recover(
     models_root: Path,
     seed: int,
     methods: tuple[str, ...] = METHODS,
+    datasets: tuple[str, ...] = DATASETS,
 ) -> list[dict]:
     """Audit selected manifests and restore byte-identical model checkpoints."""
-    if seed not in (53, 71, 83, 97):
+    if seed not in (53, 71, 83, 97, 109):
         raise ValueError(
-            "only prespecified seed-53/71/83/97 batches are supported"
+            "only prespecified seed-53/71/83/97/109 batches are supported"
         )
     if not methods or len(set(methods)) != len(methods) or any(
         method not in METHODS for method in methods
     ):
         raise ValueError("methods must be distinct supported method names")
+    if not datasets or len(set(datasets)) != len(datasets) or any(
+        dataset not in DATASETS for dataset in datasets
+    ):
+        raise ValueError('datasets must be distinct supported dataset names')
     records = []
-    for dataset in DATASETS:
+    for dataset in datasets:
         for method in methods:
             metrics_name, models_name, checksum_name = artifact_names(
                 seed, dataset, method
@@ -162,12 +167,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("metrics_root", type=Path)
     parser.add_argument("models_root", type=Path)
-    parser.add_argument("--seed", type=int, required=True, choices=(53, 71, 83, 97))
+    parser.add_argument("--seed", type=int, required=True, choices=(53, 71, 83, 97, 109))
     parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
+    parser.add_argument("--datasets", nargs="+", choices=DATASETS, default=list(DATASETS))
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     records = recover(
-        args.metrics_root, args.models_root, args.seed, tuple(args.methods)
+        args.metrics_root, args.models_root, args.seed, tuple(args.methods), tuple(args.datasets)
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
