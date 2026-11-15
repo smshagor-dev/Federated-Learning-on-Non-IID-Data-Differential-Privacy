@@ -1,0 +1,95 @@
+name: IEEE TAI independent seed109 six-cell audit
+on:
+  push:
+    branches: [research/ieee-seed109-sixcell-audit]
+    paths:
+      - .github/workflows/tai-seed109-sixcell-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tai-seed109-sixcell-evidence
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify original job-level success (not whole unfinished workflow)
+        run: |
+          set -euo pipefail
+          for spec in '43673652958:CIFAR10:fedavg' '43673652958:CIFAR100:fedavg' '43678346066:CIFAR10:ditto' '43678346066:CIFAR10:per_fedavg' '43678346066:CIFAR100:ditto' '43678346066:CIFAR100:per_fedavg'; do
+            IFS=: read -r run dataset method <<< "$spec"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100" --jq '.jobs[] | select(.name | contains("'"${dataset}"'") and contains("'"${method}"'")) | .conclusion' | grep -Fx success
+          done
+      - name: Download original six metrics and checkpoint archives
+        run: |
+          set -euo pipefail
+          for dataset in CIFAR10 CIFAR100; do
+          for method in fedavg ditto per_fedavg; do
+            run=43678346066
+            if [ "$method" = fedavg ]; then run=43673652958; fi
+            suffix="${dataset}-${method}-seed109"
+            for kind in evidence models; do
+              artifact="ieee-tai-focus-${kind}-${suffix}"
+              root="audit/input/metrics"
+              if [ "$kind" = models ]; then root="audit/input/models"; fi
+              mkdir -p "$root/$artifact"
+              gh run download "$run" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir "$root/$artifact"
+            done
+          done
+          done
+      - name: Verify original checkpoint digests and reconstruct evidence
+        run: |
+          python scripts/recover_tai_focused_archives.py audit/input/metrics audit/input/models --seed 109 --methods fedavg ditto per_fedavg --output audit/recovered-seed109-sixcell.json
+      - name: Install pinned audit dependencies
+        run: |
+          python -m pip install 'numpy==2.4.6' 'torch==2.15.0' 'torchvision==0.29.2' 'pyyaml==6.0.3'
+      - name: Independently audit rounds, client outcomes and partition hashes
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.audit_tai_primary_collection import collect
+          rows, report = collect([Path("audit/input/metrics")])
+          assert report["primary"]["verified"] == 6, report
+          assert report["rq4_derived"]["verified"] == 0, report
+          primary = [r for r in rows if r["evidence_type"] == "50-round-primary"]
+          assert {(r["dataset"], r["method"], int(r["seed"])) for r in primary} == {
+              (dataset, method, 109)
+              for dataset in ("CIFAR10", "CIFAR100")
+              for method in ("fedavg", "ditto", "per_fedavg")
+          }, primary
+          assert {r["condition"] for r in primary} == {"dirichlet:0.1"}
+          assert {r["source_commit_sha"] for r in primary} == {
+              "a6641509c2b8e6557101499db553177d70a6a3e2"
+          }
+          for dataset in ("CIFAR10", "CIFAR100"):
+              group = [r for r in primary if r["dataset"] == dataset]
+              for key in ("train_partition_hash", "test_partition_hash"):
+                  assert len({r[key] for r in group}) == 1, (dataset, key)
+                  assert all(len(r[key]) == 64 for r in group), (dataset, key)
+          Path("audit/coverage.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          Path("audit/verified-primary.json").write_text(json.dumps(primary, indent=2, sort_keys=True) + "\n")
+          print("SEED109_SIXCELL_AUDIT_SUCCESS")
+          PY
+      - name: Archive independent evidence receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ieee-tai-seed109-sixcell-audit
+          path: |
+            audit/recovered-seed109-sixcell.json
+            audit/coverage.json
+            audit/verified-primary.json
+          retention-days: 90
+          if-no-files-found: warn
