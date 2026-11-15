@@ -5,7 +5,7 @@ name: IEEE TAI focused CIFAR seed149 bounded personalized methods
 on:
   push:
     branches:
-      - research/ieee-cifar-seed149-personalization
+      - research/ieee-seed149-personalization
     paths:
       - .github/workflows/tai-pfl-focused-seed149-personalization.yml
   workflow_dispatch:
