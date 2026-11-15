@@ -59,9 +59,9 @@ def recover(
     datasets: tuple[str, ...] = DATASETS,
 ) -> list[dict]:
     """Audit selected manifests and restore byte-identical model checkpoints."""
-    if seed not in (53, 71, 83, 97, 109):
+    if seed not in (53, 71, 83, 97, 109, 127):
         raise ValueError(
-            "only prespecified seed-53/71/83/97/109 batches are supported"
+            "only prespecified seed-53/71/83/97/109/127 batches are supported"
         )
     if not methods or len(set(methods)) != len(methods) or any(
         method not in METHODS for method in methods
@@ -168,7 +168,7 @@ def main() -> None:
     parser.add_argument("metrics_root", type=Path)
     parser.add_argument("models_root", type=Path)
     parser.add_argument(
-        "--seed", type=int, required=True, choices=(53, 71, 83, 97, 109)
+        "--seed", type=int, required=True, choices=(53, 71, 83, 97, 109, 127)
     )
     parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     parser.add_argument(
