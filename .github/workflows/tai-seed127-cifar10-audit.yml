@@ -1,7 +1,7 @@
 name: IEEE TAI independent seed127 CIFAR10 three-method audit
 on:
   push:
-    branches: [research/ieee-seed127-cifar10-audit]
+    branches: [research/ieee-seed127-cifar10-threecell-audit]
     paths:
       - .github/workflows/tai-seed127-cifar10-audit.yml
   workflow_dispatch:
