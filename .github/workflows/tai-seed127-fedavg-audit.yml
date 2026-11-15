@@ -1,0 +1,82 @@
+name: IEEE TAI independent seed127 two-baseline evidence audit
+on:
+  push:
+    branches: [research/ieee-seed127-fedavg-evidence]
+    paths: [.github/workflows/tai-seed127-fedavg-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tai-seed127-fedavg-evidence
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require original two-cell 50-round training success
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/43686685591" --jq '.status + " " + (.conclusion // "pending")')" = "completed success"
+      - name: Download original official dataset raw metrics and checkpoints
+        run: |
+          set -euo pipefail
+          for dataset in CIFAR10 CIFAR100; do
+            for kind in evidence models; do
+              artifact="ieee-tai-focus-${kind}-${dataset}-fedavg-seed127"
+              root=audit/input/metrics
+              if [ "$kind" = models ]; then root=audit/input/models; fi
+              mkdir -p "$root/$artifact"
+              gh run download 43686685591 --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir "$root/$artifact"
+            done
+          done
+      - name: Independently verify checkpoint SHA256 and reconstruct original evidence
+        run: |
+          python scripts/recover_tai_focused_archives.py audit/input/metrics audit/input/models --seed 127 --methods fedavg --output audit/recovery.json
+      - name: Install pinned independent audit dependencies
+        run: |
+          python -m pip install 'numpy==2.4.6' 'torch==2.15.0' 'torchvision==0.29.2' 'pyyaml==6.0.3'
+      - name: Audit 50 rounds, 20-client held-out metrics, partition and source identity
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.audit_tai_primary_collection import collect
+          rows, report = collect([Path("audit/input/metrics")])
+          assert report["primary"]["verified"] == 2, report
+          assert report["rq4_derived"]["verified"] == 0, report
+          primary = [r for r in rows if r["evidence_type"] == "50-round-primary"]
+          assert {(r["dataset"], r["method"], int(r["seed"])) for r in primary} == {
+              ("CIFAR10", "fedavg", 127), ("CIFAR100", "fedavg", 127)
+          }, primary
+          assert {r["condition"] for r in primary} == {"dirichlet:0.1"}
+          assert {r["source_commit_sha"] for r in primary} == {
+              "a6641509c2b8e6557101499db553177d70a6a3e2"
+          }
+          assert all(len(r[key]) == 64 for r in primary for key in (
+              "train_partition_hash", "test_partition_hash"
+          )), primary
+          Path("audit/coverage.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          Path("audit/verified-primary.json").write_text(json.dumps(primary, indent=2, sort_keys=True) + "\n")
+          print("SEED127_TWO_BASELINE_AUDIT_SUCCESS")
+          PY
+      - name: Archive independent receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ieee-tai-seed127-fedavg-independent-audit
+          path: |
+            audit/recovery.json
+            audit/coverage.json
+            audit/verified-primary.json
+          retention-days: 90
+          if-no-files-found: warn
