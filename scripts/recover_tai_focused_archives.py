@@ -57,7 +57,7 @@ def recover(
     seed: int,
     methods: tuple[str, ...] = METHODS,
 ) -> list[dict]:
-    """Audit explicitly selected checkpoint manifests, restoring byte-identical models."""
+    """Audit selected manifests and restore byte-identical model checkpoints."""
     if seed not in (53, 71, 83, 97):
         raise ValueError(
             "only prespecified seed-53/71/83/97 batches are supported"
