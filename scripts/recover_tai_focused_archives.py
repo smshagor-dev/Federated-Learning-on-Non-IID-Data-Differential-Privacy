@@ -167,13 +167,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("metrics_root", type=Path)
     parser.add_argument("models_root", type=Path)
-    parser.add_argument("--seed", type=int, required=True, choices=(53, 71, 83, 97, 109))
+    parser.add_argument(
+        "--seed", type=int, required=True, choices=(53, 71, 83, 97, 109)
+    )
     parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
-    parser.add_argument("--datasets", nargs="+", choices=DATASETS, default=list(DATASETS))
+    parser.add_argument(
+        "--datasets", nargs="+", choices=DATASETS, default=list(DATASETS)
+    )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     records = recover(
-        args.metrics_root, args.models_root, args.seed, tuple(args.methods), tuple(args.datasets)
+        args.metrics_root,
+        args.models_root,
+        args.seed,
+        tuple(args.methods),
+        tuple(args.datasets),
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
