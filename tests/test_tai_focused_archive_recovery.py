@@ -93,3 +93,27 @@ def test_archive_path_traversal_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="untrusted checkpoint path"):
         recover(metrics, models, 71)
+
+
+def test_seed109_cifar10_only_three_original_archives(tmp_path):
+    metrics, models = _archives(tmp_path, seed=109)
+    records = recover(metrics, models, 109, METHODS, ("CIFAR10",))
+    assert len(records) == 3
+    assert {record["method"] for record in records} == set(METHODS)
+    assert {record["dataset"] for record in records} == {"CIFAR10"}
+
+
+def test_seed109_missing_requested_method_fails_closed(tmp_path):
+    metrics, models = _archives(tmp_path, seed=109)
+    name = artifact_names(109, "CIFAR10", "ditto")[0]
+    (metrics / name / "MODEL_SHA256.json").unlink()
+    with pytest.raises(FileNotFoundError):
+        recover(metrics, models, 109, METHODS, ("CIFAR10",))
+
+
+def test_dataset_selection_rejects_duplicates_and_unknowns(tmp_path):
+    metrics, models = _archives(tmp_path, seed=109)
+    with pytest.raises(ValueError, match="datasets"):
+        recover(metrics, models, 109, METHODS, ("CIFAR10", "CIFAR10"))
+    with pytest.raises(ValueError, match="datasets"):
+        recover(metrics, models, 109, METHODS, ("not_a_dataset",))
