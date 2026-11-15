@@ -1,9 +1,9 @@
 name: IEEE TAI independent seed127 CIFAR100 two-method audit
 on:
   push:
-    branches: [research/ieee-seed127-cifar100-twocell-audit]
+    branches: [research/ieee-seed127-cifar100-ditto-audit]
     paths:
-      - .github/workflows/tai-seed127-cifar100-audit.yml
+      - .github/workflows/tai-seed127-cifar100-ditto-audit.yml
   workflow_dispatch:
 permissions:
   contents: read
