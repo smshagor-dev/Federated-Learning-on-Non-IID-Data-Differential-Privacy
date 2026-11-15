@@ -51,15 +51,24 @@ def sha256_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def recover(metrics_root: Path, models_root: Path, seed: int) -> list[dict]:
-    """Audit six checkpoint manifests, restore their byte-identical models."""
-    if seed not in (53, 71, 83):
+def recover(
+    metrics_root: Path,
+    models_root: Path,
+    seed: int,
+    methods: tuple[str, ...] = METHODS,
+) -> list[dict]:
+    """Audit selected manifests and restore byte-identical model checkpoints."""
+    if seed not in (53, 71, 83, 97):
         raise ValueError(
-            "only the separately planned seed-53/71/83 batches are supported"
+            "only prespecified seed-53/71/83/97 batches are supported"
         )
+    if not methods or len(set(methods)) != len(methods) or any(
+        method not in METHODS for method in methods
+    ):
+        raise ValueError("methods must be distinct supported method names")
     records = []
     for dataset in DATASETS:
-        for method in METHODS:
+        for method in methods:
             metrics_name, models_name, checksum_name = artifact_names(
                 seed, dataset, method
             )
@@ -153,10 +162,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("metrics_root", type=Path)
     parser.add_argument("models_root", type=Path)
-    parser.add_argument("--seed", type=int, required=True, choices=(53, 71, 83))
+    parser.add_argument("--seed", type=int, required=True, choices=(53, 71, 83, 97))
+    parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
-    records = recover(args.metrics_root, args.models_root, args.seed)
+    records = recover(
+        args.metrics_root, args.models_root, args.seed, tuple(args.methods)
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps({"status": "CHECKPOINT_HASHED_NOT_YET_RAW_AUDITED",

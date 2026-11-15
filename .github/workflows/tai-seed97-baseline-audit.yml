@@ -1,0 +1,80 @@
+name: IEEE TAI independent seed97 two-baseline audit
+on:
+  push:
+    branches: [research/ieee-seed97-baseline-audit]
+    paths:
+      - .github/workflows/tai-seed97-baseline-audit.yml
+      - scripts/recover_tai_focused_archives.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tai-seed97-baseline-evidence
+  cancel-in-progress: false
+jobs:
+  independent-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify original training success, not a pilot
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/43639170245" --jq '.status + " " + (.conclusion // "pending")')" = "completed success"
+      - name: Recover original seed97 FedAvg metrics and checkpoints
+        run: |
+          set -euo pipefail
+          mkdir -p audit/input/metrics audit/input/models
+          for dataset in CIFAR10 CIFAR100; do
+            suffix="${dataset}-fedavg-seed97"
+            metrics="ieee-tai-focus-evidence-${suffix}"
+            models="ieee-tai-focus-models-${suffix}"
+            mkdir -p "audit/input/metrics/${metrics}" "audit/input/models/${models}"
+            gh run download 43639170245 --repo "$GITHUB_REPOSITORY" --name "$metrics" --dir "audit/input/metrics/$metrics"
+            gh run download 43639170245 --repo "$GITHUB_REPOSITORY" --name "$models" --dir "audit/input/models/$models"
+          done
+      - name: Independently verify checkpoint SHA256 provenance
+        run: |
+          python scripts/recover_tai_focused_archives.py audit/input/metrics audit/input/models --seed 97 --methods fedavg --output audit/recovered-seed97-baselines.json
+      - name: Install pinned verification dependencies
+        run: |
+          python -m pip install 'numpy==2.4.6' 'torch==2.15.0' 'torchvision==0.29.2' 'pyyaml==6.0.3'
+      - name: Verify exact 50-round evidence, client outcomes and source identity
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.audit_tai_primary_collection import collect
+          rows, report = collect([Path("audit/input/metrics")])
+          assert report["primary"]["verified"] == 2, report
+          assert report["rq4_derived"]["verified"] == 0, report
+          primary = [r for r in rows if r["evidence_type"] == "50-round-primary"]
+          assert {(r["dataset"], r["method"], int(r["seed"])) for r in primary} == {
+              ("CIFAR10", "fedavg", 97), ("CIFAR100", "fedavg", 97)
+          }, primary
+          assert {r["condition"] for r in primary} == {"dirichlet:0.1"}
+          assert {r["source_commit_sha"] for r in primary} == {
+              "a6641509c2b8e6557101499db553177d70a6a3e2"
+          }
+          Path("audit/coverage-seed97-baselines.json").write_text(json.dumps(report, indent=2, sort_keys=True)+"\n")
+          Path("audit/verified-seed97-baselines.json").write_text(json.dumps(primary, indent=2, sort_keys=True)+"\n")
+          print("SEED97_BASELINE_AUDIT_SUCCESS: two distinct primary cells, not a complete paired seed")
+          PY
+      - name: Archive audit receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ieee-tai-seed97-fedavg-independent-audit
+          path: |
+            audit/recovered-seed97-baselines.json
+            audit/coverage-seed97-baselines.json
+            audit/verified-seed97-baselines.json
+          if-no-files-found: warn
+          retention-days: 90
