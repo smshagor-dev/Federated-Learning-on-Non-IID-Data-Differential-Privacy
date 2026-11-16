@@ -3,6 +3,9 @@ on:
   push:
     branches: [research/ieee-seed149-cifar100-audit-clean]
     paths: [.github/workflows/tai-seed149-cifar100-personalized-audit.yml]
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/tai-seed149-cifar100-personalized-audit.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,6 +15,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   audit:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     env:
