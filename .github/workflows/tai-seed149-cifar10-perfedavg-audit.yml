@@ -1,0 +1,76 @@
+name: IEEE TAI independent seed149 CIFAR10 Per-FedAvg audit
+on:
+  push:
+    branches: [research/ieee-seed149-cifar10-perfedavg-audit]
+    paths: [.github/workflows/tai-seed149-cifar10-perfedavg-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tai-seed149-cifar10-perfedavg-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require original CIFAR10 training success
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/43731822341/jobs?per_page=100" --jq '.jobs[] | select(.name | contains("CIFAR10") and contains("per_fedavg")) | .conclusion' | grep -Fx success
+      - name: Download immutable raw metrics and checkpoints
+        run: |
+          set -euo pipefail
+          for kind in evidence models; do
+            artifact="ieee-tai-focus-${kind}-CIFAR10-per_fedavg-seed149"
+            root=audit/input/metrics
+            if [ "$kind" = models ]; then root=audit/input/models; fi
+            mkdir -p "$root/$artifact"
+            gh run download 43731822341 --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir "$root/$artifact"
+          done
+      - name: Independently verify checkpoint SHA256
+        run: |
+          python scripts/recover_tai_focused_archives.py audit/input/metrics audit/input/models --seed 149 --datasets CIFAR10 --methods per_fedavg --output audit/recovery.json
+      - name: Install pinned independent audit dependencies
+        run: |
+          python -m pip install 'numpy==1.26.4' 'torch==2.5.1' 'torchvision==0.20.1' 'pyyaml==6.0.2'
+      - name: Audit original 50 rounds and held-out clients
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.audit_tai_primary_collection import collect
+          rows, report = collect([Path("audit/input/metrics")])
+          assert report["primary"]["verified"] == 1, report
+          assert report["rq4_derived"]["verified"] == 0, report
+          primary = [r for r in rows if r["evidence_type"] == "50-round-primary"]
+          assert len(primary) == 1, primary
+          r = primary[0]
+          assert (r["dataset"], r["method"], int(r["seed"])) == ("CIFAR10", "per_fedavg", 149), r
+          assert r["condition"] == "dirichlet:0.1", r
+          assert r["source_commit_sha"] == "a6641509c2b8e6557101499db553177d70a6a3e2", r
+          assert all(len(r[key]) == 64 for key in ("train_partition_hash", "test_partition_hash")), r
+          Path("audit/verified-primary.json").write_text(json.dumps(primary, indent=2, sort_keys=True) + "\n")
+          Path("audit/coverage.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          print("SEED149_CIFAR10_PERFEDAVG_INDEPENDENT_AUDIT_SUCCESS")
+          PY
+      - name: Preserve evidence receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ieee-tai-seed149-cifar10-perfedavg-independent-audit
+          path: |
+            audit/recovery.json
+            audit/verified-primary.json
+            audit/coverage.json
+          retention-days: 90
+          if-no-files-found: warn
