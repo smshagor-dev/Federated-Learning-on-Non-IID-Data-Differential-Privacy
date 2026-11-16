@@ -6,14 +6,15 @@ import pytest
 
 from scripts.tai_confirmatory_inference import (
     DATASETS,
+    FROZEN_SOURCE_SHA,
     METHODS,
     SEEDS,
-    FROZEN_SOURCE_SHA,
     analyze,
     exact_signflip,
     holm,
     load_rows,
 )
+
 
 def test_exact_two_sided_signflip_ten_positive():
     assert exact_signflip([0.1]*10) == 2/1024
