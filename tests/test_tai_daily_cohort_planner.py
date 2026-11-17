@@ -122,7 +122,7 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 11)
 
     def test_registry_malformed_payload_fails_closed(self):
-        with self.assertRaises(KeyError):
+        with self.assertRaises(TypeError):
             self.run_planner(pages_payload={1: None})
 
     def test_invalid_override_rejected(self):
