@@ -12,14 +12,14 @@ from collections import namedtuple
 
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/tai-pfl-daily-confirmatory.yml"
 Cell = namedtuple("Cell", "dataset condition method seed")
-METHODS = ("fedavg", "fedprox", "scaffold", "fedsam", "ditto", "per_fedavg")
+METHODS = ("fedavg", "fedprox", "scaffold", "ditto", "per_fedavg", "fedsam")
 SEEDS = (11, 23, 37, 53, 71, 83, 97, 109, 127, 149)
 
 
 def required_cells():
-    return [Cell(d, c, m, s) for d in ("CIFAR10", "CIFAR100", "MNIST", "FashionMNIST")
-            for c in ("dirichlet:0.1", "iid", "dirichlet:0.3",
-                      "dirichlet:0.5", "dirichlet:1.0", "quantity:0.1", "quantity:0.5")
+    return [Cell(d, c, m, s) for d in ("MNIST", "FASHIONMNIST", "CIFAR10", "CIFAR100")
+            for c in ("iid", "dirichlet:1.0", "dirichlet:0.3",
+                      "dirichlet:0.1", "dirichlet:0.05", "pathological:2", "quantity_skew:1.0")
             for m in METHODS for s in SEEDS]
 
 
