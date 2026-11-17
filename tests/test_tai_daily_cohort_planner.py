@@ -1,16 +1,17 @@
 """Execute the real daily planner heredoc with synthetic artifacts and matrix."""
 import json
 import os
-from pathlib import Path
 import re
 import sys
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
 from collections import namedtuple
+from pathlib import Path
+from unittest.mock import patch
 
-WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/tai-pfl-daily-confirmatory.yml"
+WORKFLOW = (Path(__file__).resolve().parents[1]
+            / ".github/workflows/tai-pfl-daily-confirmatory.yml")
 Cell = namedtuple("Cell", "dataset condition method seed")
 METHODS = ("fedavg", "fedprox", "scaffold", "ditto", "per_fedavg", "fedsam")
 SEEDS = (11, 23, 37, 53, 71, 83, 97, 109, 127, 149)
@@ -19,7 +20,8 @@ SEEDS = (11, 23, 37, 53, 71, 83, 97, 109, 127, 149)
 def required_cells():
     return [Cell(d, c, m, s) for d in ("MNIST", "FASHIONMNIST", "CIFAR10", "CIFAR100")
             for c in ("iid", "dirichlet:1.0", "dirichlet:0.3",
-                      "dirichlet:0.1", "dirichlet:0.05", "pathological:2", "quantity_skew:1.0")
+                      "dirichlet:0.1", "dirichlet:0.05",
+                      "pathological:2", "quantity_skew:1.0")
             for m in METHODS for s in SEEDS]
 
 
@@ -67,12 +69,14 @@ class PlannerTests(unittest.TestCase):
             output = Path(td) / "output"
             event.write_text(json.dumps({"inputs": {"cohort_index": override}}))
             env = {"GITHUB_EVENT_PATH": str(event), "GITHUB_OUTPUT": str(output),
-                   "GH_REPOSITORY": "example/repo", "GH_TOKEN": "fake", "RUN_NO": "1261"}
+                   "GH_REPOSITORY": "example/repo", "GH_TOKEN": "fake",
+                   "RUN_NO": "1261"}
             with patch.dict(os.environ, env), patch.dict(sys.modules, {
                     "scripts": scripts, "scripts.run_tai_1680": fake}), \
                  patch("urllib.request.urlopen", side_effect=urlopen):
                 exec(compile(planner_code(), str(WORKFLOW), "exec"), {})
-            result = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            result = dict(line.split("=", 1)
+                          for line in output.read_text().splitlines())
             return result, pages
 
     def test_high_run_number_still_selects_first_cohort(self):
