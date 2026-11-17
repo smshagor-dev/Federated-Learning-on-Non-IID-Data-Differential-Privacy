@@ -1,4 +1,5 @@
 """Execute the real daily planner heredoc with synthetic artifacts and matrix."""
+
 import json
 import os
 import re
