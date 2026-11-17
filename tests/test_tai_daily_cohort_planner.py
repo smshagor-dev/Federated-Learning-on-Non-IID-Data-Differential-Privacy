@@ -1,11 +1,8 @@
 """Execute the real daily planner heredoc with synthetic artifacts and matrix."""
-import contextlib
-import io
 import json
 import os
 from pathlib import Path
 import re
-import runpy
 import sys
 import tempfile
 import types
