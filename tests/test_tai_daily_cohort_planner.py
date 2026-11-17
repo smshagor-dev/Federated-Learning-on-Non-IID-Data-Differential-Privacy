@@ -45,7 +45,7 @@ class FakeResponse:
 
 
 class PlannerTests(unittest.TestCase):
-    def run_planner(self, names=(), override=None, failure=False):
+    def run_planner(self, names=(), override=None, failure=False, pages_payload=None):
         fake = types.ModuleType("scripts.run_tai_1680")
         fake.METHODS, fake.SEEDS, fake.required_cells = METHODS, SEEDS, required_cells
         scripts = types.ModuleType("scripts")
@@ -56,6 +56,9 @@ class PlannerTests(unittest.TestCase):
             pages.append(request.full_url)
             if failure:
                 raise OSError("synthetic API failure")
+            if pages_payload is not None:
+                page = int(request.full_url.split("page=")[-1])
+                return FakeResponse({"artifacts": pages_payload.get(page, [])})
             return FakeResponse({"artifacts": [
                 {"name": n, "expired": False} for n in names]})
 
@@ -99,6 +102,28 @@ class PlannerTests(unittest.TestCase):
     def test_api_failure_fails_closed(self):
         with self.assertRaises(OSError):
             self.run_planner(failure=True)
+
+    def test_registry_pagination_and_expired_artifacts(self):
+        cells = required_cells()
+        shard = next(i for i, c in enumerate(cells)
+                     if c == Cell("CIFAR10", "dirichlet:0.1", "fedavg", 11))
+        duplicate = f"tai-scoped-CIFAR10-fedavg-seed11-{shard}"
+        # A full first page forces a second page; only non-expired
+        # matching artifacts should prevent retraining.
+        first = [{"name": f"unrelated-{i}", "expired": False}
+                 for i in range(100)]
+        result, urls = self.run_planner(
+            pages_payload={1: first, 2: [{"name": duplicate, "expired": False}]})
+        self.assertEqual(len(urls), 2)
+        self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 23)
+
+        result, _ = self.run_planner(
+            pages_payload={1: [{"name": duplicate, "expired": True}]})
+        self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 11)
+
+    def test_registry_malformed_payload_fails_closed(self):
+        with self.assertRaises(KeyError):
+            self.run_planner(pages_payload={1: None})
 
     def test_invalid_override_rejected(self):
         with self.assertRaises(ValueError):
