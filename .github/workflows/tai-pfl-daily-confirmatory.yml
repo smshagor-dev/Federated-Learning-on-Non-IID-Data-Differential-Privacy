@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ieee-tai-daily-confirmatory-frozen-source
@@ -42,6 +43,8 @@ jobs:
         id: choose
         env:
           RUN_NO: ${{ github.run_number }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
         run: |
           python - <<'PY'
           import json
@@ -52,50 +55,79 @@ jobs:
           with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as f:
               event = json.load(f)
           override = (event.get("inputs") or {}).get("cohort_index")
-          index = (int(override) if override not in ("", None)
-                   else int(os.environ["RUN_NO"]) - 1)
           conditions = ("dirichlet:0.1", "iid")
           datasets = ("CIFAR10", "CIFAR100")
-          cohorts = [
-              (dataset, condition, seed)
-              for condition in conditions for dataset in datasets
-              for seed in SEEDS
-          ]
+          cohorts = [(dataset, condition, seed)
+                     for condition in conditions for dataset in datasets
+                     for seed in SEEDS]
           all_cells = required_cells()
           assert len(all_cells) == 1680
-          lookup = {
-              (cell.dataset, cell.condition, cell.method, cell.seed): i
-              for i, cell in enumerate(all_cells)
-          }
-          if not (0 <= index < len(cohorts)):
-              print(
-                  "NO NEW COHORT: scoped 240-cell campaign exhausted "
-                  "or invalid index; NOT proof of complete 1680-cell study."
-              )
-              matrix = {
-                  "include": [
-                      {"dataset": "NONE", "condition": "NONE",
-                       "method": "NONE", "seed": 0, "shard": 0}
-                  ]
-              }
+          lookup = {(c.dataset, c.condition, c.method, c.seed): i
+                    for i, c in enumerate(all_cells)}
+
+          # Inspect the registry completely; fail closed on API or pagination errors.
+          import urllib.request
+          existing = set()
+          for page in range(1, 101):
+              url = (f"https://api.github.com/repos/{os.environ['GH_REPOSITORY']}"
+                     f"/actions/artifacts?per_page=100&page={page}")
+              request = urllib.request.Request(url, headers={
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28"})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  artifacts = json.load(response)["artifacts"]
+              existing.update(a["name"] for a in artifacts
+                              if not a.get("expired", False))
+              if len(artifacts) < 100:
+                  break
+          else:
+              raise RuntimeError("Artifact registry exceeded 10,000; fail closed")
+
+          def cells_for(i):
+              dataset, condition, seed = cohorts[i]
+              return [{"dataset": dataset, "condition": condition,
+                       "method": method, "seed": seed,
+                       "shard": lookup[(dataset, condition, method, seed)]}
+                      for method in METHODS]
+
+          def names_for(cells):
+              return {f"tai-scoped-{c['dataset']}-{c['method']}-"
+                      f"seed{c['seed']}-{c['shard']}" for c in cells}
+
+          if override not in ("", None):
+              index = int(override)
+              if not 0 <= index < len(cohorts):
+                  raise ValueError("cohort_index must be 0..39")
+              candidates = [index]
+          else:
+              candidates = range(len(cohorts))
+
+          selected = None
+          partial = []
+          for index in candidates:
+              cells = cells_for(index)
+              matched = names_for(cells) & existing
+              if matched:
+                  if len(matched) < len(cells):
+                      partial.append(index)
+                  continue
+              selected = (index, cells)
+              break
+
+          if selected is None:
+              print("NO UNARCHIVED COHORT; partial cohort indices:", partial)
+              matrix = {"include": [{"dataset": "NONE", "condition": "NONE",
+                                     "method": "NONE", "seed": 0, "shard": 0}]}
               has_work = "false"
           else:
-              dataset, condition, seed = cohorts[index]
-              matrix = {
-                  "include": [
-                      {
-                          "dataset": dataset,
-                          "condition": condition,
-                          "method": method,
-                          "seed": seed,
-                          "shard": lookup[(dataset, condition, method, seed)],
-                      }
-                      for method in METHODS
-                  ]
-              }
+              index, cells = selected
+              print(f"Selected {index+1}/{len(cohorts)}: "
+                    f"{cells[0]['dataset']} {cells[0]['condition']} "
+                    f"seed {cells[0]['seed']}; partial cohorts skipped: {partial}")
+              matrix = {"include": cells}
               has_work = "true"
-              print(f"Scoped cohort {index+1}/{len(cohorts)}: "
-                    f"{dataset}, {condition}, seed {seed}, six methods")
+          # Artifact presence prevents duplicate compute, not scientific credit.
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
               f.write("matrix="+json.dumps(matrix, separators=(",", ":"))+"\n")
               f.write("has_work="+has_work+"\n")
