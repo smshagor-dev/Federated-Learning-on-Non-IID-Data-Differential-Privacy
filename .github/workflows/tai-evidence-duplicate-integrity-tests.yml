@@ -1,0 +1,27 @@
+name: IEEE TAI evidence duplicate integrity regression
+on:
+  push:
+    branches:
+      - research/ieee-archive-provenance-integrity
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/audit_tai_primary_collection.py
+      - tests/test_tai_archive_duplicate_integrity.py
+      - .github/workflows/tai-evidence-duplicate-integrity-tests.yml
+permissions:
+  contents: read
+jobs:
+  duplicate-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only scientific audit dependencies
+        run: |
+          python -m pip install 'torch==2.15.0' 'numpy==2.4.6' 'pytest==9.2.0'
+      - name: Verify duplicate archive rejection and exact duplicate idempotence
+        run: python -m pytest -q tests/test_tai_archive_duplicate_integrity.py
