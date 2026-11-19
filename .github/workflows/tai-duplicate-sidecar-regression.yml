@@ -1,0 +1,25 @@
+name: IEEE TAI duplicate evidence sidecar regression
+on:
+  push:
+    branches: [fix/tai-reject-conflicting-duplicate-evidence]
+  pull_request:
+    paths:
+      - scripts/audit_tai_primary_collection.py
+      - tests/test_tai_duplicate_archive_sidecars.py
+      - .github/workflows/tai-duplicate-sidecar-regression.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install audit dependencies
+        run: python -m pip install numpy pytest
+      - name: Validate duplicate archive integrity
+        run: python -m pytest -q tests/test_tai_duplicate_archive_sidecars.py
