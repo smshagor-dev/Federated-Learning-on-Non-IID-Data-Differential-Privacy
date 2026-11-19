@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
@@ -64,6 +65,7 @@ def collect(roots: list[Path]) -> tuple[list[dict], dict]:
     derived: dict[tuple[str, str, int, int], tuple[dict, Path]] = {}
     duplicate_archives = 0
     files_seen = 0
+    seen_digests: dict[tuple[str, tuple], str] = {}
     for root in roots:
         if not root.is_dir():
             raise ValueError(f"evidence root not found: {root}")
@@ -104,13 +106,35 @@ def collect(roots: list[Path]) -> tuple[list[dict], dict]:
                     steps,
                 )
                 group = derived
+            # The full archive identity includes sidecars, not just result.json.
+            # Stream large model checkpoints instead of loading them into RAM.
+            hasher = hashlib.sha256(
+                json.dumps(result, sort_keys=True, separators=(",", ":"),
+                           allow_nan=False).encode("utf-8")
+            )
+            for sidecar in sorted(p for p in path.parent.rglob("*") if p.is_file()):
+                if sidecar == path:
+                    continue
+                relative = sidecar.relative_to(path.parent).as_posix()
+                # Length-frame each entry: unframed concatenation can confuse
+                # different file boundaries even when SHA-256 itself is sound.
+                name = relative.encode("utf-8")
+                hasher.update(len(name).to_bytes(8, "big"))
+                hasher.update(name)
+                hasher.update(sidecar.stat().st_size.to_bytes(8, "big"))
+                with sidecar.open("rb") as stream:
+                    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                        hasher.update(chunk)
+            digest = hasher.hexdigest()
+            digest_key = ("primary" if steps == 1 else "rq4", key)
             if key in group:
                 previous, _ = group[key]
-                if previous["run_id"] != result["run_id"]:
-                    raise ValueError(f"conflicting experiments for {key}")
+                if previous["run_id"] != result["run_id"] or seen_digests[digest_key] != digest:
+                    raise ValueError(f"conflicting duplicate experiment evidence for {key}: {path}")
                 duplicate_archives += 1
                 continue
             group[key] = (result, path)
+            seen_digests[digest_key] = digest
 
     # The independent replicate is the paired training seed. All six methods
     # in a dataset/partition/seed must share both actual data and implementation.
