@@ -116,8 +116,12 @@ def collect(roots: list[Path]) -> tuple[list[dict], dict]:
                 if sidecar == path:
                     continue
                 relative = sidecar.relative_to(path.parent).as_posix()
-                hasher.update(relative.encode("utf-8"))
-                hasher.update(b"\0")
+                # Length-frame each entry: unframed concatenation can confuse
+                # different file boundaries even when SHA-256 itself is sound.
+                name = relative.encode("utf-8")
+                hasher.update(len(name).to_bytes(8, "big"))
+                hasher.update(name)
+                hasher.update(sidecar.stat().st_size.to_bytes(8, "big"))
                 with sidecar.open("rb") as stream:
                     for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                         hasher.update(chunk)
