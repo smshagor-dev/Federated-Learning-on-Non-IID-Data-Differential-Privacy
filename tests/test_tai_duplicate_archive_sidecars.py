@@ -58,3 +58,16 @@ def test_different_run_id_rejected(tmp_path, monkeypatch):
     records[b]["run_id"] = "different-run"
     with pytest.raises(ValueError, match="conflicting duplicate"):
         audit.collect([root])
+
+def test_sidecar_boundary_ambiguity_rejected(tmp_path, monkeypatch):
+    """Different file layouts must never share a duplicate-evidence digest.
+
+    Previously the unframed stream for one file a=b"Xb\\0Y" was identical
+    to the stream for a=b"X", b=b"Y".
+    """
+    root, a, b, _ = setup(tmp_path, monkeypatch)
+    (a.parent / "a").write_bytes(b"Xb\\0Y")
+    (b.parent / "a").write_bytes(b"X")
+    (b.parent / "b").write_bytes(b"Y")
+    with pytest.raises(ValueError, match="conflicting duplicate"):
+        audit.collect([root])
