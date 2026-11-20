@@ -28,12 +28,21 @@ def load_verified_manifest(path, expected_sha256):
     if not isinstance(rows, list) or len(rows) != 40:
         raise ValueError("expected four comparisons x ten seeds")
     seen = set()
+    # Both personalized methods must reuse one independently trained FedAvg
+    # baseline for each dataset/seed; reject contradictory baseline receipts.
+    baseline_by_dataset_seed = {}
     for row in rows:
         comparison, seed = row["comparison"], row["seed"]
         key = (comparison, seed)
         if comparison not in COMPARISONS or type(seed) is not int or seed not in SEEDS or key in seen:
             raise ValueError("unregistered comparison, invalid seed or duplicate")
         seen.add(key)
+        dataset = comparison.split(":", 1)[0]
+        baseline_key = (dataset, seed)
+        baseline = row["baseline"]
+        if baseline_key in baseline_by_dataset_seed and baseline_by_dataset_seed[baseline_key] != baseline:
+            raise ValueError("inconsistent FedAvg baseline reused across comparisons")
+        baseline_by_dataset_seed[baseline_key] = baseline
         for side in ("baseline", "treatment"):
             receipt = row[side]
             if receipt.get("independently_audited") is not True:
