@@ -59,5 +59,22 @@ class Gates(unittest.TestCase):
         x=fixture(); x["paired_rows"][0]["comparison"]="CIFAR10:ditto:vs:per_fedavg"
         with self.assertRaises(ValueError): check(x)
 
+    def test_nonhex_artifact_digest(self):
+        x=fixture(); x["paired_rows"][0]["treatment"]["artifact_sha256"]="z"*64
+        with self.assertRaisesRegex(ValueError, "missing artifact digest"): check(x)
+    def test_nonhex_source_sha(self):
+        x=fixture(); x["paired_rows"][0]["baseline"]["source_sha"]="z"*40
+        with self.assertRaisesRegex(ValueError, "missing immutable training source"): check(x)
+    def test_nonhex_partition_digest_on_both_sides(self):
+        for side in ("baseline", "treatment"):
+            x=fixture()
+            x["paired_rows"][0][side]["train_partition_sha"]="z"*64
+            with self.assertRaisesRegex(ValueError, "invalid train_partition_sha"): check(x)
+    def test_malformed_pinned_digest_type(self):
+        x=fixture()
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/"manifest.json"; p.write_text(json.dumps(x))
+            with self.assertRaisesRegex(ValueError, "manifest digest"): load_verified_manifest(p, None)
+
 if __name__=="__main__":
     unittest.main()
