@@ -5,6 +5,7 @@ raw artifacts. A self-attested manifest, even with a matching digest, is NOT pro
 """
 import hashlib
 import json
+import re
 from pathlib import Path
 
 SEEDS = (11, 23, 37, 53, 71, 83, 97, 109, 127, 149)
@@ -17,7 +18,7 @@ COMPARISONS = frozenset(
 def load_verified_manifest(path, expected_sha256):
     raw = Path(path).read_bytes()
     actual = hashlib.sha256(raw).hexdigest()
-    if len(expected_sha256) != 64 or actual != expected_sha256.lower():
+    if not isinstance(expected_sha256, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha256) or actual != expected_sha256.lower():
         raise ValueError("manifest digest not pinned or mismatch")
     doc = json.loads(raw)
     if doc.get("schema") != "tai-independent-evidence-v1":
@@ -52,10 +53,15 @@ def load_verified_manifest(path, expected_sha256):
             correct, total = receipt.get("correct"), receipt.get("total")
             if type(correct) is not int or type(total) is not int or total <= 0 or not 0 <= correct <= total:
                 raise ValueError("invalid held-out counts")
-            if not receipt.get("artifact_sha256") or len(receipt["artifact_sha256"]) != 64:
+            if not isinstance(receipt.get("artifact_sha256"), str) or not re.fullmatch(r"[0-9a-fA-F]{64}", receipt["artifact_sha256"]):
                 raise ValueError("missing artifact digest")
-            if not receipt.get("source_sha") or len(receipt["source_sha"]) != 40:
+            if not isinstance(receipt.get("source_sha"), str) or not re.fullmatch(r"[0-9a-fA-F]{40}", receipt["source_sha"]):
                 raise ValueError("missing immutable training source")
+        for side in ("baseline", "treatment"):
+            for partition_field in ("train_partition_sha", "test_partition_sha"):
+                digest = row[side].get(partition_field)
+                if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+                    raise ValueError(f"invalid {partition_field} digest")
         for field in ("source_sha", "train_partition_sha", "test_partition_sha"):
             a, b = row["baseline"].get(field), row["treatment"].get(field)
             if not a or a != b:
