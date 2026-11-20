@@ -48,6 +48,13 @@ class Gates(unittest.TestCase):
     def test_bad_counts(self):
         x=fixture(); x["paired_rows"][0]["baseline"]["correct"]=10001
         with self.assertRaises(ValueError): check(x)
+    def test_conflicting_fedavg_baseline_across_methods(self):
+        x=fixture()
+        rows=[r for r in x["paired_rows"] if r["seed"] == 11 and r["comparison"].startswith("CIFAR10:")]
+        self.assertEqual(len(rows), 2)
+        rows[1]["baseline"]["correct"]=4999
+        with self.assertRaisesRegex(ValueError, "inconsistent FedAvg baseline"):
+            check(x)
     def test_unregistered_comparison(self):
         x=fixture(); x["paired_rows"][0]["comparison"]="CIFAR10:ditto:vs:per_fedavg"
         with self.assertRaises(ValueError): check(x)
