@@ -120,7 +120,10 @@ class PlannerTests(unittest.TestCase):
         result, _ = self.run_planner(names=[name])
         self.assertEqual(result["has_work"], "true")
         self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 11)
-        self.assertEqual([c["method"] for c in json.loads(result["matrix"])["include"]], list(METHODS[1:]))
+        selected_methods = [
+            cell["method"] for cell in json.loads(result["matrix"])["include"]
+        ]
+        self.assertEqual(selected_methods, list(METHODS[1:]))
 
     def test_explicit_partial_override_resumes_missing_methods(self):
         cells = required_cells()
@@ -132,7 +135,10 @@ class PlannerTests(unittest.TestCase):
         name = f"tai-scoped-CIFAR10-fedavg-seed11-{shard}"
         result, _ = self.run_planner(names=[name], override="0")
         self.assertEqual(result["has_work"], "true")
-        self.assertEqual([c["method"] for c in json.loads(result["matrix"])["include"]], list(METHODS[1:]))
+        selected_methods = [
+            cell["method"] for cell in json.loads(result["matrix"])["include"]
+        ]
+        self.assertEqual(selected_methods, list(METHODS[1:]))
 
     def test_api_failure_fails_closed(self):
         with self.assertRaises(OSError):
@@ -154,7 +160,10 @@ class PlannerTests(unittest.TestCase):
         )
         self.assertEqual(len(urls), 2)
         self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 11)
-        self.assertEqual([c["method"] for c in json.loads(result["matrix"])["include"]], list(METHODS[1:]))
+        selected_methods = [
+            cell["method"] for cell in json.loads(result["matrix"])["include"]
+        ]
+        self.assertEqual(selected_methods, list(METHODS[1:]))
 
         result, _ = self.run_planner(
             pages_payload={1: [{"name": duplicate, "expired": True}]}
