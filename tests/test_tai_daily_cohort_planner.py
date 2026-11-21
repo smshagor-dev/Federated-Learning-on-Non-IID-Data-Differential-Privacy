@@ -109,7 +109,7 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 11)
         self.assertTrue(pages)
 
-    def test_partial_cohort_skipped(self):
+    def test_partial_cohort_resumes_missing_methods(self):
         cells = required_cells()
         shard = next(
             i
@@ -119,9 +119,13 @@ class PlannerTests(unittest.TestCase):
         name = f"tai-scoped-CIFAR10-fedavg-seed11-{shard}"
         result, _ = self.run_planner(names=[name])
         self.assertEqual(result["has_work"], "true")
-        self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 23)
+        self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 11)
+        selected_methods = [
+            cell["method"] for cell in json.loads(result["matrix"])["include"]
+        ]
+        self.assertEqual(selected_methods, list(METHODS[1:]))
 
-    def test_explicit_duplicate_override_skips(self):
+    def test_explicit_partial_override_resumes_missing_methods(self):
         cells = required_cells()
         shard = next(
             i
@@ -130,7 +134,11 @@ class PlannerTests(unittest.TestCase):
         )
         name = f"tai-scoped-CIFAR10-fedavg-seed11-{shard}"
         result, _ = self.run_planner(names=[name], override="0")
-        self.assertEqual(result["has_work"], "false")
+        self.assertEqual(result["has_work"], "true")
+        selected_methods = [
+            cell["method"] for cell in json.loads(result["matrix"])["include"]
+        ]
+        self.assertEqual(selected_methods, list(METHODS[1:]))
 
     def test_api_failure_fails_closed(self):
         with self.assertRaises(OSError):
@@ -151,7 +159,11 @@ class PlannerTests(unittest.TestCase):
             pages_payload={1: first, 2: [{"name": duplicate, "expired": False}]}
         )
         self.assertEqual(len(urls), 2)
-        self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 23)
+        self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 11)
+        selected_methods = [
+            cell["method"] for cell in json.loads(result["matrix"])["include"]
+        ]
+        self.assertEqual(selected_methods, list(METHODS[1:]))
 
         result, _ = self.run_planner(
             pages_payload={1: [{"name": duplicate, "expired": True}]}

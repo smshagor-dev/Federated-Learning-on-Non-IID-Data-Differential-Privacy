@@ -1,5 +1,20 @@
 #include "fl_coordinator/run_manager.hpp"
 
+// Load all legacy dependencies before the narrowly scoped method-name macros.
+// Otherwise the `advance` macro rewrites std::advance in GCC 15 system headers.
+#include "fl_coordinator/structured_log.hpp"
+#include "fl_core/secure_random.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <limits>
+#include <sstream>
+#include <system_error>
+
 // Preserve every implementation that is unrelated to round fault tolerance.
 // Only the four entry points below are renamed and wrapped; the original source
 // remains byte-for-byte in run_manager_legacy.cpp.

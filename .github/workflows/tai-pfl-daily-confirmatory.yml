@@ -104,19 +104,19 @@ jobs:
               candidates = range(len(cohorts))
 
           selected = None
-          partial = []
           for index in candidates:
               cells = cells_for(index)
-              matched = names_for(cells) & existing
-              if matched:
-                  if len(matched) < len(cells):
-                      partial.append(index)
+              # Resume incomplete cohorts rather than skipping them indefinitely.
+              # Artifact presence is a compute-dedup hint, not scientific credit.
+              missing = [c for c in cells
+                         if next(iter(names_for([c]))) not in existing]
+              if not missing:
                   continue
-              selected = (index, cells)
+              selected = (index, missing)
               break
 
           if selected is None:
-              print("NO UNARCHIVED COHORT; partial cohort indices:", partial)
+              print("NO UNARCHIVED COHORT")
               matrix = {"include": [{"dataset": "NONE", "condition": "NONE",
                                      "method": "NONE", "seed": 0, "shard": 0}]}
               has_work = "false"
@@ -124,7 +124,8 @@ jobs:
               index, cells = selected
               print(f"Selected {index+1}/{len(cohorts)}: "
                     f"{cells[0]['dataset']} {cells[0]['condition']} "
-                    f"seed {cells[0]['seed']}; partial cohorts skipped: {partial}")
+                    f"seed {cells[0]['seed']}; missing methods: "
+                    f"{[c['method'] for c in cells]}")
               matrix = {"include": cells}
               has_work = "true"
           # Artifact presence prevents duplicate compute, not scientific credit.
