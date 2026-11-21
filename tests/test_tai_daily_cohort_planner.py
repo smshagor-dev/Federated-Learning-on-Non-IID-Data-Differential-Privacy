@@ -153,7 +153,8 @@ class PlannerTests(unittest.TestCase):
             pages_payload={1: first, 2: [{"name": duplicate, "expired": False}]}
         )
         self.assertEqual(len(urls), 2)
-        self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 23)
+        self.assertEqual(json.loads(result["matrix"])["include"][0]["seed"], 11)
+        self.assertEqual([c["method"] for c in json.loads(result["matrix"])["include"]], list(METHODS[1:]))
 
         result, _ = self.run_planner(
             pages_payload={1: [{"name": duplicate, "expired": True}]}
