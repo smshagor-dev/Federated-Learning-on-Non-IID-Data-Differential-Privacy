@@ -9,7 +9,11 @@ from pathlib import Path
 
 import torch
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "tai_checkpoint_personalization_geometry.py"
+SCRIPT = (
+    Path(__file__).resolve().parents[1]
+    / "scripts"
+    / "tai_checkpoint_personalization_geometry.py"
+)
 spec = importlib.util.spec_from_file_location("tai_checkpoint_geometry", SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -19,7 +23,10 @@ class GeometryFiniteTests(unittest.TestCase):
     def check_case(self, global_value, client_value, valid):
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / "synthetic.zip"
-            global_model = {"weight": torch.tensor([global_value]), "counter": torch.tensor(1)}
+            global_model = {
+                "weight": torch.tensor([global_value]),
+                "counter": torch.tensor(1),
+            }
             clients = {
                 i: {"weight": torch.tensor([client_value]), "counter": torch.tensor(1)}
                 for i in range(20)
