@@ -1,4 +1,5 @@
 """Fail-closed checkpoint geometry regression tests (synthetic checkpoints only)."""
+
 import importlib.util
 import io
 import math
