@@ -25,9 +25,14 @@ def audit(archive: Path) -> dict:
     if len(clients) != 20 or len(set(clients)) != 20:
         raise ValueError("Expected 20 unique clients")
     keys = set(global_model)
-    norm_sq = sum(torch.sum(t.double().square()).item() for t in global_model.values() if t.is_floating_point())
-    if norm_sq <= 0:
-        raise ValueError("Zero global floating parameter norm")
+    norm_sq = 0.0
+    for k, t in global_model.items():
+        if t.is_floating_point():
+            if not torch.isfinite(t).all():
+                raise ValueError(f"Non-finite global tensor: {k}")
+            norm_sq += torch.sum(t.double().square()).item()
+    if not math.isfinite(norm_sq) or norm_sq <= 0:
+        raise ValueError("Invalid global floating parameter norm")
     values = []
     for cid, model in sorted(clients.items()):
         if set(model) != keys:
@@ -43,7 +48,12 @@ def audit(archive: Path) -> dict:
                 sq += torch.sum((a.double() - b.double()).square()).item()
             elif not torch.equal(a, b):
                 raise ValueError(f"Non-floating buffer mismatch: {k}")
-        values.append({"client": str(cid), "relative_l2": math.sqrt(sq / norm_sq)})
+        if not math.isfinite(sq):
+            raise ValueError(f"Non-finite squared distance for client {cid}")
+        relative_l2 = math.sqrt(sq / norm_sq)
+        if not math.isfinite(relative_l2):
+            raise ValueError(f"Non-finite relative distance for client {cid}")
+        values.append({"client": str(cid), "relative_l2": relative_l2})
     return {
         "archive": archive.name,
         "clients": values,
@@ -60,7 +70,7 @@ def main():
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     report = {"records": [audit(p) for p in args.archives], "certified_primary_cells": 0}
-    serialized = json.dumps(report, indent=2)
+    serialized = json.dumps(report, indent=2, allow_nan=False)
     if args.output:
         args.output.write_text(serialized + "\n", encoding="utf-8")
     else:
