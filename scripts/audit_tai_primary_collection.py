@@ -59,6 +59,11 @@ def _primary_key(value: dict) -> tuple[str, str, int, str]:
     )
 
 
+def _same_duplicate_result(previous: dict, candidate: dict) -> bool:
+    """A reused run ID does not make divergent measurements identical."""
+    return previous == candidate
+
+
 def collect(roots: list[Path]) -> tuple[list[dict], dict]:
     primary: dict[tuple[str, str, int, str], tuple[dict, Path]] = {}
     derived: dict[tuple[str, str, int, int], tuple[dict, Path]] = {}
@@ -106,7 +111,7 @@ def collect(roots: list[Path]) -> tuple[list[dict], dict]:
                 group = derived
             if key in group:
                 previous, _ = group[key]
-                if previous["run_id"] != result["run_id"]:
+                if not _same_duplicate_result(previous, result):
                     raise ValueError(f"conflicting experiments for {key}")
                 duplicate_archives += 1
                 continue
