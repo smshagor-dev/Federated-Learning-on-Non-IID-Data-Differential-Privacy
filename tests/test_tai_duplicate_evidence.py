@@ -1,5 +1,7 @@
 """Regression tests: never silently count divergent evidence with a reused run ID."""
+
 import unittest
+
 from scripts.audit_tai_primary_collection import _same_duplicate_result
 
 
@@ -15,11 +17,20 @@ class DuplicateEvidenceTests(unittest.TestCase):
         self.assertTrue(_same_duplicate_result(self.result, dict(self.result)))
 
     def test_reused_run_id_with_modified_metric_is_conflict(self):
-        changed = {**self.result, "metrics": {**self.result["metrics"], "p10_client_accuracy": 0.99}}
+        changed = {
+            **self.result,
+            "metrics": {**self.result["metrics"], "p10_client_accuracy": 0.99},
+        }
         self.assertFalse(_same_duplicate_result(self.result, changed))
 
     def test_reused_run_id_with_modified_partition_is_conflict(self):
-        changed = {**self.result, "request": {**self.result["request"], "train_partition_hash": "partition-b"}}
+        changed = {
+            **self.result,
+            "request": {
+                **self.result["request"],
+                "train_partition_hash": "partition-b",
+            },
+        }
         self.assertFalse(_same_duplicate_result(self.result, changed))
 
 
