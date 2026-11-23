@@ -106,7 +106,7 @@ def collect(roots: list[Path]) -> tuple[list[dict], dict]:
                 group = derived
             if key in group:
                 previous, _ = group[key]
-                if previous["run_id"] != result["run_id"]:
+                if previous != result:
                     raise ValueError(f"conflicting experiments for {key}")
                 duplicate_archives += 1
                 continue
