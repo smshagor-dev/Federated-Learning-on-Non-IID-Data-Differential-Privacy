@@ -293,7 +293,7 @@ jobs:
           )
           PY
 
-      - name: Archive compact verified evidence; avoid 170MB client checkpoints
+      - name: Archive verified evidence and all checkpoint files
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -310,7 +310,8 @@ jobs:
             research-evidence/results/**/clients_global.csv
             research-evidence/results/**/train_indices.npz
             research-evidence/results/**/test_indices.npz
-            research-evidence/results/**/global_model.pt
+            research-evidence/results/**/*.pt
+            research-evidence/rq4/**/*.pt
             research-evidence/results/**/realized_heterogeneity.json
             research-evidence/rq4/**/request.json
             research-evidence/rq4/**/result.json
@@ -320,6 +321,6 @@ jobs:
             research-evidence/rq4/**/test_indices.npz
             research-evidence/rq4/**/rounds.csv
             research-evidence/rq4/**/realized_heterogeneity.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
           compression-level: 1
