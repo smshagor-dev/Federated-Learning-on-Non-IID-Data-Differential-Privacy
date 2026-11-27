@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "provenance": "GitHub Actions artifact metadata fetched 2026-11-17; digests are provider receipts, not independent recomputation",
+  "run_id": 43036134413,
+  "training_head_sha": "0fc06726ad70b3cd1e0323f7738bf7f955046048",
+  "scientific_cell_credit": 0,
+  "artifacts": [
+    {
+      "id": 13881395306,
+      "name": "tai-seed23-models-CIFAR100-per_fedavg",
+      "size_in_bytes": 172552119,
+      "digest": "sha256:d364a3f2b8aecb6f09a85983e6a066a2c169b40204255db2c781cf0cc985d68e",
+      "expires_at": "2026-11-18T18:04:24Z",
+      "expired": false
+    },
+    {
+      "id": 13878334076,
+      "name": "tai-seed23-metrics-CIFAR100-per_fedavg",
+      "size_in_bytes": 113527,
+      "digest": "sha256:4d0724414a315119c7c51b1cb837d3b911d886874ed8d2492a5f7302d0c665e5",
+      "expires_at": "2027-02-09T14:11:48Z",
+      "expired": false
+    },
+    {
+      "id": 13877189459,
+      "name": "tai-seed23-metrics-CIFAR100-ditto",
+      "size_in_bytes": 113596,
+      "digest": "sha256:699b572c558139aa6a923619cf9ac0cc292c8011d27a6fb719d13993d4a780dc",
+      "expires_at": "2027-02-09T14:11:48Z",
+      "expired": false
+    },
+    {
+      "id": 13877089794,
+      "name": "tai-seed23-models-CIFAR100-ditto",
+      "size_in_bytes": 172547703,
+      "digest": "sha256:e8e22950ca324d395f52433c9f925afb9b0f9f18d2258d4e8292307526430142",
+      "expires_at": "2026-11-18T17:53:03Z",
+      "expired": false
+    },
+    {
+      "id": 13874751654,
+      "name": "tai-seed23-models-CIFAR100-fedavg",
+      "size_in_bytes": 8210655,
+      "digest": "sha256:ea743613888a452130da2e0f9a5796d6c4e03b0a1497c13116be31468c6fc2c5",
+      "expires_at": "2026-11-18T16:59:08Z",
+      "expired": false
+    },
+    {
+      "id": 13873764265,
+      "name": "tai-seed23-metrics-CIFAR100-fedavg",
+      "size_in_bytes": 113475,
+      "digest": "sha256:f2ce4e362389c8ab4b835649f1f7ddbcfbf1fe3ff88f7ea6833bcd42af2cf246",
+      "expires_at": "2027-02-09T14:11:48Z",
+      "expired": false
+    },
+    {
+      "id": 13872176872,
+      "name": "tai-seed23-metrics-CIFAR10-per_fedavg",
+      "size_in_bytes": 108898,
+      "digest": "sha256:bbf0c48fdc478cd623152b1b9e153ea917aac8e9faba457c6d6505f48dd6359b",
+      "expires_at": "2027-02-09T14:11:48Z",
+      "expired": false
+    },
+    {
+      "id": 13871666248,
+      "name": "tai-seed23-metrics-CIFAR10-ditto",
+      "size_in_bytes": 108919,
+      "digest": "sha256:6b9c9fe5f8f63f5967052b4b4d0a75554e39a0cc5a807ca1c23f3886480e9696",
+      "expires_at": "2027-02-09T14:11:48Z",
+      "expired": false
+    },
+    {
+      "id": 13871319821,
+      "name": "tai-seed23-models-CIFAR10-per_fedavg",
+      "size_in_bytes": 170752513,
+      "digest": "sha256:4d9d9ae9c0a78f741fc4ac6675693d77d226bb2c8edfd33d8a6c9339fb34f318",
+      "expires_at": "2026-11-18T16:25:54Z",
+      "expired": false
+    },
+    {
+      "id": 13869874242,
+      "name": "tai-seed23-models-CIFAR10-ditto",
+      "size_in_bytes": 170764399,
+      "digest": "sha256:d4799f42a1db5e9fb4c91920a91595c3bd4959d09aa70ac985d4a8371a607d92",
+      "expires_at": "2026-11-18T16:09:05Z",
+      "expired": false
+    },
+    {
+      "id": 13867820875,
+      "name": "tai-seed23-metrics-CIFAR10-fedavg",
+      "size_in_bytes": 108797,
+      "digest": "sha256:5635e90b26983b03ce545437715d7fb6ff2af0ce732c4dd6e1b5661798636c1a",
+      "expires_at": "2027-02-09T14:11:48Z",
+      "expired": false
+    },
+    {
+      "id": 13866484854,
+      "name": "tai-seed23-models-CIFAR10-fedavg",
+      "size_in_bytes": 8125713,
+      "digest": "sha256:d6a87ecc7413387a8ef856d18e6b5ab75d0d80ad587c4e862abfd3a527baea9f",
+      "expires_at": "2026-11-18T15:16:55Z",
+      "expired": false
+    }
+  ]
+}
